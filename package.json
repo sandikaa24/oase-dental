@@ -1,0 +1,14 @@
+ {
+ "name": "oase-dental",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm --filter @oase/web dev",
+    "build": "pnpm --filter @oase/web build",
+    "lint": "pnpm --filter @oase/web lint",
+    "db:migrate": "pnpm --filter @oase/web exec prisma migrate dev",
+    "db:seed": "pnpm --filter @oase/web exec prisma db seed",
+    "db:reset": "pnpm --filter @oase/web exec prisma migrate reset --force",
+    "db:studio": "pnpm --filter @oase/web exec prisma studio"
+  },
+  "engines": { "node": ">=18.17.0" }
+}

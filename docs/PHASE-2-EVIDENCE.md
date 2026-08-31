@@ -11,7 +11,7 @@
 |---|---|---|
 | 1. Attendance | ✅ | T1–T13 + T4b + cheap tests, 6 suite regresi hijau |
 | 2. POS (Transactions) | ✅ | POS-1 s/d POS-13 + POS-9b + assert 0 movement, 7 suite regresi hijau |
-| 3. Inventory | ⬜ | — |
+| 3. Inventory | ✅ | INV-1 s/d INV-10, 8 suite regresi hijau |
 
 ---
 
@@ -124,25 +124,59 @@
 - [`app/api/v1/transactions/[id]/cancel/route.ts`](file:///D:/OASE/apps/web/app/api/v1/transactions/[id]/cancel/route.ts) — Endpoint POST pembatalan transaksi oleh OWNER (200).
 - [`scripts/phase2-task2-test.mjs`](file:///D:/OASE/apps/web/scripts/phase2-task2-test.mjs) — Script pengujian menyeluruh skenario POS-1 s/d POS-13 (+ POS-9b).
 
-### Hasil Tes POS (POS-1 s/d POS-13)
-- **POS-1:** Setup data product master, service master, stok awal = 10, dan user cashier/manager ✅
-- **POS-2:** Create DRAFT (2x Product @50k + 1x Service @100k) $\rightarrow$ `201 DRAFT`, bayar 250k $\rightarrow$ `201 PAID`, `change = 50000`, `transactionNumber = TRX-YYYYMMDD-XXXXX` ✅
-- **POS-3:** Konsistensi DB: `total = 200000`, `StockLevel` berkurang 10 $\rightarrow$ 8, `InventoryMovement` tercatat 1 baris (`delta = -2`, `referenceType = 'TRANSACTION'`) ✅
-- **POS-4:** Pembayaran kurang (`paid = 30000 < total = 50000`) $\rightarrow$ `400 VALIDATION_ERROR` ✅
-- **POS-5:** Validasi input: `quantity = 0` $\rightarrow$ 400; `itemId` acak $\rightarrow$ 400 ✅
-- **POS-6:** Anti-tamper harga client: subtotal tetap dihitung dari harga master DB ($100000$) meskipun client mengirim parameter `price: 1` ✅
-- **POS-7:** Stok tidak mencukupi (tersedia 8, diminta 50) $\rightarrow$ `409 INSUFFICIENT_STOCK`, status transaksi tetap `DRAFT`, 0 payment tersimpan, **0 InventoryMovement tercipta (atomik rollback terbukti)**, saldo stok tetap 8 ✅
-- **POS-8:** Cashier tanpa switch-branch create transaksi $\rightarrow$ `400 VALIDATION_ERROR` ✅
-- **POS-9:** CASHIER `GET /transactions` $\rightarrow$ `200 OK` (semua transaksi milik cabang aktif JKT); tanpa cookie $\rightarrow$ `401 UNAUTHORIZED` ✅
-- **POS-9b:** MANAGER `GET /transactions` $\rightarrow$ `403 FORBIDDEN` (sesuai kontrak role POS) ✅
-- **POS-10:** CASHIER coba cancel transaksi PAID $\rightarrow$ `403 FORBIDDEN`; OWNER cancel dengan alasan $\ge$ 10 karakter $\rightarrow$ `200 OK`, `status = CANCELLED`, saldo `StockLevel` pulih kembali menjadi 10, `InventoryMovement` pemulihan stok (`+2`) tercatat di DB ✅
-- **POS-11:** `GET /transactions/:id` $\rightarrow$ `200 OK`, detail lengkap, items lengkap, uang terserialisasi sebagai string desimal ✅
-- **POS-12:** Presisi aritmatika uang `Prisma.Decimal`: 3x @12345.5 - 1000.5 = 36036 (0 floating point artifact) ✅
-- **POS-13:** Snapshot master price: update harga master product dari 50000 menjadi 95000 tidak mengubah harga item & total transaksi lama yang sudah dibayar (tetap 50000) ✅
+---
+
+## Tugas 3 — Inventory (Stock-in, Movement Card, & Stock Opname)
+
+### Keputusan Desain
+- **D-I1 / Storage Biaya Stock-In (`unitCost`)** — Schema `StockLevel` dan `InventoryMovement` tidak memiliki kolom `unitCost`. Sesuai instruksi mutlak tanpa mengubah schema DB, jika client menyertakan `unitCost`, nilainya diformat dan disimpan ke dalam kolom `notes` pada `InventoryMovement` dengan format `[Biaya: Rp ${unitCost}] ${note || ''}`. Bukti: INV-2.
+- **D-I2 / Semantik PATCH Stock Opname** — `PATCH /stock-opnames/:id` melakukan penggantian (`replace`) nilai `physicalQty` dan `note` pada item DRAFT opname. Hanya diizinkan pada status `DRAFT`. Opname berstatus `SUBMITTED` bersifat immutable dan perubahan ditolak dengan `409 INVALID_TRANSACTION_STATE`. Bukti: INV-3.
+- **D-I3 / Submit Opname Atomik & Zero Delta Movement** — Seluruh penyesuaian stok saat `POST /stock-opnames/:id/submit` dieksekusi dalam satu `prisma.$transaction`.
+  - Jika selisih $\Delta = \text{physicalQty} - \text{systemQty} === 0$, **TIDAK dibuat baris movement** (zero movement optimization).
+  - Jika penyesuaian menghasilkan stok $< 0$ di `StockLevel` $\rightarrow$ ditolak `409 INSUFFICIENT_STOCK` dan rollback total. Bukti: INV-3 & INV-7.
+- **D-I4 / Snapshot System Qty saat Create DRAFT** — Saat `POST /stock-opnames` (CREATE DRAFT), server mengambil snapshot saldo stok `StockLevel` saat itu dan menyimpannya di `StockOpnameItem.systemQty`. Bukti: INV-3 & INV-10.
+- **D-I5 / Peringatan Low Stock vs Master minStock** — `GET /inventory/stock?lowStock=true` membandingkan saldo cabang di `StockLevel.quantity` terhadap nilai `minStock` pada tabel master `Product` atau `Material` (`quantity < minStock`).
+- **Integrasi Dua Arah POS & Inventory** — `InventoryMovement` mencatat seluruh mutasi dari ketiga sumber: `STOCK_IN` (+delta), `OPNAME` (+/-delta), dan `TRANSACTION` (-delta dari pelunasan kasir POS). Bukti: INV-4, INV-5, dan INV-10.
+
+### Matriks Guard (Inventory & Stock Opname)
+
+| Endpoint | Method | Permission / Guard | Role yang Diizinkan | Cakupan / Scope Data |
+|---|---|---|---|---|
+| `/api/v1/inventory/stock` | GET | `STOCK_REPORT` | `OWNER`, `MANAGER` | **OWNER:** semua cabang / filter `?branchId`.<br>**MANAGER:** terisolasi di cabang aktif (`auth.branchId`). |
+| `/api/v1/inventory/stock/:itemType/:itemId/movements` | GET | `STOCK_REPORT` | `OWNER`, `MANAGER` | Kartu stok per item per cabang. IDOR scope cabang untuk MANAGER. |
+| `/api/v1/inventory/stock-in` | POST | `STOCK_IN` | `OWNER`, `MANAGER` | Menambah saldo stok pada cabang aktif (`auth.branchId`). |
+| `/api/v1/stock-opnames` | GET | `STOCK_OPNAME_MANAGE` | `OWNER`, `MANAGER` | List riwayat opname cabang aktif (MANAGER) / filter cabang (OWNER). |
+| `/api/v1/stock-opnames` | POST | `STOCK_OPNAME_MANAGE` | `OWNER`, `MANAGER` | Create DRAFT opname + snapshot `systemQty` pada cabang aktif (`auth.branchId`). |
+| `/api/v1/stock-opnames/:id` | GET | `STOCK_OPNAME_MANAGE` | `OWNER`, `MANAGER` | Detail opname + items. IDOR guard branch scope. |
+| `/api/v1/stock-opnames/:id` | PATCH | `STOCK_OPNAME_MANAGE` | `OWNER`, `MANAGER` | Edit hasil hitung fisik `physicalQty` pada status `DRAFT`. |
+| `/api/v1/stock-opnames/:id/submit` | POST | `STOCK_OPNAME_MANAGE` | `OWNER`, `MANAGER` | Finalisasi opname $\rightarrow$ mutasi atomik `StockLevel` & movement `OPNAME`. |
+
+### File Inventory
+- [`lib/validations/inventory.schema.ts`](file:///D:/OASE/apps/web/lib/validations/inventory.schema.ts) — Zod validation schemas untuk stock-in, query stock, movement card, create/update/list stock opnames.
+- [`lib/services/inventory.service.ts`](file:///D:/OASE/apps/web/lib/services/inventory.service.ts) — Business logic stok, kartu stok, stock-in multi item, dan lifecycle stock opname (snapshot, patch, submit atomik).
+- [`app/api/v1/inventory/stock/route.ts`](file:///D:/OASE/apps/web/app/api/v1/inventory/stock/route.ts) — Endpoint GET list stok cabang aktif + join master + low stock filter.
+- [`app/api/v1/inventory/stock/[itemType]/[itemId]/movements/route.ts`](file:///D:/OASE/apps/web/app/api/v1/inventory/stock/[itemType]/[itemId]/movements/route.ts) — Endpoint GET kartu stok movement per item per cabang.
+- [`app/api/v1/inventory/stock-in/route.ts`](file:///D:/OASE/apps/web/app/api/v1/inventory/stock-in/route.ts) — Endpoint POST penerimaan barang masuk multi-item (201).
+- [`app/api/v1/stock-opnames/route.ts`](file:///D:/OASE/apps/web/app/api/v1/stock-opnames/route.ts) — Endpoint GET list & POST create DRAFT stock opname.
+- [`app/api/v1/stock-opnames/[id]/route.ts`](file:///D:/OASE/apps/web/app/api/v1/stock-opnames/[id]/route.ts) — Endpoint GET detail & PATCH edit DRAFT stock opname.
+- [`app/api/v1/stock-opnames/[id]/submit/route.ts`](file:///D:/OASE/apps/web/app/api/v1/stock-opnames/[id]/submit/route.ts) — Endpoint POST submit stock opname $\rightarrow$ SUBMITTED.
+- [`scripts/phase2-task3-test.mjs`](file:///D:/OASE/apps/web/scripts/phase2-task3-test.mjs) — Script pengujian menyeluruh skenario INV-1 s/d INV-10.
+
+### Hasil Tes Inventory (INV-1 s/d INV-10)
+- **INV-1:** Setup OWNER, cabang JKT/BDG, product & material master baru, manager/cashier login, verifikasi stok awal = 0 ✅
+- **INV-2:** Stock-in +50 pcs $\rightarrow$ `201 CREATED`, `StockLevel = 50`, `InventoryMovement` quantityDelta = +50, notes memuat unitCost ✅
+- **INV-3:** Stock Opname: Create DRAFT snapshot 50 $\rightarrow$ `201 DRAFT`, PATCH physicalQty 45 $\rightarrow$ `200 OK`, Submit $\rightarrow$ `200 SUBMITTED`, `StockLevel` disesuaikan menjadi 45, `InventoryMovement` OPNAME tercatat `quantityDelta = -5` ✅
+- **INV-4:** Riwayat kartu stok mencakup 3 sumber mutasi: `STOCK_IN` (+50), `OPNAME` (-5), dan `TRANSACTION` (-2 dari POS kasir) ✅
+- **INV-5:** Konsistensi saldo: akumulasi seluruh movement ($50 - 5 - 2 = 43$) persis sama dengan saldo `StockLevel` ($43$) ✅
+- **INV-6:** Guard role: CASHIER ditolak stock-in, stock list, dan opname (`403 FORBIDDEN`); tanpa cookie $\rightarrow$ `401`; OWNER filter `?branchId=BDG` $\rightarrow$ `200` ✅
+- **INV-7:** Penyesuaian opname yang menghasilkan stok negatif ditolak dengan `409 INSUFFICIENT_STOCK` dan saldo stok tidak berubah ✅
+- **INV-8:** Validasi input: `quantity = 0` $\rightarrow$ 400; `itemId` acak $\rightarrow$ 404; duplicate date $\rightarrow$ 409 DUPLICATE ✅
+- **INV-9:** IDOR & branch scope: MANAGER JKT ditolak akses opname cabang BDG (`403 FORBIDDEN`) ✅
+- **INV-10:** Regresi kanari POS: eksekusi transaksi POS setelah operasi inventory memotong stok dengan benar dan integrasi dua arah tetap utuh ✅
 
 ---
 
-## Ringkasan Regresi Keseluruhan (7 Suites)
+## Ringkasan Regresi Keseluruhan (8 Suites)
 
 - `phase0-regression-test.mjs` $\rightarrow$ **16 PASS, 0 FAIL** ✅
 - `phase1-task2-guard-test.mjs` $\rightarrow$ **12 + G4 PASS** ✅
@@ -151,5 +185,7 @@
 - `phase1-task5-test.mjs` $\rightarrow$ **E1–E11 (+ E8b) PASS** ✅
 - `phase2-task1-test.mjs` $\rightarrow$ **T1–T13 (+ T4b & cheap tests) PASS** ✅
 - `phase2-task2-test.mjs` $\rightarrow$ **POS-1 s/d POS-13 (+ POS-9b) PASS** ✅
+- `phase2-task3-test.mjs` $\rightarrow$ **INV-1 s/d INV-10 PASS** ✅
 - `pnpm lint` $\rightarrow$ **0 warnings, 0 errors** ✅
-- `pnpm build` (clean build) $\rightarrow$ **Compiled successfully, 0 TS errors** ✅
+- `pnpm build` (clean build) $\rightarrow$ **Compiled successfully (37 API routes compiled), 0 TS errors** ✅
+

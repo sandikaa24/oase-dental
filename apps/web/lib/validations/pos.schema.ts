@@ -1,0 +1,113 @@
+import { z } from 'zod';
+
+const itemTypeEnum = z.enum(['SERVICE', 'PRODUCT']);
+const paymentMethodEnum = z.enum(['CASH', 'DEBIT', 'QRIS_TRANSFER']);
+const transactionStatusEnum = z.enum(['DRAFT', 'PAID', 'CANCELLED']);
+
+export const transactionItemInputSchema = z.object({
+  itemType: itemTypeEnum,
+  itemId: z.string().uuid('itemId harus berupa UUID valid'),
+  quantity: z.number().int().min(1, 'Quantity minimal 1'),
+});
+
+export const createTransactionSchema = z
+  .object({
+    items: z
+      .array(transactionItemInputSchema)
+      .min(1, 'Transaksi minimal memiliki 1 item'),
+    patientName: z.string().optional().nullable(),
+    patientPhone: z.string().optional().nullable(),
+    discountAmount: z
+      .union([z.number(), z.string()])
+      .optional()
+      .default(0)
+      .transform((val) => String(val)),
+    discountReason: z.string().optional().nullable(),
+  })
+  .refine(
+    (data) => {
+      const discount = parseFloat(data.discountAmount || '0');
+      if (discount > 0) {
+        return !!data.discountReason && data.discountReason.trim().length > 0;
+      }
+      return true;
+    },
+    {
+      message: 'Alasan diskon wajib diisi jika ada potongan harga',
+      path: ['discountReason'],
+    }
+  );
+
+export const updateTransactionSchema = z
+  .object({
+    items: z.array(transactionItemInputSchema).min(1).optional(),
+    patientName: z.string().optional().nullable(),
+    patientPhone: z.string().optional().nullable(),
+    discountAmount: z
+      .union([z.number(), z.string()])
+      .optional()
+      .transform((val) => (val !== undefined ? String(val) : undefined)),
+    discountReason: z.string().optional().nullable(),
+  })
+  .refine(
+    (data) => {
+      if (data.discountAmount !== undefined) {
+        const discount = parseFloat(data.discountAmount || '0');
+        if (discount > 0) {
+          return !!data.discountReason && data.discountReason.trim().length > 0;
+        }
+      }
+      return true;
+    },
+    {
+      message: 'Alasan diskon wajib diisi jika ada potongan harga',
+      path: ['discountReason'],
+    }
+  );
+
+export const paymentInputSchema = z.object({
+  method: paymentMethodEnum,
+  amount: z
+    .union([z.number(), z.string()])
+    .transform((val) => String(val))
+    .refine(
+      (val) => {
+        const num = parseFloat(val);
+        return !isNaN(num) && num > 0;
+      },
+      { message: 'Amount pembayaran harus lebih besar dari 0' }
+    ),
+});
+
+export const payTransactionSchema = z.object({
+  payments: z
+    .array(paymentInputSchema)
+    .min(1, 'Minimal 1 metode pembayaran diperlukan'),
+});
+
+export const cancelTransactionSchema = z.object({
+  reason: z
+    .string()
+    .min(10, 'Alasan pembatalan minimal 10 karakter'),
+});
+
+export const transactionListQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+  status: transactionStatusEnum.optional(),
+  date: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Format date harus YYYY-MM-DD')
+    .optional(),
+  dateFrom: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Format dateFrom harus YYYY-MM-DD')
+    .optional(),
+  dateTo: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Format dateTo harus YYYY-MM-DD')
+    .optional(),
+  cashierId: z.string().uuid().optional(),
+  branchId: z.string().uuid().optional(),
+  search: z.string().optional(),
+});

@@ -13,9 +13,11 @@ Jika ada konflik antar dokumen, urutan kebenaran:
 2. `docs/PRD.md` (v2.0)
 3. `docs/API-CONTRACT.md` (v2.0)
 4. `docs/DB-SCHEMA.md` (v2.0)
-5. Kode yang sudah ada di repo
+5. `docs/ui-design-system.md` — spesifikasi visual lengkap (BINDING untuk
+   semua tugas frontend; menang atas PRD dalam persoalan tampilan/visual)
+6. Kode yang sudah ada di repo
 
-Baca ketiga file di `docs/` SEBELUM menulis kode apa pun.
+Baca semua file di `docs/` SEBELUM menulis kode apa pun.
 
 ---
 
@@ -38,8 +40,14 @@ Baca ketiga file di `docs/` SEBELUM menulis kode apa pun.
 8. **Jika instruksi user bertentangan dengan PRD**, tunjukkan
    konfliknya dan minta keputusan sebelum eksekusi. Jangan diam-diam
    mengubah PRD atau mengabaikan PRD.
-9. **Tidak ada data dummy kode.** Semua via seed script.
+9. **Tidak ada data dummy di kode.** Semua via seed script.
 10. **Tidak ada `any` di TypeScript.** Error jangan di-swallow.
+11. **`docs/ui-design-system.md` wajib dipatuhi pada setiap tugas
+    frontend.** Wajib dibaca pada Langkah 0; bagian yang relevan wajib
+    dikutip dalam laporan; self-check kepatuhan (§25 design system)
+    wajib dilaporkan di evidence. Hardcoded hex di komponen, komponen
+    duplicate di luar `components/ui/`, dan pelanggaran format data
+    (Rupiah / Asia-Jakarta) = kerja ulang.
 
 ---
 
@@ -49,11 +57,26 @@ Baca ketiga file di `docs/` SEBELUM menulis kode apa pun.
   Selesai fase = `pnpm build` sukses + dev server jalan.
 - Sebelum mulai: nyatakan ringkas rencana kerja fase ini
   (file apa saja yang akan dibuat/diubah), tunggu konfirmasi user.
+- **Langkah 0 untuk setiap tugas:** sebelum menulis kode, baca dokumen
+  kontrak yang relevan (API-CONTRACT, PRD, ui-design-system.md untuk
+  frontend), kutip bagian yang relevan dalam laporan, dan tunjukkan
+  semua kebuntuan/kontrak diam — lalu TUNGGU keputusan. Jangan
+  mengarang untuk menutup celah kontrak.
 - Setelah selesai fase: tulis ringkasan yang sudah dibuat + cara
   menguji manual + daftar hal yang belum selesai (jika ada).
 - Jangan menyentuh modul fase lain "sekalian biar lengkap".
-- Sebelum menulis kode, agent WAJIB memastikan semua package yang dibutuhkan fase ini tercantum di rencana kerja beserta        perintah instalasinya (mis. pnpm add jose bcryptjs @types/node). Jika agent tidak punya akses terminal, tampilkan daftar perintah ke user untuk dijalankan manual sebelum lanjut.
-- Saat mengedit file yang ada di docs (terutama prisma/schema.prisma), tulis ulang file secara utuh atau edit blok yang presisi. Setelah selesai, WAJIB jalankan prisma validate dan tampilkan outputnya sebelum melanjutkan langkah berikutnya.
+- Sebelum menulis kode, agent WAJIB memastikan semua package yang
+  dibutuhkan fase ini tercantum di rencana kerja beserta perintah
+  instalasinya (mis. `pnpm add jose bcryptjs @types/node`). Jika agent
+  tidak punya akses terminal, tampilkan daftar perintah ke user untuk
+  dijalankan manual sebelum lanjut.
+- Saat mengedit file di docs (terutama prisma/schema.prisma), tulis
+  ulang file secara utuh atau edit blok yang presisi. Setelah selesai,
+  WAJIB jalankan `prisma validate` dan tampilkan outputnya sebelum
+  melanjutkan langkah berikutnya.
+- **Tanpa persetujuan eksplisit user: tidak ada commit.** Commit hanya
+  setelah review lulus dan user memberi instruksi commit.
+
 ---
 
 ## 4. Pola Wajib per Endpoint
@@ -66,7 +89,7 @@ branch check → handler logic → response helper
 ```
 
 - Response sukses: `ok(data, meta?)` → `{ success: true, data, meta? }`
-- Response error: `fail(code, message,)` →
+- Response error: `fail(code, message)` →
   `{ success: false, message, code }`
 - Kode error standar: lihat PRD Bagian 6.2.
 - Pagination semua GET list: `?page&limit` (default 20, max 100).
@@ -82,10 +105,13 @@ branch check → handler logic → response helper
 ```
 apps/web/            # Next.js (portal publik + /admin dashboard + API routes)
   app/api/v1/...     # REST API
+  app/               # halaman frontend (login, /admin, dll.)
+  components/        # komponen React (components/ui/ = reusable wajib)
   lib/services/      # business logic
   lib/               # prisma client, auth helper, response helper
+  scripts/           # test suite regresi per tugas
 packages/shared/     # types, enums, konstanta permission matrix
-docs/                # PRD.md, DB-SCHEMA.md, API-CONTRACT.md
+docs/                # PRD.md, DB-SCHEMA.md, API-CONTRACT.md, ui-design-system.md
 prisma/              # schema.prisma, migrations, seed.ts
 ```
 
@@ -105,7 +131,11 @@ Monorepo pnpm workspace. Jalankan apa pun dari root: `pnpm dev`,
 - [ ] Transaksi PAID / closing CLOSED / opname SUBMITTED = immutable
 - [ ] Semua GET list punya pagination
 - [ ] Tidak ada password/token/PII di log
-- [ ] `pnpm build` sukses tanpa error TypeScript
+- [ ] Tidak ada token di localStorage (sesi = httpOnly cookie)
+- [ ] Guard frontend = UX saja; penolakan keamanan tetap dari server (401/403)
+- [ ] Self-check design system §25 dijalankan (tugas frontend) dan dilaporkan
+- [ ] `pnpm build` sukses tanpa error TypeScript + `pnpm lint` bersih
+- [ ] Suite regresi yang ada tetap hijau (jangan ada yang rusak)
 
 ---
 
@@ -113,7 +143,21 @@ Monorepo pnpm workspace. Jalankan apa pun dari root: `pnpm dev`,
 
 Rekam medis, payment gateway, notifikasi otomatis (WA/email),
 partial refund, payroll, multi-currency, pajak, mobile app,
-tabel role dinam, booking online di portal publik.
+tabel role dinamis, booking online di portal publik.
 
 Jika user memintanya, ingatkan bahwa ini out-of-scope v1 dan minta
 konfirmasi eksplisit untuk mengubah PRD sebelum dibangun.
+
+---
+
+## 8. Regresi & Bukti (definisi "selesai")
+
+Sebuah tugas dianggap selesai HANYA jika:
+
+1. Semua kriteria uji tugas tersebut hijau (output mentah dilaporkan).
+2. Seluruh test suite regresi yang sudah ada tetap hijau.
+3. `pnpm lint` + `pnpm build` bersih.
+4. Keputusan desain yang diambil dilaporkan (keputusan + alasan).
+5. Self-check kepatuhan (backend: aturan 5/6/7; frontend: design
+   system §25) dilaporkan.
+6. Tidak ada commit tanpa persetujuan user.

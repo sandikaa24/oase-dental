@@ -167,6 +167,32 @@ Pagination: `?page=1&limit=20`, default 20, max 100.
 7. **Immutable**: transaksi `PAID`, `CANCELLED`, cash closing `CLOSED`,
    dan audit log tidak boleh di-update.
 
+## 6.4 FRONTEND DESIGN SYSTEM (BINDING)
+
+Seluruh implementasi frontend WAJIB mengikuti design system yang terdokumentasi di:
+
+```text
+docs/ui-design-system.md
+```
+
+Ketentuan:
+
+1. **Status: BINDING.** File tersebut berlaku sebagai kontrak UI, setara
+   kedudukannya dengan API-CONTRACT untuk backend.
+2. **Pembagian kewenangan:**
+   - Persoalan tampilan/visual (warna, tipografi, komponen, state, format
+     tampilan) → `docs/ui-design-system.md` yang menang.
+   - Persoalan logika/data (bentuk request/response, validasi, alur bisnis)
+     → API-CONTRACT yang menang.
+3. **Wajib dibaca di Langkah 0** setiap tugas frontend. Bagian design system
+   yang relevan dengan tugas tersebut wajib dikutip dalam laporan Langkah 0
+   (sama seperti kutipan API-CONTRACT).
+4. **Self-check kepatuhan** (§25 ui-design-system.md) wajib dieksekusi dan
+   hasilnya dilaporkan di evidence setiap tugas frontend, sebagai bagian
+   dari definisi "selesai".
+5. Pelanggaran design system ditangani sama seperti pelanggaran kontrak API:
+   ditolak pada review, wajib diperbaiki sebelum commit.
+
 ---
 
 ## 7. Modul

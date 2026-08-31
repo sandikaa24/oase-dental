@@ -115,3 +115,132 @@ Base URL script dapat di-override via env `API_BASE` (default port 3000).
 - G6: audit grep → semua route punya guard, tidak ada yang kosong.
 - G7: `pnpm lint` bersih, `pnpm build` sukses tanpa error TypeScript.
 - Pembersihan komentar deliberasi di POST /branches: diverifikasi ulang lewat re-run guard test → perilaku tetap identik.
+
+---
+
+# Fase 1 — Tugas 4: Master Data (Categories, Services, Products, Materials)
+
+## Ringkasan
+
+CRUD penuh untuk empat resource master data GLOBAL (tidak ada `branchId`):
+Categories, Services, Products, Materials. Pola per endpoint identik Tugas 1:
+Zod parse → `requireAuth` → `requirePermission` → service layer → response helper.
+Handler tipis, seluruh logika di `lib/services/*`.
+
+File baru: `lib/validations/{category,service,product,material}.schema.ts`,
+`lib/services/{category,service,product,material}.service.ts`,
+`app/api/v1/{categories,services,products,materials}/route.ts` + `[id]/route.ts`.
+Tidak ada dependency baru, tidak ada perubahan schema Prisma.
+
+## Keputusan A1: READ produk/bahan boleh untuk CASHIER
+
+PRD Bagian 5 memberi `MASTER_DATA_READ` ke CASHIER, dan POS Fase 2 tidak bisa
+jalan tanpa membaca katalog produk. "Inventory" yang tertutup untuk CASHIER
+merujuk stok/opname/stock-in — resource Fase 2 dengan guard sendiri, bukan
+katalog master. Jadi GET products/materials → 200 untuk CASHIER.
+
+## Keputusan B1: hard delete vs soft delete berbasis pemakaian
+
+Cek pemakaian berbeda per resource, sesuai FK yang benar-benar ada di schema:
+
+| Resource | Dianggap "sudah dipakai" jika ada |
+|---|---|
+| Service | `TransactionItem.serviceId` |
+| Product | `TransactionItem.productId` atau `InventoryMovement.productId` |
+| Material | `InventoryMovement.materialId` (material tidak dijual) |
+
+Belum dipakai → hard delete. Sudah dipakai → soft delete (`deletedAt`).
+Semua list/get mengecualikan `deletedAt != null`; PATCH ke item yang sudah
+soft-deleted → 404.
+
+## Keputusan C: Categories tanpa endpoint DELETE
+
+Model `Category` tidak punya kolom `deletedAt` dan API-CONTRACT tidak
+mencantumkan DELETE. Penonaktifan = PATCH `{ active: false }`. Tidak ada
+kolom atau endpoint yang ditambahkan di luar dokumen.
+
+## Deviasi: fallback P2003 ke soft delete
+
+Jika hard delete tetap gagal karena foreign key lain (Prisma `P2003`), kode
+jatuh ke soft delete alih-alih melempar 409. Alasan: histori referensial tidak
+boleh rusak dan operasi hapus tetap tuntas. Ini deviasi dari "hard delete"
+literal dan sengaja dicatat di sini.
+
+## Known limitation: `Service.name` tidak unique
+
+`model Service` tidak punya `@unique` pada `name`, sehingga tidak ada mapping
+409 DUPLICATE untuk Services (tes B2 = N/A). Tidak diubah karena perubahan
+schema di luar lingkup Tugas 4. Opsi masa depan: unique composite
+`categoryId, name` via `prisma migrate dev`.
+
+## Bukti runtime `requirePermission` (memenuhi kontrak Tugas 2)
+
+Categories adalah endpoint pertama yang memakai `requirePermission`:
+
+- A4 — CASHIER GET /categories → **200** (punya `MASTER_DATA_READ`).
+- A8a — CASHIER POST /categories → **403 FORBIDDEN**, message
+  "Permission tidak mencukupi untuk aksi ini" (tidak punya `MASTER_DATA_MANAGE`).
+
+Status `requirePermission` naik dari typecheck-only menjadi tervalidasi runtime.
+Message 403 ini berbeda dari `requireRole` ("Role tidak diizinkan mengakses
+resource ini"), konsisten dengan pemisahan dua lapisan 403 di Tugas 2.
+
+## Matriks role x endpoint (perluasan G6)
+
+| Endpoint | Method | Guard | OWNER | MANAGER | CASHIER | EMPLOYEE |
+|---|---|---|---|---|---|---|
+| `/categories` | GET | MASTER_DATA_READ | 200 | 200 | 200 | 403 |
+| `/categories` | POST/PATCH | MASTER_DATA_MANAGE | 201/200 | 403 | 403 | 403 |
+| `/services` | GET | MASTER_DATA_READ | 200 | 200 | 200 | 403 |
+| `/services` | POST/PATCH/DELETE | MASTER_DATA_MANAGE | 201/200/200 | 403 | 403 | 403 |
+| `/products` | GET | MASTER_DATA_READ | 200 | 200 | 200 | 403 |
+| `/products` | POST/PATCH/DELETE | MASTER_DATA_MANAGE | 201/200/200 | 403 | 403 | 403 |
+| `/materials` | GET | MASTER_DATA_READ | 200 | 200 | 200 | 403 |
+| `/materials` | POST/PATCH/DELETE | MASTER_DATA_MANAGE | 201/200/200 | 403 | 403 | 403 |
+
+Kolom OWNER dan CASHIER hasil tes runtime. Kolom MANAGER dan EMPLOYEE
+diturunkan dari `PERMISSION_MATRIX` (MANAGER punya `MASTER_DATA_READ`,
+EMPLOYEE tidak) — belum diuji runtime karena user MANAGER/EMPLOYEE belum ada
+di seed, sama seperti catatan G5 di Tugas 2.
+
+Semua GET list memakai pagination `?page&limit` (default 20, max 100) dengan
+meta `{ total, page, limit, totalPages }`, plus filter `?active=true|false`.
+
+## Akar masalah `pnpm build` gagal: cache `.next` stale
+
+`pnpm build` sempat gagal dengan `PageNotFoundError: Cannot find module for
+page: /api/v1/auth/login`. Penyebabnya **bukan** kode Tugas 4 dan **bukan**
+kondisi pre-existing: build dijalankan pada direktori `.next` yang masih berisi
+artefak dev server yang sebelumnya jalan di sesi yang sama. Setelah
+`rm -rf apps/web/.next`, `pnpm build` langsung hijau dan me-list ke-17 route
+termasuk 8 route master data baru.
+
+Klaim awal saya bahwa error ini "pre-existing" tidak berdasar dan salah.
+Aturan kerja untuk sesi berikutnya: hentikan dev server dan bersihkan `.next`
+sebelum menjalankan `pnpm build` sebagai gerbang penutup fase.
+
+## Hasil verifikasi Tugas 4
+
+- Skrip `scripts/phase1-task4-test.mjs`: 4 resource x 9 kriteria, semua sesuai
+  ekspektasi. Categories A1 201 / A2 409 DUPLICATE / A3 400 VALIDATION_ERROR /
+  A4 200+meta / A5 200 & 404 / A6 200 partial / A7 active=false + filter /
+  A8a 403 / A9 401. Services B1 201 s.d. B9 401 dengan B7 DELETE mode `hard`
+  dan tombstone 404. Products C1–C9 termasuk C2 409 SKU duplikat.
+  Materials D1–D9 termasuk D2 409 SKU duplikat.
+- Regresi Fase 0: 16 PASS, 0 FAIL.
+- Regresi Tugas 3: B1–B11 PASS (B7 BRANCH_ACCESS_DENIED, B8 FORBIDDEN).
+- Regresi Tugas 2: G1 12 tes branches identik, G4 CASHIER 403 pada branches.
+- `npx tsc --noEmit` exit 0, `pnpm lint` bersih tanpa warning.
+- `pnpm build` hijau setelah `.next` dibersihkan.
+
+## Deviasi skrip bukti
+
+`scripts/phase1-task4-test.mjs` memakai suffix acak per run untuk nama kategori
+dan SKU produk/bahan (`PRD-T4-<n>`, `MTL-T4-<n>`) agar tes 201 dan 409
+reproducible. Konsekuensi sama seperti Tugas 2: data uji menumpuk di DB.
+Pembersihan berkala, mis.
+`DELETE FROM products WHERE sku LIKE 'PRD-T4-%' OR sku LIKE 'PRDX-T4-%';`
+`DELETE FROM materials WHERE sku LIKE 'MTL-T4-%' OR sku LIKE 'MTLX-T4-%';`
+`DELETE FROM categories WHERE name LIKE 'Kat %' OR name LIKE 'X %';`
+Skrip B1 memakai `categoryId` kategori seed "Perawatan Umum" secara hardcode;
+jika DB di-reseed dengan id berbeda, nilai itu perlu disesuaikan.

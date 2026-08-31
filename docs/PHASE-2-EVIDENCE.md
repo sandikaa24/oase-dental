@@ -10,8 +10,10 @@
 | Tugas | Status | Bukti |
 |---|---|---|
 | 1. Attendance | ✅ | T1–T13 + T4b + cheap tests, 6 suite regresi hijau |
-| 2. POS (Transactions) | ⬜ | — |
+| 2. POS (Transactions) | ✅ | POS-1 s/d POS-13 + POS-9b + assert 0 movement, 7 suite regresi hijau |
 | 3. Inventory | ⬜ | — |
+
+---
 
 ## Tugas 1 — Attendance
 
@@ -55,7 +57,7 @@
 - **?month=YYYY-MM** — Validasi regex `^\d{4}-(0[1-9]|1[0-2])$`; tanpa param → default bulan berjalan
   WIB (keputusan saat kontrak diam). Bukti: cheap tests.
 
-### Matriks Guard (baris baru untuk matriks G6)
+### Matriks Guard (Attendance)
 
 | Endpoint | Method | Permission / Guard | Role yang Diizinkan | Cakupan / Scope Data |
 |---|---|---|---|---|
@@ -65,7 +67,7 @@
 | `/api/v1/attendance` | GET | `ATTENDANCE_VIEW_ALL` | `OWNER`, `MANAGER` | **OWNER:** semua cabang / filter `?branchId`.<br>**MANAGER:** terisolasi di cabang aktif (`auth.branchId`). |
 | `/api/v1/attendance/:id/correct` | POST | `OWNER` | `OWNER` only | Koreksi record absensi + audit log `ATTENDANCE_CORRECTED`. |
 
-### File
+### File Attendance
 - [`lib/errors.ts`](file:///D:/OASE/apps/web/lib/errors.ts) — Tambah error code custom pada `ValidationError` dan class `AlreadyCheckedInError`.
 - [`lib/validations/attendance.schema.ts`](file:///D:/OASE/apps/web/lib/validations/attendance.schema.ts) — Zod validation schemas untuk `GET /attendance/me`, `GET /attendance`, dan `POST /attendance/:id/correct`.
 - [`lib/services/attendance.service.ts`](file:///D:/OASE/apps/web/lib/services/attendance.service.ts) — Business logic absensi, helper tanggal/jam WIB `getJakartaDateTime`, kalkulasi lateAfter, dan audit log.
@@ -76,34 +78,78 @@
 - [`app/api/v1/attendance/[id]/correct/route.ts`](file:///D:/OASE/apps/web/app/api/v1/attendance/[id]/correct/route.ts) — Endpoint POST koreksi manual absensi oleh OWNER (200).
 - [`scripts/phase2-task1-test.mjs`](file:///D:/OASE/apps/web/scripts/phase2-task1-test.mjs) — Script pengujian menyeluruh kriteria T1–T13 (+ T4b & Cheap Tests).
 
-### Hasil Tes
-- **T4:** Check-in tanpa switch-branch (activeBranchId null) $\rightarrow$ `400 VALIDATION_ERROR` ✅
-- **T4b (D1):** Check-in oleh OWNER tanpa employeeId $\rightarrow$ `400 VALIDATION_ERROR` ✅
-- **T1:** Check-in setelah switch-branch ke JKT $\rightarrow$ `201 CREATED`, status LATE/PRESENT terisi ✅
-- **T2:** Check-in kedua kali pada hari sama $\rightarrow$ `400 ALREADY_CHECKED_IN` ✅
-- **T5:** CASHIER panggil `GET /attendance` $\rightarrow$ `403 FORBIDDEN` (tidak punya `ATTENDANCE_VIEW_ALL`) ✅
-- **T6:** `GET /attendance/me` $\rightarrow$ `200 OK`, hanya record milik diri sendiri ✅
-- **T3:** Check-out $\rightarrow$ `200 OK`, checkOut timestamp terisi ✅
-- **T10:** Check-out kedua kali pada hari sama $\rightarrow$ `409 INVALID_TRANSACTION_STATE` ✅
-- **T7:** `GET /attendance` oleh OWNER (`200 OK`, pagination meta) & MANAGER (`200 OK`) ✅
-- **T8:** Tanpa cookie $\rightarrow$ `401 UNAUTHORIZED`; koreksi ID acak $\rightarrow$ `404 NOT_FOUND` ✅
-- **T9:** OWNER koreksi manual check-in ke jam lewat batas $\rightarrow$ `200 OK`, `status = LATE`, `corrected = true` ✅
-- **T11:** MANAGER (aktif di JKT) panggil `GET /attendance` $\rightarrow$ Record BDG tidak muncul (tembok scope terbukti) ✅
-- **T12:** OWNER koreksi manual check-in ke 07:30 WIB ($\le$ 08:15) $\rightarrow$ `200 OK`, `status = PRESENT`, `corrected = true` ✅
-- **T13:** MANAGER coba panggil koreksi manual $\rightarrow$ `403 FORBIDDEN` ✅
-- **Cheap Tests:** `GET /attendance/me?month=abracadabra` $\rightarrow$ `400 VALIDATION_ERROR`; `GET /attendance/me?month=2026-01` $\rightarrow$ `200 OK` array kosong ✅
+---
 
-**Hasil Regresi 6 Suite & Build:**
-- `phase2-task1-test.mjs` $\rightarrow$ **100% PASS (T1–T13 + T4b + Cheap Tests)** ✅
+## Tugas 2 — POS (Transactions + TransactionItems)
+
+### Keputusan Desain
+- **A1 / Known wart enum `ItemType`** — Di database Postgres (`schema.prisma`), enum `ItemType` hanya memiliki nilai `PRODUCT` dan `MATERIAL`. Item bertipe layanan (`SERVICE`) disimpan di DB dengan relasi `serviceId != null`, `productId = null`, dan nilai `itemType = 'PRODUCT'`.
+  - **Aturan Mutlak:** Pemotongan stok di `StockLevel` dan pembuatan `InventoryMovement` **HANYA dilakukan jika `productId !== null`** (bukan berdasarkan filter `itemType === 'PRODUCT'`).
+  - Serialisasi response ke client menampilkan `itemType: "SERVICE"` jika `serviceId !== null`, dan `"PRODUCT"` jika `productId !== null`.
+- **D-1 / Snapshot Master Price & Name** — Harga dan nama item selalu di-snapshot dari master tabel `Service` dan `Product` saat create/edit DRAFT. Nilai harga yang dikirim oleh client diabaikan sepenuhnya (anti-tamper).
+  - Perubahan harga di master data setelah transaksi dibayar **TIDAK mengubah** history harga pada transaksi yang sudah selesai. Bukti: POS-6 & POS-13.
+- **D-2 / Presisi Uang Decimal** — Semua kalkulasi subtotal, diskon, dan total tagihan menggunakan `Prisma.Decimal` (string parsing, 0 floating point math di JavaScript). Total = $\text{subtotal} - \text{discountAmount}$. Diserialisasi ke string desimal di response JSON. Bukti: POS-12.
+- **D-3 / Validasi Pembayaran & Kembalian** — Pembayaran `paid < total` saat pay ditolak dengan `400 VALIDATION_ERROR`. Kembalian (`change`) dihitung sebagai $\text{paidTotal} - \text{total}$. Bukti: POS-4.
+- **D-4 / Slot Validasi Closing Kasir** — Verifikasi bahwa hari operasional belum ditutup oleh kasir (`CashClosing` dengan `branchId` terkait, `status = 'CLOSED'`, dan `closingDate >= workDate`). Jika sudah ditutup $\rightarrow$ ditolak `409 CLOSING_PERIOD_LOCKED`. Mengecek model `CashClosing` riil yang ada di `schema.prisma` L468-485.
+- **D-5 / Rollback Atomik Stok Tidak Cukup** — Ketersediaan stok produk diverifikasi di `StockLevel`. Jika stok tidak mencukupi $\rightarrow$ `409 INSUFFICIENT_STOCK` dan seluruh operasi di-rollback atomik di dalam `prisma.$transaction` (terbukti: 0 row `TransactionPayment` & 0 row `InventoryMovement` tersimpan di database). Bukti: POS-7.
+- **D-6 / Nomor DRAFT vs TRX Resmi** — Saat create DRAFT (`POST /transactions`), nomor transaksi digenerate sementara dengan format `DRAFT-YYYYMMDD-XXXXXX` (random alphanumeric). Saat eksekusi bayar (`POST /transactions/:id/pay`), nomor transaksi resmi digenerate secara sekuensial melalui tabel `NumberSequence` dengan format `TRX-YYYYMMDD-XXXXX`. Bukti: POS-2.
+- **D-7 / Immutabilitas Transaksi PAID** — Operasi edit (`PATCH /transactions/:id`) dan hapus (`DELETE /transactions/:id`) hanya diizinkan untuk transaksi berstatus `DRAFT`. Transaksi dengan status selain `DRAFT` ditolak dengan `409 INVALID_TRANSACTION_STATE`.
+- **D-8 / Pembatalan (VOID) Transaksi [OWNER Only]** — Endpoint `POST /transactions/:id/cancel` hanya dapat dipanggil oleh role `OWNER` dengan menyertakan `reason` (minimal 10 karakter) pada transaksi yang sudah berstatus `PAID`. Operasi ini secara atomik:
+  1. Mengembalikan saldo stok produk (`StockLevel.quantity += qty`).
+  2. Mencatat `InventoryMovement` pemulihan stok (`quantityDelta: +qty`, `referenceType: 'TRANSACTION'`).
+  3. Mengubah status transaksi menjadi `CANCELLED`.
+  4. Mencatat `AuditLog` dengan aksi `TRANSACTION_CANCELLED`.
+  Bukti: POS-10.
+- **D-9 / Guard Scope & IDOR Guard** — Non-OWNER (`CASHIER`) hanya dapat melihat dan membuat transaksi pada cabang aktifnya (`auth.branchId`). Endpoint `/transactions/:id` dilindungi IDOR guard (CASHIER ditolak 403 jika mengakses transaksi cabang lain). Role `MANAGER` ditolak `403 FORBIDDEN` dari modul POS (sesuai API-CONTRACT §8). Bukti: POS-8, POS-9, & POS-9b.
+- **D-10 / Alasan Diskon** — Diskon nominal (`discountAmount > 0`) wajib menyertakan alasan diskon (`discountReason` minimal 1 karakter).
+
+### Matriks Guard (POS / Transactions)
+
+| Endpoint | Method | Permission / Guard | Role yang Diizinkan | Cakupan / Scope Data |
+|---|---|---|---|---|
+| `/api/v1/transactions` | GET | `requireRole('OWNER', 'CASHIER')` | `OWNER`, `CASHIER` | **OWNER:** semua cabang / filter `?branchId`.<br>**CASHIER:** terisolasi di cabang aktif (`auth.branchId`). |
+| `/api/v1/transactions` | POST | `POS_CREATE` | `OWNER`, `CASHIER` | Membuat transaksi `DRAFT` pada cabang aktif (`auth.branchId`). |
+| `/api/v1/transactions/:id` | GET | `requireRole('OWNER', 'CASHIER')` | `OWNER`, `CASHIER` | Detail transaksi + items + payments. IDOR guard branch ownership untuk non-OWNER. |
+| `/api/v1/transactions/:id` | PATCH | `POS_CREATE` | `OWNER`, `CASHIER` | Edit draft transaksi (hanya status `DRAFT`). |
+| `/api/v1/transactions/:id` | DELETE | `POS_CREATE` | `OWNER`, `CASHIER` | Hapus draft transaksi (hanya status `DRAFT`). |
+| `/api/v1/transactions/:id/pay` | POST | `POS_CREATE` | `OWNER`, `CASHIER` | Pelunasan transaksi `DRAFT` $\rightarrow$ `PAID`, potong stok atomik, generate nomor urut `TRX-...`. |
+| `/api/v1/transactions/:id/cancel` | POST | `OWNER` (`TRANSACTION_CANCEL`) | `OWNER` only | Membatalkan transaksi `PAID` $\rightarrow$ `CANCELLED`, memulihkan stok produk, catat audit log. |
+
+### File POS
+- [`lib/validations/pos.schema.ts`](file:///D:/OASE/apps/web/lib/validations/pos.schema.ts) — Zod validation schemas untuk create DRAFT, update DRAFT, pay, cancel, dan list query.
+- [`lib/services/pos.service.ts`](file:///D:/OASE/apps/web/lib/services/pos.service.ts) — Business logic transaksi, kalkulasi Decimal, $transaction atomik, pengurangan/pemulihan stok, sequence generator, IDOR guard.
+- [`app/api/v1/transactions/route.ts`](file:///D:/OASE/apps/web/app/api/v1/transactions/route.ts) — Endpoint GET list & POST create DRAFT transaksi.
+- [`app/api/v1/transactions/[id]/route.ts`](file:///D:/OASE/apps/web/app/api/v1/transactions/[id]/route.ts) — Endpoint GET detail, PATCH edit DRAFT, DELETE buang DRAFT.
+- [`app/api/v1/transactions/[id]/pay/route.ts`](file:///D:/OASE/apps/web/app/api/v1/transactions/[id]/pay/route.ts) — Endpoint POST pelunasan transaksi (201).
+- [`app/api/v1/transactions/[id]/cancel/route.ts`](file:///D:/OASE/apps/web/app/api/v1/transactions/[id]/cancel/route.ts) — Endpoint POST pembatalan transaksi oleh OWNER (200).
+- [`scripts/phase2-task2-test.mjs`](file:///D:/OASE/apps/web/scripts/phase2-task2-test.mjs) — Script pengujian menyeluruh skenario POS-1 s/d POS-13 (+ POS-9b).
+
+### Hasil Tes POS (POS-1 s/d POS-13)
+- **POS-1:** Setup data product master, service master, stok awal = 10, dan user cashier/manager ✅
+- **POS-2:** Create DRAFT (2x Product @50k + 1x Service @100k) $\rightarrow$ `201 DRAFT`, bayar 250k $\rightarrow$ `201 PAID`, `change = 50000`, `transactionNumber = TRX-YYYYMMDD-XXXXX` ✅
+- **POS-3:** Konsistensi DB: `total = 200000`, `StockLevel` berkurang 10 $\rightarrow$ 8, `InventoryMovement` tercatat 1 baris (`delta = -2`, `referenceType = 'TRANSACTION'`) ✅
+- **POS-4:** Pembayaran kurang (`paid = 30000 < total = 50000`) $\rightarrow$ `400 VALIDATION_ERROR` ✅
+- **POS-5:** Validasi input: `quantity = 0` $\rightarrow$ 400; `itemId` acak $\rightarrow$ 400 ✅
+- **POS-6:** Anti-tamper harga client: subtotal tetap dihitung dari harga master DB ($100000$) meskipun client mengirim parameter `price: 1` ✅
+- **POS-7:** Stok tidak mencukupi (tersedia 8, diminta 50) $\rightarrow$ `409 INSUFFICIENT_STOCK`, status transaksi tetap `DRAFT`, 0 payment tersimpan, **0 InventoryMovement tercipta (atomik rollback terbukti)**, saldo stok tetap 8 ✅
+- **POS-8:** Cashier tanpa switch-branch create transaksi $\rightarrow$ `400 VALIDATION_ERROR` ✅
+- **POS-9:** CASHIER `GET /transactions` $\rightarrow$ `200 OK` (semua transaksi milik cabang aktif JKT); tanpa cookie $\rightarrow$ `401 UNAUTHORIZED` ✅
+- **POS-9b:** MANAGER `GET /transactions` $\rightarrow$ `403 FORBIDDEN` (sesuai kontrak role POS) ✅
+- **POS-10:** CASHIER coba cancel transaksi PAID $\rightarrow$ `403 FORBIDDEN`; OWNER cancel dengan alasan $\ge$ 10 karakter $\rightarrow$ `200 OK`, `status = CANCELLED`, saldo `StockLevel` pulih kembali menjadi 10, `InventoryMovement` pemulihan stok (`+2`) tercatat di DB ✅
+- **POS-11:** `GET /transactions/:id` $\rightarrow$ `200 OK`, detail lengkap, items lengkap, uang terserialisasi sebagai string desimal ✅
+- **POS-12:** Presisi aritmatika uang `Prisma.Decimal`: 3x @12345.5 - 1000.5 = 36036 (0 floating point artifact) ✅
+- **POS-13:** Snapshot master price: update harga master product dari 50000 menjadi 95000 tidak mengubah harga item & total transaksi lama yang sudah dibayar (tetap 50000) ✅
+
+---
+
+## Ringkasan Regresi Keseluruhan (7 Suites)
+
 - `phase0-regression-test.mjs` $\rightarrow$ **16 PASS, 0 FAIL** ✅
 - `phase1-task2-guard-test.mjs` $\rightarrow$ **12 + G4 PASS** ✅
 - `phase1-task3-test.mjs` $\rightarrow$ **B1–B11 PASS** ✅
 - `phase1-task4-test.mjs` $\rightarrow$ **36/36 PASS** ✅
 - `phase1-task5-test.mjs` $\rightarrow$ **E1–E11 (+ E8b) PASS** ✅
+- `phase2-task1-test.mjs` $\rightarrow$ **T1–T13 (+ T4b & cheap tests) PASS** ✅
+- `phase2-task2-test.mjs` $\rightarrow$ **POS-1 s/d POS-13 (+ POS-9b) PASS** ✅
 - `pnpm lint` $\rightarrow$ **0 warnings, 0 errors** ✅
-- `pnpm build` (clean build setelah `rm -rf .next`) $\rightarrow$ **Compiled successfully, 0 TS errors** ✅
-
-### Catatan Lingkungan
-- Jam sistem mesin dev menunjukkan 2026 (anomali WIB). Tidak memengaruhi tes
-  (semua relatif), tapi wajib disinkronkan sebelum modul yang membandingkan
-  tanggal dengan dunia luar (laporan/ekspor).
+- `pnpm build` (clean build) $\rightarrow$ **Compiled successfully, 0 TS errors** ✅

@@ -12,6 +12,7 @@ import { getBranchById, updateBranch } from '@/lib/services/branch.service';
  */
 export const GET = withErrorHandler(async (req: NextRequest, { params }: { params: { id: string } }) => {
   const auth = await requireAuth();
+  // OWNER-only; BRANCH_MANAGE tersedia jika nanti perlu permission-granular
   requireRole(auth, 'OWNER');
 
   const branch = await getBranchById(params.id);
@@ -25,6 +26,7 @@ export const GET = withErrorHandler(async (req: NextRequest, { params }: { param
  */
 export const PATCH = withErrorHandler(async (req: NextRequest, { params }: { params: { id: string } }) => {
   const auth = await requireAuth();
+  // OWNER-only; BRANCH_MANAGE tersedia jika nanti perlu permission-granular
   requireRole(auth, 'OWNER');
 
   const body = await req.json();

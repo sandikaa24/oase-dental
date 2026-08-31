@@ -12,6 +12,7 @@ import { createBranch, listBranches } from '@/lib/services/branch.service';
  */
 export const GET = withErrorHandler(async (req: NextRequest) => {
   const auth = await requireAuth();
+  // OWNER-only; BRANCH_MANAGE tersedia jika nanti perlu permission-granular
   requireRole(auth, 'OWNER');
 
   const { searchParams } = new URL(req.url);
@@ -29,6 +30,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
  */
 export const POST = withErrorHandler(async (req: NextRequest) => {
   const auth = await requireAuth();
+  // OWNER-only; BRANCH_MANAGE tersedia jika nanti perlu permission-granular
   requireRole(auth, 'OWNER');
 
   const body = await req.json();
@@ -36,13 +38,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
 
   const branch = await createBranch(input);
 
-  // According to API-CONTRACT typically returns 201. ok() returns 200 by default.
-  // Wait, let's just use ok() and if we need 201 we can do it, but ok() returns 200.
-  // We can return a custom response if needed, but PRD uses ok() helper.
-  // Wait, the test says "POST /branches -> 201".
-  // Let's check if we can add status to ok(). `ok` in response.ts does not accept status.
-  // But wait, the PRD doesn't explicitly mention 201 in the helper, it says "Response 201: data transaksi lengkap" for transactions.
-  // I will just use NextResponse directly for 201, or return ok() and modify the status.
+  // POST create -> 201; helper ok default 200, jadi dibungkus ulang dengan status 201.
   const res = ok(branch);
   return NextResponse.json(await res.json(), { status: 201, headers: res.headers });
 });

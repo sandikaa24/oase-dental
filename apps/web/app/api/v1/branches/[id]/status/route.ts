@@ -12,6 +12,7 @@ import { setStatus } from '@/lib/services/branch.service';
  */
 export const PATCH = withErrorHandler(async (req: NextRequest, { params }: { params: { id: string } }) => {
   const auth = await requireAuth();
+  // OWNER-only; BRANCH_MANAGE tersedia jika nanti perlu permission-granular
   requireRole(auth, 'OWNER');
 
   const body = await req.json();

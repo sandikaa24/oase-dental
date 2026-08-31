@@ -2,7 +2,7 @@ import { cookies } from 'next/headers';
 import type { NextRequest } from 'next/server';
 import { ACCESS_TOKEN_COOKIE, verifyAccessToken, type AccessTokenPayload } from './auth';
 import { ForbiddenError, UnauthorizedError } from './errors';
-import type { UserRole } from '@oase/shared';
+import { hasPermission, type Permission, type UserRole } from '@oase/shared';
 
 /**
  * Context user hasil verifikasi access token.
@@ -52,6 +52,21 @@ export async function requireAuth(): Promise<AuthContext> {
 export function requireRole(auth: AuthContext, ...allowed: UserRole[]): void {
   if (!allowed.includes(auth.role)) {
     throw new ForbiddenError('Role tidak diizinkan mengakses resource ini');
+  }
+}
+
+/**
+ * Pastikan role user punya permission tertentu berdasarkan PERMISSION_MATRIX
+ * di @oase/shared (sumber tunggal, BINDING dari PRD Bagian 5).
+ * Throw ForbiddenError (403 FORBIDDEN) jika tidak.
+ *
+ * Catatan lapisan: guard ini memakai code FORBIDDEN untuk role/permission check.
+ * Penolakan akses cabang adalah lapisan berbeda dan tetap memakai
+ * BranchAccessDeniedError (403 BRANCH_ACCESS_DENIED) — jangan digabung.
+ */
+export function requirePermission(auth: AuthContext, permission: Permission): void {
+  if (!hasPermission(auth.role, permission)) {
+    throw new ForbiddenError('Permission tidak mencukupi untuk aksi ini');
   }
 }
 

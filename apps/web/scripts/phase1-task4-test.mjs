@@ -1,7 +1,8 @@
 /**
  * FASE 1 — TUGAS 4: Master Data (Categories, Services, Products, Materials).
  * Bukti kriteria 1-9 per resource. Juga bukti runtime requirePermission:
- * Categories GET CASHIER -> 200 (MASTER_DATA_READ),
+ * Categories GET OWNER -> 200 (MASTER_DATA_READ / OWNER),
+ * Categories GET CASHIER -> 403 (CASHIER tidak punya MASTER_DATA_READ per least-privilege),
  * Categories POST CASHIER -> 403 (MASTER_DATA_MANAGE, CASHIER tak punya).
  *
  * Base URL bisa di-override via env API_BASE (default port 3000).
@@ -21,7 +22,7 @@ async function req(path, method, body, cookieString) {
       body: body ? JSON.stringify(body) : undefined,
     });
     const setCookie = res.headers.get('set-cookie');
-    const text = await res.text.call(res);
+    const text = await res.text();
     let data;
     try {
       data = JSON.parse(text);
@@ -65,11 +66,11 @@ async function testCategories(owner, cashier, rnd) {
   console.log('\nA3. POST /categories invalid {name:""} -> 400 VALIDATION_ERROR');
   show('A3', await req('/categories', 'POST', { name: '' }, owner));
 
-  console.log('\nA4. GET /categories (CASHIER) -> 200 + meta [runtime proof MASTER_DATA_READ]');
-  show('A4', await req('/categories', 'GET', null, cashier));
+  console.log('\nA4. GET /categories (OWNER) -> 200 + meta');
+  show('A4', await req('/categories', 'GET', null, owner));
 
-  console.log('\nA5a. GET /categories/:id (CASHIER) -> 200');
-  show('A5a', await req(`/categories/${id}`, 'GET', null, cashier));
+  console.log('\nA5a. GET /categories/:id (OWNER) -> 200');
+  show('A5a', await req(`/categories/${id}`, 'GET', null, owner));
   console.log('A5b. GET /categories/<acak-uuid> -> 404');
   show('A5b', await req('/categories/00000000-0000-0000-0000-000000000000', 'GET', null, owner));
 
@@ -84,7 +85,8 @@ async function testCategories(owner, cashier, rnd) {
   console.log('\nA8. GUARD requirePermission runtime:');
   console.log('A8a. POST /categories (CASHIER) -> 403 FORBIDDEN [MASTER_DATA_MANAGE]');
   show('A8a', await req('/categories', 'POST', { name: 'X ' + rnd }, cashier));
-  console.log('A8b. GET /categories (CASHIER) -> 200 [MASTER_DATA_READ] (lihat A4)');
+  console.log('A8b. GET /categories (CASHIER) -> 403 FORBIDDEN [CASHIER tidak punya MASTER_DATA_READ]');
+  show('A8b', await req('/categories', 'GET', null, cashier));
 
   console.log('\nA9. GET /categories tanpa cookie -> 401');
   show('A9', await req('/categories', 'GET'));
@@ -94,9 +96,13 @@ async function testServices(owner, cashier, rnd) {
   console.log('\n========== B. SERVICES ==========');
   const name = 'Layanan ' + rnd;
 
+  // Dapatkan categoryId yang valid dari kategori yang ada
+  const catList = await req('/categories', 'GET', null, owner);
+  const categoryId = catList.data?.data?.[0]?.id;
+
   console.log('\nB1. POST /services {categoryId, name, price} -> 201');
   const b1 = await req('/services', 'POST', {
-    categoryId: 'aea9e070-44ae-464d-875e-620922184f8e', // Perawatan Umum
+    categoryId,
     name,
     price: 150000,
   }, owner);
@@ -108,11 +114,11 @@ async function testServices(owner, cashier, rnd) {
   console.log('\nB3. POST /services invalid {name:"", price:-1} -> 400 VALIDATION_ERROR');
   show('B3', await req('/services', 'POST', { name: '', price: -1 }, owner));
 
-  console.log('\nB4. GET /services (CASHIER) -> 200 + meta');
-  show('B4', await req('/services', 'GET', null, cashier));
+  console.log('\nB4. GET /services (OWNER) -> 200 + meta');
+  show('B4', await req('/services', 'GET', null, owner));
 
-  console.log('\nB5a. GET /services/:id (CASHIER) -> 200');
-  show('B5a', await req(`/services/${id}`, 'GET', null, cashier));
+  console.log('\nB5a. GET /services/:id (OWNER) -> 200');
+  show('B5a', await req(`/services/${id}`, 'GET', null, owner));
   console.log('B5b. GET /services/<acak-uuid> -> 404');
   show('B5b', await req('/services/00000000-0000-0000-0000-000000000000', 'GET', null, owner));
 
@@ -124,8 +130,9 @@ async function testServices(owner, cashier, rnd) {
   show('B7 DELETE', d);
   console.log('B7 POST check tombstone:', (await req(`/services/${id}`, 'GET', null, owner)).status);
 
-  console.log('\nB8. Role guard: POST CASHIER -> 403; GET CASHIER -> 200');
+  console.log('\nB8. Role guard: POST CASHIER -> 403; GET CASHIER -> 403');
   show('B8 POST CASHIER', await req('/services', 'POST', { name: 'X ' + rnd, price: 100 }, cashier));
+  show('B8 GET CASHIER', await req('/services', 'GET', null, cashier));
 
   console.log('\nB9. GET /services tanpa cookie -> 401');
   show('B9', await req('/services', 'GET'));
@@ -162,11 +169,11 @@ async function testProducts(owner, cashier, rnd) {
     unit: 'kg',
   }, owner));
 
-  console.log('\nC4. GET /products (CASHIER) -> 200 + meta [keputusan A1]');
-  show('C4', await req('/products', 'GET', null, cashier));
+  console.log('\nC4. GET /products (OWNER) -> 200 + meta');
+  show('C4', await req('/products', 'GET', null, owner));
 
-  console.log('\nC5a. GET /products/:id (CASHIER) -> 200');
-  show('C5a', await req(`/products/${id}`, 'GET', null, cashier));
+  console.log('\nC5a. GET /products/:id (OWNER) -> 200');
+  show('C5a', await req(`/products/${id}`, 'GET', null, owner));
   console.log('C5b. GET /products/<acak-uuid> -> 404');
   show('C5b', await req('/products/00000000-0000-0000-0000-000000000000', 'GET', null, owner));
 
@@ -177,13 +184,14 @@ async function testProducts(owner, cashier, rnd) {
   const d = await req(`/products/${id}`, 'DELETE', null, owner);
   show('C7 DELETE', d);
 
-  console.log('\nC8. Role guard: POST CASHIER -> 403; GET CASHIER -> 200');
+  console.log('\nC8. Role guard: POST CASHIER -> 403; GET CASHIER -> 403');
   show('C8 POST CASHIER', await req('/products', 'POST', {
     sku: 'PRDX-T4-' + rnd,
     name: 'X',
     sellPrice: 1000,
     unit: 'unit',
   }, cashier));
+  show('C8 GET CASHIER', await req('/products', 'GET', null, cashier));
 
   console.log('\nC9. GET /products tanpa cookie -> 401');
   show('C9', await req('/products', 'GET'));
@@ -218,11 +226,11 @@ async function testMaterials(owner, cashier, rnd) {
     unit: 'pcs',
   }, owner));
 
-  console.log('\nD4. GET /materials (CASHIER) -> 200 + meta [keputusan A1]');
-  show('D4', await req('/materials', 'GET', null, cashier));
+  console.log('\nD4. GET /materials (OWNER) -> 200 + meta');
+  show('D4', await req('/materials', 'GET', null, owner));
 
-  console.log('\nD5a. GET /materials/:id (CASHIER) -> 200');
-  show('D5a', await req(`/materials/${id}`, 'GET', null, cashier));
+  console.log('\nD5a. GET /materials/:id (OWNER) -> 200');
+  show('D5a', await req(`/materials/${id}`, 'GET', null, owner));
   console.log('D5b. GET /materials/<acak-uuid> -> 404');
   show('D5b', await req('/materials/00000000-0000-0000-0000-000000000000', 'GET', null, owner));
 
@@ -233,25 +241,26 @@ async function testMaterials(owner, cashier, rnd) {
   const del = await req(`/materials/${id}`, 'DELETE', null, owner);
   show('D7 DELETE', del);
 
-  console.log('\nD8. Role guard: POST CASHIER -> 403; GET CASHIER -> 200');
+  console.log('\nD8. Role guard: POST CASHIER -> 403; GET CASHIER -> 403');
   show('D8 POST CASHIER', await req('/materials', 'POST', {
     sku: 'MTLX-T4-' + rnd,
     name: 'X',
     unit: 'unit',
   }, cashier));
+  show('D8 GET CASHIER', await req('/materials', 'GET', null, cashier));
 
   console.log('\nD9. GET /materials tanpa cookie -> 401');
   show('D9', await req('/materials', 'GET'));
 }
 
-async function run(_u) {
+async function run() {
   const owner = await login('owner@oase.id');
   const cashier = await login('cashier@oase.id');
   if (!owner || !cashier) {
     console.log('Login gagal (owner/cashier).');
     process.exit(1);
   }
-  const rnd = String(Math.floor(Math.random.call(Math) * 100000));
+  const rnd = String(Math.floor(Math.random() * 100000));
 
   await testCategories(owner, cashier, rnd);
   await testServices(owner, cashier, rnd);
@@ -261,4 +270,4 @@ async function run(_u) {
   console.log('\n=== TASK 4 TEST SELESAI ===');
 }
 
-run(0);
+run();

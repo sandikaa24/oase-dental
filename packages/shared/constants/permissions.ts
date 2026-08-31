@@ -71,7 +71,6 @@ export const PERMISSION_MATRIX: Record<UserRole, readonly Permission[]> = {
     Permission.LEAVE_DECIDE
   ],
   CASHIER: [
-    Permission.MASTER_DATA_READ,
     Permission.POS_CREATE,
     Permission.CASH_CLOSING_CREATE,
     Permission.ATTENDANCE_SELF,

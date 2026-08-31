@@ -144,15 +144,45 @@ Body: `{ name, sku, unit, minStock, isStockTracked }`
 
 ## 8. POS — Transactions `[OWNER, CASHIER]`
 
-| Method | Path | Deskripsi |
-|---|---|---|
-| GET | /transactions | List branch aktif, filter `status`, `date`, `dateFrom/To`, `cashierId`, search `transactionNumber` |
-| POST | /transactions | Create DRAFT |
-| GET | /transactions/:id | Detail + items + payments |
-| PATCH | /transactions/:id | Edit DRAFT saja (items, patient info, discount) |
-| DELETE | /transactions/:id | Buang DRAFT |
-| POST | /transactions/:id/pay | Bayar → PAID (atomik) |
-| POST | /transactions/:id/cancel | Cancel PAID `[OWNER]` |
+| Method | Path | Permission | Deskripsi |
+|---|---|---|---|
+| GET | /pos/catalog | POS_CREATE (OWNER, CASHIER), MANAGER | Katalog item jual (Layanan & Produk) beserta stok cabang aktif |
+| GET | /transactions | OWNER, CASHIER | List branch aktif, filter `status`, `date`, `dateFrom/To`, `cashierId`, search `transactionNumber` |
+| POST | /transactions | OWNER, CASHIER | Create DRAFT |
+| GET | /transactions/:id | OWNER, CASHIER | Detail + items + payments |
+| PATCH | /transactions/:id | OWNER, CASHIER | Edit DRAFT saja (items, patient info, discount) |
+| DELETE | /transactions/:id | OWNER, CASHIER | Buang DRAFT |
+| POST | /transactions/:id/pay | OWNER, CASHIER | Bayar → PAID (atomik) |
+| POST | /transactions/:id/cancel | OWNER | Cancel PAID `[OWNER]` |
+
+**GET /pos/catalog** (query: `?search=&type=SERVICE|PRODUCT&categoryId=`)
+Response 200:
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "uuid",
+      "name": "Pembersihan Karang Gigi",
+      "type": "SERVICE",
+      "price": "150000.00",
+      "stock": null,
+      "unit": null,
+      "category": { "id": "uuid", "name": "Perawatan Umum" }
+    },
+    {
+      "id": "uuid",
+      "name": "Sikat Gigi Khusus Ortho",
+      "type": "PRODUCT",
+      "price": "35000.00",
+      "stock": 18,
+      "unit": "pcs",
+      "category": null
+    }
+  ]
+}
+```
+Field `stock` mencerminkan saldo `StockLevel` pada cabang aktif kasir. Produk/layanan yang nonaktif tidak dikembalikan. Dilarang mengekspos harga beli/cost atau field sensitif lainnya.
 
 **POST /transactions** (body; boleh langsung items tanpa DRAFT terpisah)
 ```json

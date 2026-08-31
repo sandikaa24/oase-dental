@@ -830,3 +830,121 @@ export async function cancelTransaction(
 
   return serializeTransaction(cancelled);
 }
+
+/**
+ * GET /pos/catalog
+ * Mengambil katalog item yang dapat dijual di POS (layanan & produk aktif).
+ * Untuk produk, menyertakan stok cabang aktif dari tabel StockLevel.
+ * Dilarang mengekspos field sensitif seperti harga modal/cost.
+ */
+export async function getPosCatalog(
+  branchId: string | null,
+  query: {
+    search?: string;
+    type?: 'SERVICE' | 'PRODUCT';
+    categoryId?: string;
+  }
+) {
+  const results: Array<{
+    id: string;
+    name: string;
+    type: 'SERVICE' | 'PRODUCT';
+    price: string;
+    stock: number | null;
+    unit: string | null;
+    category: { id: string; name: string } | null;
+  }> = [];
+
+  const search = query.search?.trim();
+
+  // 1. Ambil Layanan (jika type tidak dibatasi ke PRODUCT)
+  if (!query.type || query.type === 'SERVICE') {
+    const serviceWhere: Prisma.ServiceWhereInput = {
+      active: true,
+      deletedAt: null,
+    };
+
+    if (search) {
+      serviceWhere.name = { contains: search, mode: 'insensitive' };
+    }
+
+    if (query.categoryId) {
+      serviceWhere.categoryId = query.categoryId;
+    }
+
+    const services = await prisma.service.findMany({
+      where: serviceWhere,
+      include: {
+        category: {
+          select: { id: true, name: true },
+        },
+      },
+      orderBy: { name: 'asc' },
+    });
+
+    for (const s of services) {
+      results.push({
+        id: s.id,
+        name: s.name,
+        type: 'SERVICE',
+        price: s.price.toString(),
+        stock: null,
+        unit: null,
+        category: s.category ? { id: s.category.id, name: s.category.name } : null,
+      });
+    }
+  }
+
+  // 2. Ambil Produk (jika type tidak dibatasi ke SERVICE dan tidak filter categoryId)
+  if ((!query.type || query.type === 'PRODUCT') && !query.categoryId) {
+    const productWhere: Prisma.ProductWhereInput = {
+      active: true,
+      deletedAt: null,
+    };
+
+    if (search) {
+      productWhere.OR = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { sku: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+
+    const products = await prisma.product.findMany({
+      where: productWhere,
+      orderBy: { name: 'asc' },
+    });
+
+    // Ambil stok produk untuk branchId aktif jika ada
+    const productIds = products.map((p) => p.id);
+    const stockMap: Record<string, number> = {};
+
+    if (branchId && productIds.length > 0) {
+      const stockLevels = await prisma.stockLevel.findMany({
+        where: {
+          branchId,
+          itemType: 'PRODUCT',
+          itemId: { in: productIds },
+        },
+      });
+
+      for (const sl of stockLevels) {
+        stockMap[sl.itemId] = sl.quantity;
+      }
+    }
+
+    for (const p of products) {
+      results.push({
+        id: p.id,
+        name: p.name,
+        type: 'PRODUCT',
+        price: p.sellPrice.toString(),
+        stock: stockMap[p.id] ?? 0,
+        unit: p.unit,
+        category: null,
+      });
+    }
+  }
+
+  return results;
+}
+

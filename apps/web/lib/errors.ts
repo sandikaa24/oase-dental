@@ -15,8 +15,14 @@ export abstract class AppError extends Error {
 }
 
 export class ValidationError extends AppError {
-  constructor(message: string = 'Validasi gagal') {
-    super(message, 400, 'VALIDATION_ERROR');
+  constructor(message: string = 'Validasi gagal', code: string = 'VALIDATION_ERROR') {
+    super(message, 400, code);
+  }
+}
+
+export class AlreadyCheckedInError extends AppError {
+  constructor(message: string = 'Sudah melakukan check-in hari ini') {
+    super(message, 400, 'ALREADY_CHECKED_IN');
   }
 }
 

@@ -3,7 +3,9 @@
 import React from 'react';
 import { type PosCartItem } from './pos-types';
 import { formatRupiah } from '@/lib/formatters';
+import { formatThousand, sanitizeDigits, decimalToCents, centsToDecimal } from '@/lib/format/currency';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/components/ui/card';
 import {
   Trash2,
@@ -56,14 +58,13 @@ export function PosCart({
   isSavingDraft,
   activeDraftId,
 }: PosCartProps) {
-  // Hitung subtotal tampilan di client
-  const subtotalNum = items.reduce((acc, item) => {
-    const p = parseFloat(item.price) || 0;
-    return acc + p * item.quantity;
+  // Hitung subtotal tampilan di client menggunakan integer cents
+  const subtotalCents = items.reduce((acc, item) => {
+    return acc + decimalToCents(item.price) * item.quantity;
   }, 0);
 
-  const discountNum = parseFloat(discountAmount) || 0;
-  const totalNum = Math.max(0, subtotalNum - discountNum);
+  const discountCents = decimalToCents(discountAmount);
+  const totalCents = Math.max(0, subtotalCents - discountCents);
 
   // Periksa apakah ada produk yang melebihi batas stok tersedia
   const hasInsufficientStock = items.some(
@@ -74,7 +75,7 @@ export function PosCart({
   );
 
   // Validasi diskon: alasan wajib jika diskon > 0
-  const isDiscountInvalid = discountNum > 0 && !discountReason.trim();
+  const isDiscountInvalid = discountCents > 0 && !discountReason.trim();
 
   return (
     <Card className="flex flex-col h-full border border-border shadow-xs">
@@ -158,7 +159,7 @@ export function PosCart({
                 item.availableStock !== null &&
                 item.quantity > item.availableStock;
 
-              const itemTotalNum = (parseFloat(item.price) || 0) * item.quantity;
+              const itemTotalCents = decimalToCents(item.price) * item.quantity;
 
               return (
                 <div
@@ -238,7 +239,7 @@ export function PosCart({
                     </div>
 
                     <div className="text-xs font-bold text-foreground">
-                      {formatRupiah(String(itemTotalNum))}
+                      {formatRupiah(centsToDecimal(itemTotalCents))}
                     </div>
                   </div>
                 </div>
@@ -259,13 +260,16 @@ export function PosCart({
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <div>
-                <input
-                  type="number"
-                  min="0"
-                  placeholder="Nominal Diskon (Rp)"
-                  value={discountAmount}
-                  onChange={(e) => onUpdateDiscountAmount(e.target.value)}
-                  className="w-full px-2.5 py-1 text-xs rounded border border-border bg-surface text-foreground placeholder:text-muted focus:outline-hidden focus:ring-1 focus:ring-primary"
+                <Input
+                  id="discount-amount-input"
+                  prefix="Rp"
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  placeholder="0"
+                  value={formatThousand(discountAmount)}
+                  onChange={(e) => onUpdateDiscountAmount(sanitizeDigits(e.target.value))}
+                  className="h-8 text-xs pl-8 py-1"
                 />
               </div>
               <div>
@@ -275,7 +279,7 @@ export function PosCart({
                   value={discountReason}
                   onChange={(e) => onUpdateDiscountReason(e.target.value)}
                   className={cn(
-                    'w-full px-2.5 py-1 text-xs rounded border bg-surface text-foreground placeholder:text-muted focus:outline-hidden focus:ring-1',
+                    'w-full h-8 px-2.5 py-1 text-xs rounded border bg-surface text-foreground placeholder:text-muted focus:outline-hidden focus:ring-1',
                     isDiscountInvalid
                       ? 'border-danger-border focus:ring-danger-border'
                       : 'border-border focus:ring-primary'
@@ -299,20 +303,20 @@ export function PosCart({
           <div className="w-full space-y-1.5 text-xs">
             <div className="flex justify-between text-slate-600">
               <span>Subtotal</span>
-              <span>{formatRupiah(String(subtotalNum))}</span>
+              <span>{formatRupiah(centsToDecimal(subtotalCents))}</span>
             </div>
 
-            {discountNum > 0 && (
+            {discountCents > 0 && (
               <div className="flex justify-between text-danger-text">
                 <span>Diskon</span>
-                <span>-{formatRupiah(String(discountNum))}</span>
+                <span>-{formatRupiah(centsToDecimal(discountCents))}</span>
               </div>
             )}
 
             <div className="flex justify-between font-bold text-sm text-foreground pt-1.5 border-t border-slate-200">
               <span>Total Tagihan</span>
               <span className="text-primary text-base font-extrabold">
-                {formatRupiah(String(totalNum))}
+                {formatRupiah(centsToDecimal(totalCents))}
               </span>
             </div>
           </div>

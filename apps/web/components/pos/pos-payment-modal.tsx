@@ -3,7 +3,9 @@
 import React, { useState, useEffect } from 'react';
 import { type PosPayment } from './pos-types';
 import { formatRupiah } from '@/lib/formatters';
+import { formatThousand, sanitizeDigits, decimalToCents, centsToDecimal } from '@/lib/format/currency';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import {
   Dialog,
   DialogHeader,
@@ -41,33 +43,34 @@ export function PosPaymentModal({
   isProcessing,
   error,
 }: PosPaymentModalProps) {
-  const totalNum = parseFloat(totalAmount) || 0;
+  const totalCents = decimalToCents(totalAmount);
 
   const [paymentMode, setPaymentMode] = useState<'SINGLE' | 'SPLIT'>('SINGLE');
   const [singleMethod, setSingleMethod] = useState<'CASH' | 'DEBIT' | 'QRIS_TRANSFER'>('CASH');
-  const [cashGiven, setCashGiven] = useState<string>(totalAmount);
+  const [cashGiven, setCashGiven] = useState<string>('');
 
-  // Split payment list
+  // Split payment list (mulai kosong secara default)
   const [splitPayments, setSplitPayments] = useState<Array<{ method: 'CASH' | 'DEBIT' | 'QRIS_TRANSFER'; amount: string }>>([
-    { method: 'CASH', amount: String(totalNum) },
+    { method: 'CASH', amount: '' },
   ]);
 
   // Reset values when modal opens
   useEffect(() => {
     if (open) {
-      setCashGiven(String(totalNum));
-      setSplitPayments([{ method: 'CASH', amount: String(totalNum) }]);
+      setCashGiven('');
+      setSplitPayments([{ method: 'CASH', amount: '' }]);
     }
-  }, [open, totalNum]);
+  }, [open]);
 
-  // Calculations
-  const cashGivenNum = parseFloat(cashGiven) || 0;
-  const changeNum = singleMethod === 'CASH' ? Math.max(0, cashGivenNum - totalNum) : 0;
-  const isCashUnderpaid = singleMethod === 'CASH' && cashGivenNum < totalNum;
+  // Calculations (cents integer arithmetic)
+  const cashGivenCents = decimalToCents(cashGiven);
+  const isCashEmptyOrZero = !cashGiven.trim() || cashGivenCents === 0;
+  const isCashUnderpaid = singleMethod === 'CASH' && (isCashEmptyOrZero || cashGivenCents < totalCents);
+  const changeCents = singleMethod === 'CASH' && cashGivenCents >= totalCents ? cashGivenCents - totalCents : 0;
 
-  const totalSplitPaid = splitPayments.reduce((acc, p) => acc + (parseFloat(p.amount) || 0), 0);
-  const isSplitUnderpaid = totalSplitPaid < totalNum;
-  const splitRemaining = Math.max(0, totalNum - totalSplitPaid);
+  const totalSplitPaidCents = splitPayments.reduce((acc, p) => acc + decimalToCents(p.amount), 0);
+  const isSplitUnderpaid = totalSplitPaidCents < totalCents;
+  const splitRemainingCents = Math.max(0, totalCents - totalSplitPaidCents);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -78,26 +81,32 @@ export function PosPaymentModal({
       const payments: PosPayment[] = [
         {
           method: singleMethod,
-          // Server checks sum(payments) >= total. For CASH, we pass the actual bill or cash given
-          amount: singleMethod === 'CASH' ? String(cashGivenNum) : totalAmount,
+          // Server checks sum(payments) >= total. For CASH, we pass the actual cash given
+          amount: singleMethod === 'CASH' ? (cashGiven.trim() || '0') : totalAmount,
         },
       ];
       await onProcessPayment(payments);
     } else {
       if (isSplitUnderpaid) return;
-      const validPayments = splitPayments.filter((p) => (parseFloat(p.amount) || 0) > 0);
+      const validPayments = splitPayments
+        .filter((p) => decimalToCents(p.amount) > 0)
+        .map((p) => ({
+          method: p.method,
+          amount: p.amount.trim() || '0',
+        }));
       await onProcessPayment(validPayments);
     }
   };
 
   // Quick cash amounts
+  const totalWhole = Math.ceil(totalCents / 100);
   const quickCashAmounts = [
-    { label: 'Uang Pas', value: totalNum },
-    { label: 'Rp 50.000', value: 50000 },
-    { label: 'Rp 100.000', value: 100000 },
-    { label: 'Rp 200.000', value: 200000 },
-    { label: 'Rp 500.000', value: 500000 },
-  ].filter((qc) => qc.value >= totalNum || qc.label === 'Uang Pas');
+    { label: 'Uang Pas', value: String(totalWhole) },
+    { label: 'Rp 50.000', value: '50000' },
+    { label: 'Rp 100.000', value: '100000' },
+    { label: 'Rp 200.000', value: '200000' },
+    { label: 'Rp 500.000', value: '500000' },
+  ].filter((qc) => decimalToCents(qc.value) >= totalCents || qc.label === 'Uang Pas');
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange} className="max-w-md">
@@ -209,15 +218,17 @@ export function PosPaymentModal({
             {singleMethod === 'CASH' && (
               <div className="space-y-2.5 p-3 rounded-lg bg-slate-50 border border-border">
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-700">
-                    Uang Tunai Diterima (Rp)
-                  </label>
-                  <input
-                    type="number"
-                    min={totalNum}
-                    value={cashGiven}
-                    onChange={(e) => setCashGiven(e.target.value)}
-                    className="w-full px-3 py-1.5 text-sm font-bold rounded-md border border-border bg-surface text-foreground focus:outline-hidden focus:ring-2 focus:ring-primary"
+                  <Input
+                    id="cash-given-input"
+                    label="Uang Tunai Diterima"
+                    prefix="Rp"
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="off"
+                    placeholder="0"
+                    value={formatThousand(cashGiven)}
+                    onChange={(e) => setCashGiven(sanitizeDigits(e.target.value))}
+                    className="text-sm font-bold h-9"
                   />
                 </div>
 
@@ -227,7 +238,7 @@ export function PosPaymentModal({
                     <button
                       key={qc.label}
                       type="button"
-                      onClick={() => setCashGiven(String(qc.value))}
+                      onClick={() => setCashGiven(qc.value)}
                       className="px-2 py-1 text-[11px] font-medium rounded border border-slate-200 bg-white hover:bg-slate-100 transition-colors text-slate-700"
                     >
                       {qc.label}
@@ -239,7 +250,7 @@ export function PosPaymentModal({
                 <div className="flex items-center justify-between pt-2 border-t border-slate-200 text-xs">
                   <span className="font-medium text-slate-600">Uang Kembalian:</span>
                   <span className="font-bold text-sm text-success-text">
-                    {formatRupiah(String(changeNum))}
+                    {formatRupiah(centsToDecimal(changeCents))}
                   </span>
                 </div>
               </div>
@@ -253,7 +264,7 @@ export function PosPaymentModal({
               <button
                 type="button"
                 onClick={() =>
-                  setSplitPayments([...splitPayments, { method: 'QRIS_TRANSFER', amount: '0' }])
+                  setSplitPayments([...splitPayments, { method: 'QRIS_TRANSFER', amount: '' }])
                 }
                 className="text-primary hover:underline flex items-center gap-1 text-[11px]"
               >
@@ -272,23 +283,27 @@ export function PosPaymentModal({
                       updated[idx]!.method = e.target.value as 'CASH' | 'QRIS_TRANSFER' | 'DEBIT';
                       setSplitPayments(updated);
                     }}
-                    className="px-2 py-1 text-xs rounded border border-border bg-surface text-foreground focus:outline-hidden focus:ring-1 focus:ring-primary"
+                    className="h-8 px-2 py-1 text-xs rounded border border-border bg-surface text-foreground focus:outline-hidden focus:ring-1 focus:ring-primary"
                   >
                     <option value="CASH">Tunai (CASH)</option>
                     <option value="QRIS_TRANSFER">QRIS / Transfer</option>
                     <option value="DEBIT">Debit</option>
                   </select>
 
-                  <input
-                    type="number"
-                    min="0"
-                    value={p.amount}
+                  <Input
+                    prefix="Rp"
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="off"
+                    placeholder="0"
+                    value={formatThousand(p.amount)}
                     onChange={(e) => {
                       const updated = [...splitPayments];
-                      updated[idx]!.amount = e.target.value;
+                      updated[idx]!.amount = sanitizeDigits(e.target.value);
                       setSplitPayments(updated);
                     }}
-                    className="flex-1 px-2.5 py-1 text-xs rounded border border-border bg-surface text-foreground font-semibold focus:outline-hidden focus:ring-1 focus:ring-primary"
+                    containerClassName="flex-1"
+                    className="h-8 text-xs font-semibold pl-8 py-1"
                   />
 
                   {splitPayments.length > 1 && (
@@ -309,12 +324,12 @@ export function PosPaymentModal({
             <div className="pt-2 border-t border-slate-200 text-xs space-y-1">
               <div className="flex justify-between text-slate-600">
                 <span>Total Dibayar:</span>
-                <span className="font-semibold">{formatRupiah(String(totalSplitPaid))}</span>
+                <span className="font-semibold">{formatRupiah(centsToDecimal(totalSplitPaidCents))}</span>
               </div>
-              {splitRemaining > 0 && (
+              {splitRemainingCents > 0 && (
                 <div className="flex justify-between text-danger-text font-semibold">
                   <span>Kekurangan:</span>
-                  <span>{formatRupiah(String(splitRemaining))}</span>
+                  <span>{formatRupiah(centsToDecimal(splitRemainingCents))}</span>
                 </div>
               )}
             </div>

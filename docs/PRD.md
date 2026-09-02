@@ -263,6 +263,10 @@ kunci jadi `PAID` → cetak struk (browser print).
 - Given transaksi berhasil, When dilihat 1 tahun kemudian, Then harga item
   sama dengan saat transaksi (snapshot), meski master price sudah berubah.
 
+**Riwayat Transaksi di POS (scope kasir):**
+- Panel riwayat transaksi di halaman POS menampilkan seluruh transaksi pada cabang aktif (milik kasir mana pun yang bertugas di cabang tersebut), bukan hanya milik kasir yang sedang login.
+- Filter transaksi spesifik per kasir disediakan di modul Laporan (Reports), bukan di halaman antarmuka kasir POS.
+
 ### 7.6 Inventory
 - Movement ledger: setiap perubahan stok = baris `inventory_movements`
   (`branch_id`, `item_type` PRODUCT|MATERIAL, `item_id`, `quantity_delta`,
@@ -286,23 +290,21 @@ kunci jadi `PAID` → cetak struk (browser print).
 ### 7.8 Pengeluaran (Expenses)
 - `POST /expenses`: `category` (enum: OPERASIONAL | GAJI | SEWA | UTILITAS |
   SUPPLIER | LAINNYA), `amount` (>0), `expense_date` (<= hari ini),
-  `note`, `
-proof_url (nullable, gambar dari Supabase Storage, max 2MB)`.
+  `note`, `proof_url (nullable, gambar dari Supabase Storage, max 2MB)`.
+- Status: RECORDED (final, immutable). Koreksi = buat expense
+  negatif baru terpisah dengan referensi expense asli di note.
+- Read: Owner + Manager (semua branch untuk Owner; branch aktif
+  untuk Manager).
 
-Status: RECORDED (final, immutable). Koreksi = buat expense
-negatif baru terpisah dengan referensi expense asli di note.
-Read: Owner + Manager (semua branch untuk Owner; branch aktif
-untuk Manager).
-> ⚠️ The response reached the length limit. Reply **continue** to get the rest.
 ### 7.9 Cash Closing (Kas Harian)
 - 1 closing per branch, mencakup semua transaksi CASH `PAID`
   dengan `transaction_date` sejak closing sebelumnya sampai sekarang.
   Aturan kunci:
-    1.Hanya 1 closing aktif per branch. Closing baru hanya boleh
-    dibuat jika closing sebelumnya berstatus `CLOSED`.
-    2.Setelah closing, transaksi PAID baru dengan tanggal dalam
-    periode yang sudah tertutup DITOLAK (`CLOSING_PERIOD_LOCKED`).
-    3.Tanggal closing dari server, bukan input bebas client.
+    1. Hanya 1 closing aktif per branch. Closing baru hanya boleh
+       dibuat jika closing sebelumnya berstatus `CLOSED`.
+    2. Setelah closing, transaksi PAID baru dengan tanggal dalam
+       periode yang sudah tertutup DITOLAK (`CLOSING_PERIOD_LOCKED`).
+    3. Tanggal closing dari server, bukan input bebas client.
 - Flow: sistem hitung `expected_cash` (total CASH dari transaksi +
   cash in − pengeluaran cash sejak closing terakhir, bila ada) →
   kasir hitung fisik → input `actual_cash` → selisih `variance`
@@ -314,6 +316,11 @@ untuk Manager).
   dan selisih kas menjadi tanggung jawab operasional (tercatat di
   audit log + note). Tidak mengubah `expected_cash` closing yang
   sudah final.
+
+**Keputusan Desain (BINDING):**
+- **Tanpa alur approval v1**: Alur closing adalah `OPEN → CLOSED` langsung saat submit. Nilai `variance` (selisih kas fisik vs hitungan sistem) dicatat sebagai data riwayat; tidak ada status perantara `SUBMITTED`. Role `MANAGER` tidak memiliki akses closing kas (sesuai matriks permission §5). OWNER melakukan koreksi status melalui endpoint `reopen` dengan alasan wajib.
+- **Future enhancement eksplisit**: Alur approval khusus untuk selisih kas (variance approval flow) hanya akan dibangun dengan amandemen PRD + perubahan database schema + pembaruan API-CONTRACT terlebih dahulu.
+- **Semantik `periodStart` (BINDING, sudah diimplementasi)**: Closing menutup seluruh transaksi sejak closing `CLOSED` terakhir di cabang tersebut (`paidAt > lastClosed.closingDate`). Pada closing pertama kali cabang, `periodStart` adalah `paidAt` dari transaksi `PAID` terlama di cabang tersebut (`paidAt >= firstTx.paidAt`). Jika cabang belum memiliki transaksi sama sekali, `periodStart` menggunakan awal hari kerja operasional (00:00 WIB hari ini). Fallback ke nilai epoch (`1970-01-01`) DILARANG.
 ### 7.10 Portal Pub (dinamis, multibahasa ID/EN)
 - Route: / dan subhalaman; bahasa via `?lang=en` atau path prefix
   /en (pilih salah satu; rekomendasi: path prefix /en, default ID).

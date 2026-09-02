@@ -20,8 +20,11 @@ export function formatRupiah(value: string | number | null | undefined): string 
   const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 
   let result = `Rp ${formattedInteger}`;
-  if (decimalPart && decimalPart !== '00' && decimalPart !== '0') {
-    result += `,${decimalPart}`;
+  if (decimalPart !== undefined) {
+    const frac = decimalPart.padEnd(2, '0').slice(0, 2);
+    if (frac !== '00') {
+      result += `,${frac}`;
+    }
   }
 
   return isNegative ? `-${result}` : result;

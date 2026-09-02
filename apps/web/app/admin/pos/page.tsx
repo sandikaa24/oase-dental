@@ -32,7 +32,7 @@ import {
 import { cn } from '@/lib/utils';
 
 export default function PosPage() {
-  const { user } = useAuth();
+  const { user, isLoading: authLoading } = useAuth();
 
   // Active Tab: 'POS' (Katalog + Keranjang) or 'HISTORY' (Riwayat Transaksi)
   const [activeTab, setActiveTab] = useState<'POS' | 'HISTORY'>('POS');
@@ -73,6 +73,9 @@ export default function PosPage() {
 
   // Load Catalog
   const loadCatalog = useCallback(async () => {
+    if (authLoading) return;
+    if (user?.role !== 'OWNER' && !user?.activeBranchId) return;
+
     try {
       setIsLoadingCatalog(true);
       const res = await fetchApi<PosCatalogItem[]>('/api/v1/pos/catalog');
@@ -84,13 +87,21 @@ export default function PosPage() {
     } finally {
       setIsLoadingCatalog(false);
     }
-  }, []);
+  }, [authLoading, user?.activeBranchId, user?.role]);
 
   // Load History
-  const loadTransactions = useCallback(async () => {
+  const loadTransactions = useCallback(async (branchIdOverride?: string | null) => {
+    if (authLoading) return;
+    const branchId = branchIdOverride ?? user?.activeBranchId;
+    if (user?.role !== 'OWNER' && !branchId) return;
+
     try {
       setIsLoadingTransactions(true);
-      const res = await fetchApi<PosTransaction[]>('/api/v1/transactions?limit=50');
+      const queryParams = new URLSearchParams({ limit: '50' });
+      if (branchId) {
+        queryParams.set('branchId', branchId);
+      }
+      const res = await fetchApi<PosTransaction[]>(`/api/v1/transactions?${queryParams.toString()}`);
       if (res.success && res.data) {
         setTransactions(res.data);
       }
@@ -99,12 +110,15 @@ export default function PosPage() {
     } finally {
       setIsLoadingTransactions(false);
     }
-  }, []);
+  }, [authLoading, user?.activeBranchId, user?.role]);
 
   useEffect(() => {
+    if (authLoading) return;
+    if (user?.role !== 'OWNER' && !user?.activeBranchId) return;
+
     loadCatalog();
     loadTransactions();
-  }, [loadCatalog, loadTransactions, user?.activeBranchId]);
+  }, [authLoading, user?.activeBranchId, user?.role, loadCatalog, loadTransactions]);
 
   // Cart Operations
   const handleAddToCart = (item: PosCatalogItem) => {

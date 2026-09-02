@@ -14,6 +14,9 @@ di luar file ini tanpa bertanya.
 - Semua request body divalidasi Zod; pelanggaran → 400 `VALIDATION_ERROR`
   dengan `details` berisi array path + message.
 
+> **Catatan Pemeliharaan Dokumen (BINDING):**
+> Endpoint baru tidak dianggap selesai sebelum response shape-nya terdokumentasi di dokumen ini pada commit yang sama. Response shape yang belum terdokumentasi = celah kontrak yang wajib ditutup di Langkah 0.
+
 Permission ditulis sebagai: `[OWNER]`, `[OWNER, MANAGER]`, dst.
 `(SELF)` = semua role, hanya untuk data milik sendiri.
 
@@ -284,10 +287,10 @@ menyebut expense referensi).
 
 **POST /cash-closings**
 ```json
-{ "actualCash": 1500000, "note": null }
+{ "actualCash": "1500000", "note": null }
 ```
 Rules:
-- Tolak jika sudah ada closing berstatus OPEN di branch → 409
+- Tolak jika sudah ada closing berstatus CLOSED hari ini di branch → 409
   `INVALID_TRANSACTION_STATE`.
 - `expectedCash` DIHITUNG SERVER (total payment CASH dari transaksi
   PAID sejak closing terakhir, tanggal server, minus pengeluaran tunai
@@ -295,6 +298,76 @@ Rules:
 - `variance = actualCash − expectedCash`.
 - Status langsung `CLOSED`, simpan `closedBy`. Immutable setelah itu.
 - Transaksi PAID berikutnya otomatis berada di periode baru.
+
+**GET /cash-closings/preview** — Response 200 (field persis dari implementasi):
+```json
+{
+  "success": true,
+  "data": {
+    "branchId": "uuid",
+    "periodStart": "2026-08-31T17:00:00.000Z",
+    "expectedCash": "1500000.00",
+    "transactionCount": 12,
+    "totalRevenue": "2350000.00",
+    "alreadyClosedToday": false,
+    "lastClosingDate": "2026-08-31T11:00:00.000Z"
+  }
+}
+```
+Catatan field:
+- `expectedCash` — total CASH dari transaksi PAID sejak closing terakhir (string Decimal).
+- `transactionCount` — jumlah transaksi PAID semua metode dalam periode.
+- `totalRevenue` — total omset semua metode dalam periode (string Decimal).
+- `alreadyClosedToday` — `true` jika sudah ada closing CLOSED hari ini (kasir tidak bisa submit lagi).
+- `lastClosingDate` — ISO timestamp closing terakhir; `null` jika belum pernah ada closing.
+- `periodStart` — ISO timestamp awal periode; timestamp transaksi PAID pertama di cabang jika belum pernah ada closing (atau workDate hari ini jika belum ada transaksi). Fallback epoch dilarang.
+
+**GET /cash-closings** — Response 200 (dengan pagination):
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "uuid",
+      "branchId": "uuid",
+      "branch": { "id": "uuid", "code": "JKT", "name": "OASE Klinik Gigi — Pusat" },
+      "status": "CLOSED",
+      "periodStart": "2026-08-30T17:00:00.000Z",
+      "closingDate": "2026-08-31T11:00:00.000Z",
+      "expectedCash": "1500000.00",
+      "actualCash": "1480000.00",
+      "variance": "-20000.00",
+      "note": null,
+      "closedBy": "user-uuid",
+      "closedByUser": {
+        "id": "user-uuid",
+        "email": "kasir@oase.id",
+        "employee": { "name": "Siti Kasir" }
+      },
+      "reopenedBy": null,
+      "reopenedByUser": null,
+      "reopenedReason": null,
+      "reopenedAt": null,
+      "createdAt": "2026-08-31T11:00:00.000Z"
+    }
+  ],
+  "meta": { "page": 1, "limit": 20, "total": 5, "totalPages": 1 }
+}
+```
+Query params GET /cash-closings: `?page&limit&status=OPEN|CLOSED&branchId(OWNER saja)`
+
+**GET /cash-closings/:id** — Response 200 (field identik dengan list item di atas, tanpa array)
+```json
+{ "success": true, "data": { /* field identik dengan item di GET /cash-closings */ } }
+```
+
+**POST /cash-closings/:id/reopen** — Response 200:
+```json
+{ "success": true, "data": { /* field identik dengan GET /:id, status berubah ke "OPEN" */ } }
+```
+
+Catatan field Decimal: `expectedCash`, `actualCash`, `variance` selalu dikembalikan sebagai **string** (bukan number) untuk menjaga presisi `Decimal(12,2)`.
+Variance negatif = defisit (kurang); positif = surplus (lebih); nol = tepat.
 
 ---
 
@@ -323,7 +396,30 @@ agregat hari ini untuk dashboard.
 | GET | /dashboard/manager | OWNER, MANAGER | Low stock, opname draft, cuti pending, absensi hari ini |
 | GET | /dashboard/owner | OWNER | Ringkasan semua cabang + tren 7 hari |
 
----
+**GET /dashboard/cashier** — Response 200 (field persis dari implementasi):
+```json
+{
+  "success": true,
+  "data": {
+    "date": "2026-09-01",
+    "branchId": "uuid",
+    "transactionCount": 8,
+    "totalRevenue": "2350000.00",
+    "cashRevenue": "1500000.00",
+    "debitRevenue": "500000.00",
+    "qrisRevenue": "350000.00",
+    "closingStatus": "CLOSED",
+    "closingId": "uuid"
+  }
+}
+```
+Catatan field:
+- `closingStatus` — `"OPEN"` | `"CLOSED"` | `null`. Null berarti belum ada closing sama sekali hari ini.
+- `closingId` — UUID closing hari ini; `null` jika belum ada closing.
+- `date` — Tanggal operasional server format `YYYY-MM-DD` (Asia/Jakarta).
+- Semua revenue field adalah string Decimal.
+
+
 
 ## 15. Audit Log `[OWNER]`
 

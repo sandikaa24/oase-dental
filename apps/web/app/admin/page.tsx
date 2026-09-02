@@ -2,10 +2,13 @@
 
 import React from 'react';
 import { useAuth } from '@/lib/auth-context';
+import { useQuery } from '@tanstack/react-query';
+import { fetchApi, type ApiResponse } from '@/lib/api-client';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
-import { RoleBadge, Badge } from '@/components/ui/badge';
+import { RoleBadge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton, CardSkeleton } from '@/components/ui/skeleton';
+import { ClosingStatusBadge } from '@/components/closing/closing-status-badge';
 import { formatRupiah, formatDate } from '@/lib/formatters';
 import {
   ShoppingCart,
@@ -21,6 +24,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import Link from 'next/link';
+import type { CashierDashboard } from '@/components/closing/closing-types';
 
 export default function AdminDashboardPage() {
   const { user, isLoading } = useAuth();
@@ -84,6 +88,15 @@ export default function AdminDashboardPage() {
 }
 
 function CashierDashboardView() {
+  // Fetch data real dari /dashboard/cashier
+  const { data: dashData, isLoading: dashLoading } = useQuery<ApiResponse<CashierDashboard>>({
+    queryKey: ['cashier-dashboard'],
+    queryFn: () => fetchApi<CashierDashboard>('/api/v1/dashboard/cashier'),
+    staleTime: 30_000,
+  });
+
+  const dash = dashData?.data;
+
   return (
     <div className="space-y-6">
       {/* Quick Action Cards */}
@@ -149,41 +162,65 @@ function CashierDashboardView() {
         </Card>
       </div>
 
-      {/* Summary Cards */}
+      {/* Summary Cards — data real dari /dashboard/cashier */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <Card>
           <CardHeader className="pb-2">
             <CardDescription>Transaksi Hari Ini</CardDescription>
-            <CardTitle className="text-2xl font-bold">0</CardTitle>
+            {dashLoading ? (
+              <Skeleton className="h-8 w-12 mt-1" />
+            ) : (
+              <CardTitle className="text-2xl font-bold">{dash?.transactionCount ?? 0}</CardTitle>
+            )}
           </CardHeader>
           <CardContent>
-            <p className="text-xs text-muted">Belum ada transaksi di shift ini</p>
+            <p className="text-xs text-muted">
+              {dash?.transactionCount === 0 ? 'Belum ada transaksi hari ini' : 'Semua metode pembayaran'}
+            </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="pb-2">
-            <CardDescription>Total Omset Shift Ini</CardDescription>
-            <CardTitle className="text-2xl font-bold text-primary">
-              {formatRupiah('0')}
-            </CardTitle>
+            <CardDescription>Total Omset Hari Ini</CardDescription>
+            {dashLoading ? (
+              <Skeleton className="h-8 w-32 mt-1" />
+            ) : (
+              <CardTitle className="text-2xl font-bold text-primary">
+                {formatRupiah(dash?.totalRevenue ?? '0')}
+              </CardTitle>
+            )}
           </CardHeader>
           <CardContent>
-            <p className="text-xs text-muted">Tunai + Non-Tunai</p>
+            <p className="text-xs text-muted">
+              Tunai: {formatRupiah(dash?.cashRevenue ?? '0')} ·
+              Non-Tunai: {formatRupiah(dash?.debitRevenue ?? '0')}
+            </p>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Status Kas</CardDescription>
-            <div className="mt-1">
-              <Badge variant="warning">BELUM CLOSING</Badge>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <p className="text-xs text-muted mt-2">Pastikan input kas fisik sebelum pulang</p>
-          </CardContent>
-        </Card>
+        {/* Widget Status Kas — status real + deep-link ke halaman closing */}
+        <Link href="/admin/cash-closing" className="block group">
+          <Card className="h-full group-hover:border-teal-300 transition-colors cursor-pointer">
+            <CardHeader className="pb-2">
+              <CardDescription>Status Kas</CardDescription>
+              <div className="mt-1">
+                {dashLoading ? (
+                  <Skeleton className="h-6 w-32" />
+                ) : (
+                  <ClosingStatusBadge status={dash?.closingStatus ?? null} />
+                )}
+              </div>
+            </CardHeader>
+            <CardContent>
+              <p className="text-xs text-muted mt-2">
+                {dash?.closingStatus === 'CLOSED'
+                  ? 'Kas sudah ditutup hari ini — lihat detail'
+                  : 'Pastikan input kas fisik sebelum pulang'}
+              </p>
+            </CardContent>
+          </Card>
+        </Link>
       </div>
     </div>
   );

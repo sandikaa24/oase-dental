@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Sidebar } from './sidebar';
 import { Header } from './header';
 import { useAuth } from '@/lib/auth-context';
@@ -8,6 +9,17 @@ import { Skeleton } from '@/components/ui/skeleton';
 
 export function AdminShell({ children }: { children: React.ReactNode }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [queryClient] = useState(
+    () =>
+      new QueryClient({
+        defaultOptions: {
+          queries: {
+            staleTime: 30 * 1000,
+            refetchOnWindowFocus: false,
+          },
+        },
+      })
+  );
   const { isLoading, user } = useAuth();
 
   if (isLoading && !user) {
@@ -48,20 +60,23 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground flex">
-      {/* Sidebar Navigation */}
-      <Sidebar
-        isOpen={mobileMenuOpen}
-        onClose={() => setMobileMenuOpen(false)}
-      />
+    <QueryClientProvider client={queryClient}>
+      <div className="min-h-screen bg-background text-foreground flex">
+        {/* Sidebar Navigation */}
+        <Sidebar
+          isOpen={mobileMenuOpen}
+          onClose={() => setMobileMenuOpen(false)}
+        />
 
-      {/* Main Content Area */}
-      <div className="flex-1 flex flex-col md:pl-64 min-w-0">
-        <Header onToggleMobileMenu={() => setMobileMenuOpen(true)} />
-        <main className="flex-1 p-4 sm:p-6 md:p-8 max-w-7xl w-full mx-auto">
-          {children}
-        </main>
+        {/* Main Content Area */}
+        <div className="flex-1 flex flex-col md:pl-64 min-w-0">
+          <Header onToggleMobileMenu={() => setMobileMenuOpen(true)} />
+          <main className="flex-1 p-4 sm:p-6 md:p-8 max-w-7xl w-full mx-auto">
+            {children}
+          </main>
+        </div>
       </div>
-    </div>
+    </QueryClientProvider>
   );
 }
+

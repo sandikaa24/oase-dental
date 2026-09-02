@@ -40,6 +40,13 @@ Baca semua file di `docs/` SEBELUM menulis kode apa pun.
 8. **Jika instruksi user bertentangan dengan PRD**, tunjukkan
    konfliknya dan minta keputusan sebelum eksekusi. Jangan diam-diam
    mengubah PRD atau mengabaikan PRD.
+8a. **Jika premis instruksi tidak sesuai kondisi repo** (endpoint/
+    dokumen/file yang diasumsikan sudah ada ternyata belum
+    diimplementasi) → STOP dan melapor. Mengeksekusi sendiri
+    "agar tugas selesai" dilarang, sebagus apapun hasilnya.
+8b. **Endpoint baru tidak dianggap selesai sebelum response
+    shape-nya terdokumentasi di API-CONTRACT.md** pada commit
+    yang sama.
 9. **Tidak ada data dummy di kode.** Semua via seed script.
 10. **Tidak ada `any` di TypeScript.** Error jangan di-swallow.
 11. **`docs/ui-design-system.md` wajib dipatuhi pada setiap tugas
@@ -48,6 +55,17 @@ Baca semua file di `docs/` SEBELUM menulis kode apa pun.
     wajib dilaporkan di evidence. Hardcoded hex di komponen, komponen
     duplicate di luar `components/ui/`, dan pelanggaran format data
     (Rupiah / Asia-Jakarta) = kerja ulang.
+12. **Verifikasi visual wajib untuk fitur frontend:** test suite
+    API tidak menjalankan hydration React maupun kode client —
+    status HTTP 200 tidak membuktikan halaman berfungsi. Sebelum
+    commit: walkthrough manual di browser + DevTools Network;
+    tidak boleh ada request gagal (4xx/5xx) yang tidak dijelaskan.
+13. **Pola data-fetching client = TanStack Query;**
+    QueryClientProvider dideklarasikan di `admin-shell.tsx`
+    SEBELUM hook dipakai di view/komponen anak.
+14. **Perubahan file di luar batas tugas WAJIB dilaporkan di AWAL
+    laporan dengan alasan** — tidak boleh tersembunyi di daftar
+    file.
 
 ---
 
@@ -62,6 +80,10 @@ Baca semua file di `docs/` SEBELUM menulis kode apa pun.
   frontend), kutip bagian yang relevan dalam laporan, dan tunjukkan
   semua kebuntuan/kontrak diam — lalu TUNGGU keputusan. Jangan
   mengarang untuk menutup celah kontrak.
+- **Langkah 0 juga wajib memverifikasi premis terhadap repo:** cek
+  direktori `apps/web/app/api/v1/` dan `lib/services/` sebelum
+  berasumsi endpoint sudah ada. Kontrak di dokumen tidak berarti kode
+  sudah ada.
 - Setelah selesai fase: tulis ringkasan yang sudah dibuat + cara
   menguji manual + daftar hal yang belum selesai (jika ada).
 - Jangan menyentuh modul fase lain "sekalian biar lengkap".
@@ -110,9 +132,9 @@ apps/web/            # Next.js (portal publik + /admin dashboard + API routes)
   lib/services/      # business logic
   lib/               # prisma client, auth helper, response helper
   scripts/           # test suite regresi per tugas
+  prisma/            # schema.prisma, migrations, seed.ts
 packages/shared/     # types, enums, konstanta permission matrix
 docs/                # PRD.md, DB-SCHEMA.md, API-CONTRACT.md, ui-design-system.md
-prisma/              # schema.prisma, migrations, seed.ts
 ```
 
 Monorepo pnpm workspace. Jalankan apa pun dari root: `pnpm dev`,
@@ -134,6 +156,8 @@ Monorepo pnpm workspace. Jalankan apa pun dari root: `pnpm dev`,
 - [ ] Tidak ada token di localStorage (sesi = httpOnly cookie)
 - [ ] Guard frontend = UX saja; penolakan keamanan tetap dari server (401/403)
 - [ ] Self-check design system §25 dijalankan (tugas frontend) dan dilaporkan
+- [ ] Response shape endpoint baru terdokumentasi di API-CONTRACT.md
+- [ ] Walkthrough visual browser + DevTools Network bersih (frontend)
 - [ ] `pnpm build` sukses tanpa error TypeScript + `pnpm lint` bersih
 - [ ] Suite regresi yang ada tetap hijau (jangan ada yang rusak)
 
@@ -160,4 +184,7 @@ Sebuah tugas dianggap selesai HANYA jika:
 4. Keputusan desain yang diambil dilaporkan (keputusan + alasan).
 5. Self-check kepatuhan (backend: aturan 5/6/7; frontend: design
    system §25) dilaporkan.
-6. Tidak ada commit tanpa persetujuan user.
+6. Verifikasi visual browser dilakukan untuk tugas frontend (aturan 12).
+7. Tidak ada perubahan di luar batas tugas yang tidak dilaporkan
+   (aturan 14).
+8. Tidak ada commit tanpa persetujuan user.

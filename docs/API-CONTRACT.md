@@ -130,18 +130,18 @@ tidak boleh overlap dengan pengajuan PENDING/APPROVED milik sendiri
 | GET | /services | OWNER, MANAGER, CASHIER (+ 🔓 `GET /portal/services` terpisah) |
 | POST | /services | OWNER |
 | PATCH | /services/:id | OWNER |
-| DELETE | /services/:id | OWNER — soft delete; tolak jika belum dipakai transaksi |
+| DELETE | /services/:id | OWNER — soft delete jika sudah dipakai transaksi (`mode: "soft"`), hard delete jika belum (`mode: "hard"`) |
 
 Create/Update body: `{ categoryId?, name, nameEn?, description?,
 descriptionEn?, price, durationMinutes?, active?, showOnPortal? }`
 
 ### Products `[OWNER]`
 `GET/POST /products`, `GET/PATCH/DELETE /products/:id`
-Body: `{ name, sku, sellPrice, unit, minStock }`. Soft delete aturan sama.
+Body: `{ name, sku, sellPrice, unit, minStock }`. Soft delete jika sudah dipakai transaksi/inventaris (`mode: "soft"`), hard delete jika belum (`mode: "hard"`).
 
 ### Materials `[OWNER]`
 `GET/POST /materials`, `GET/PATCH/DELETE /materials/:id`
-Body: `{ name, sku, unit, minStock, isStockTracked }`
+Body: `{ name, sku, unit, minStock, isStockTracked }`. Soft delete jika sudah ada riwayat mutasi stok (`mode: "soft"`), hard delete jika belum (`mode: "hard"`).
 
 ---
 

@@ -172,3 +172,35 @@ Semua komponen strictly memakai token semantik Tailwind dan dilarang memakai arb
 - **Self-check Design System §25**: **0 pelanggaran** (Hardcoded hex = 0, Any = 0, Duplicate components = 0, Format rupiah/Asia-Jakarta konsisten).
 - **Linter & Build**: `pnpm lint` bersih (0 warning/error) & `pnpm build` sukses (34/34 halaman static/dynamic terkompilasi).
 
+---
+
+## TUGAS 5: MASTER DATA FRONTEND (LAYANAN, PRODUK, BAHAN, KATEGORI)
+
+### 1. Sifat Data Global & Persona Cabang (Aturan 15)
+- **Katalog Master Bersifat Global**: Berdasarkan `schema.prisma` dan `API-CONTRACT.md` §7, entitas `Category`, `Service`, `Product`, dan `Material` tidak memiliki kolom `branchId`. Seluruh katalog master berlaku seragam untuk semua cabang.
+- **Keputusan UX**: `BranchSelector` **tidak diperlukan** di halaman `/admin/master-data`.
+- **Persona Role Guard**:
+  - `OWNER`: Hak akses penuh (CRUD lengkap: *Tambah*, *Edit*, *Delete*, *Toggle Active*).
+  - `MANAGER` & `CASHIER`: Hanya memiliki hak baca (`MASTER_DATA_READ`). Antarmuka menyajikan tabel katalog secara *Read-Only* (seluruh tombol aksi tulis disembunyikan). Upaya penembusan langsung ke API ditolak dengan HTTP 403 Forbidden.
+
+---
+
+### 2. Klarifikasi & Penyelarasan Kontrak DELETE (Aturan 8b)
+- **Temuan Kode Backend**: Implementasi aktual pada `service.service.ts`, `product.service.ts`, dan `material.service.ts` bekerja seragam:
+  - **Soft Delete** (`deletedAt = new Date()`, `mode: "soft"`) apabila data sudah pernah digunakan di `transaction_items` atau `inventory_movements`.
+  - **Hard Delete** (`mode: "hard"`) apabila data belum pernah dipakai transaksi/inventaris sama sekali.
+- **Sinkronisasi Dokumen Kontrak**: `docs/API-CONTRACT.md` §7 telah diselaraskan pada commit ini untuk mencantumkan klausul `mode: "soft" | "hard"` secara konsisten di ketiga entitas.
+
+---
+
+### 3. Jaminan Konsistensi & Pengujian (Test Suite)
+- **Pola Currency & Input Data**: Nominal harga layanan dan produk diformat menggunakan helper `formatThousand` & `sanitizeDigits` dengan prefix `Rp`; batas `minStock` dan `durationMinutes` bertipe Integer murni dengan `inputMode="numeric"`.
+- **Uji Edit-Match Permanen**: Setiap operasi `PATCH` diuji dengan pemanggilan `GET /:id` ulang dan pencocokan nilai field secara identik.
+- **Hasil Test Suite**:
+  - `phase3-task5-test.mjs`: **36 PASSED / 0 FAILED (100%)**
+  - **Total Suite Regresi Keseluruhan**: **147 PASSED / 0 FAILED (100%)** (16 Phase 0 + 18 Task 1 + 12 Task 2 + 30 Task 3 + 35 Task 4 + 36 Task 5).
+  - `pnpm lint`: Bersih 0 warning/error.
+  - `pnpm build`: Berhasil mengompilasi 34/34 routes aplikasi.
+  - **Self-check Design System §25**: 0 pelanggaran.
+
+

@@ -362,12 +362,19 @@ export async function stockIn(
   activeBranchId: string | null,
   ip: string | null
 ) {
-  if (!activeBranchId) {
-    throw new ValidationError('Branch aktif diperlukan untuk penerimaan barang masuk');
+  let targetBranchId: string | null = null;
+  if (role === 'OWNER') {
+    targetBranchId = input.branchId ?? activeBranchId ?? null;
+  } else {
+    targetBranchId = activeBranchId; // non-OWNER: input client diabaikan
+  }
+
+  if (!targetBranchId) {
+    throw new ValidationError('Branch aktif atau branchId diperlukan untuk penerimaan barang masuk');
   }
 
   // Verifikasi cabang
-  const branch = await prisma.branch.findUnique({ where: { id: activeBranchId } });
+  const branch = await prisma.branch.findUnique({ where: { id: targetBranchId } });
   if (!branch || !branch.active) {
     throw new ValidationError('Cabang tidak ditemukan atau sudah tidak aktif');
   }
@@ -398,13 +405,13 @@ export async function stockIn(
       const stockLevel = await tx.stockLevel.upsert({
         where: {
           branchId_itemType_itemId: {
-            branchId: activeBranchId,
+            branchId: targetBranchId,
             itemType: input.itemType,
             itemId: it.itemId,
           },
         },
         create: {
-          branchId: activeBranchId,
+          branchId: targetBranchId,
           itemType: input.itemType,
           itemId: it.itemId,
           quantity: it.quantity,
@@ -424,7 +431,7 @@ export async function stockIn(
       // 2. Catat InventoryMovement
       const movement = await tx.inventoryMovement.create({
         data: {
-          branchId: activeBranchId,
+          branchId: targetBranchId,
           itemType: input.itemType,
           productId: input.itemType === 'PRODUCT' ? it.itemId : null,
           materialId: input.itemType === 'MATERIAL' ? it.itemId : null,
@@ -450,9 +457,9 @@ export async function stockIn(
         actorId: userId,
         action: 'CREATE',
         entity: 'StockIn',
-        entityId: createdMovements[0]?.movementId ?? activeBranchId,
+        entityId: createdMovements[0]?.movementId ?? targetBranchId,
         after: {
-          branchId: activeBranchId,
+          branchId: targetBranchId,
           itemType: input.itemType,
           itemCount: input.items.length,
           note: input.note,
@@ -466,7 +473,7 @@ export async function stockIn(
   });
 
   return {
-    branchId: activeBranchId,
+    branchId: targetBranchId,
     itemType: input.itemType,
     items: result,
   };
@@ -556,8 +563,15 @@ export async function createStockOpname(
   role: UserRole,
   activeBranchId: string | null
 ) {
-  if (!activeBranchId) {
-    throw new ValidationError('Branch aktif diperlukan untuk membuat stock opname');
+  let targetBranchId: string | null = null;
+  if (role === 'OWNER') {
+    targetBranchId = input.branchId ?? activeBranchId ?? null;
+  } else {
+    targetBranchId = activeBranchId; // non-OWNER: input client diabaikan
+  }
+
+  if (!targetBranchId) {
+    throw new ValidationError('Branch aktif atau branchId diperlukan untuk membuat stock opname');
   }
 
   const opnameDateObj = new Date(`${input.opnameDate}T00:00:00.000Z`);
@@ -566,7 +580,7 @@ export async function createStockOpname(
   const existing = await prisma.stockOpname.findUnique({
     where: {
       branchId_opnameDate: {
-        branchId: activeBranchId,
+        branchId: targetBranchId,
         opnameDate: opnameDateObj,
       },
     },
@@ -587,7 +601,7 @@ export async function createStockOpname(
 
   const stockLevels = await prisma.stockLevel.findMany({
     where: {
-      branchId: activeBranchId,
+      branchId: targetBranchId,
       itemType: input.itemType,
     },
   });
@@ -610,7 +624,7 @@ export async function createStockOpname(
 
   const created = await prisma.stockOpname.create({
     data: {
-      branchId: activeBranchId,
+      branchId: targetBranchId,
       opnameDate: opnameDateObj,
       status: 'DRAFT',
       items: {

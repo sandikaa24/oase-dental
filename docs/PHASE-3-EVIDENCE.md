@@ -124,3 +124,51 @@ Semua komponen strictly memakai token semantik Tailwind dan dilarang memakai arb
 - **Revisi (keputusan user)**: input uang diterima & split payment KOSONG saat modal terbuka; pengisian hanya via ketikan manual, chip nominal, atau tombol "Uang Pas" (satu-satunya auto-fill, tetap via `Math.ceil` sen). Konfirmasi disabled saat kosong/0/kurang bayar; kembalian tampil "Rp 0" saat input kosong.
 - **Alasan**: kasir wajib memverifikasi eksplisit uang yang benar-benar diterima — pre-fill memungkinkan konfirmasi tanpa verifikasi.
 - **Status**: keputusan final; `useEffect` reset terikat ke `[open]` saja.
+
+---
+
+## TUGAS 4: INVENTARIS, KARTU STOK, STOCK OPNAME & FIX OWNER BRANCH SELECTOR
+
+### 1. Bug Tertangkap Review Visual (Aturan 12)
+- **Gejala**: Login sebagai `OWNER`, membuka kartu stok item memunculkan error *"Cabang harus ditentukan untuk melihat kartu stok"*; membuka modal stock-in memunculkan error *"Branch aktif diperlukan untuk penerimaan barang masuk"*.
+- **Akar**: `OWNER` memiliki `activeBranchId = null` (by design multi-cabang tanpa default single branch). Modul inventaris mengasumsikan cabang aktif selalu ada — asumsi ini hanya benar untuk persona `MANAGER` atau `CASHIER`.
+- **Mengapa Lolos dari Test Suite**: Suite API backend sebelumnya hijau 100% (104 PASS) karena skenario ber-cabang diuji menggunakan persona `MANAGER` yang memiliki klaim token `activeBranchId`.
+- **Pelajaran**: Setiap modul ber-cabang **WAJIB diuji dengan minimal dua persona**:
+  1. Persona yang **PUNYA cabang aktif** (`MANAGER` / `CASHIER`).
+  2. Persona yang **TIDAK punya cabang aktif** (`OWNER`).
+
+---
+
+### 2. Solusi Arsitektur & Sinkronisasi Kontrak API (Aturan 8b)
+1. **Frontend Branch Selector**:
+   - Komponen `BranchSelector` (`components/inventory/branch-selector.tsx`):
+     - Untuk `OWNER`: Mengambil daftar cabang aktif via TanStack Query (`GET /api/v1/branches`), otomatis memilih cabang pertama sebagai default, dan menyediakan dropdown pilihan cabang.
+     - Untuk non-`OWNER` (`MANAGER`): Menampilkan badge/label statis nama cabang aktif tanpa opsi penggantian.
+   - `queryKey` TanStack Query pada seluruh data inventaris (`stock`, `movements`, `opname`) menyertakan `selectedBranchId` sehingga pergantian cabang memicu refetch otomatis.
+   - Invalidation query menarget cabang terkait secara spesifik setelah mutasi (stock-in / opname).
+   - Empty state netral bergambar *"Silakan pilih cabang..."* ditampilkan bila data cabang belum terpilih/tersedia (bukan error banner merah).
+
+2. **Backend & Schema Update**:
+   - `apps/web/lib/validations/inventory.schema.ts`: Menambahkan `branchId: z.string().uuid().optional()` pada `stockInSchema` dan `createStockOpnameSchema`.
+   - `apps/web/lib/services/inventory.service.ts`:
+     ```typescript
+     targetBranchId = role === 'OWNER'
+       ? (input.branchId ?? activeBranchId)
+       : activeBranchId; // Non-OWNER: input client DIABAIKAN (menggunakan claim JWT)
+     ```
+   - **Aturan 8b**: Perubahan `branchId?: string` terdokumentasi resmi di `docs/API-CONTRACT.md` §9 & §10 pada commit yang sama.
+
+---
+
+### 3. Penjaga IDOR Terbukti (`INV-5.5`)
+- **Skenario Uji**: User `MANAGER` Cabang A mengirimkan `branchId` Cabang B di body request `POST /inventory/stock-in` dan `POST /stock-opnames`.
+- **Hasil Verifikasi**: Server secara konsisten **mengabaikan** input `branchId` client dan **hanya memproses mutasi pada Cabang A** (berdasarkan klaim token JWT sesi Manager). Cabang B terbukti tidak terdampak (IDOR dicegah total).
+
+---
+
+### 4. Hasil Verifikasi & Test Suite
+- **Phase 3 Task 4 Suite (`phase3-task4-test.mjs`)**: **35 PASSED / 0 FAILED (100%)**
+- **Total Suite Regresi Gabungan (Phase 0, Phase 3 Tasks 1–4)**: **111 PASSED / 0 FAILED (100%)**
+- **Self-check Design System §25**: **0 pelanggaran** (Hardcoded hex = 0, Any = 0, Duplicate components = 0, Format rupiah/Asia-Jakarta konsisten).
+- **Linter & Build**: `pnpm lint` bersih (0 warning/error) & `pnpm build` sukses (34/34 halaman static/dynamic terkompilasi).
+

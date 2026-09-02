@@ -6,6 +6,7 @@ import { z } from 'zod';
  */
 export const stockInSchema = z
   .object({
+    branchId: z.string().uuid({ message: 'branchId harus UUID yang valid' }).optional(),
     itemType: z.enum(['PRODUCT', 'MATERIAL']),
     items: z
       .array(
@@ -61,6 +62,7 @@ export type MovementListQueryInput = z.infer<typeof movementListQuerySchema>;
  */
 export const createStockOpnameSchema = z
   .object({
+    branchId: z.string().uuid({ message: 'branchId harus UUID yang valid' }).optional(),
     opnameDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'opnameDate harus format YYYY-MM-DD'),
     itemType: z.enum(['PRODUCT', 'MATERIAL']),
     note: z.string().optional().nullable(),

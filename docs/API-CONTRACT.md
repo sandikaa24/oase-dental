@@ -229,13 +229,14 @@ TRANSACTION delta positif), simpan cancelledBy/At/Reason, audit log.
 
 | Method | Path | Permission | Deskripsi |
 |---|---|---|---|
-| GET | /inventory/stock | OWNER, MANAGER | Stok branch aktif (+ `?itemType`, `?lowStock=true`) |
-| GET | /inventory/stock/:itemType/:itemId/movements | OWNER, MANAGER | Kartu stok, filter tanggal, paginated |
+| GET | /inventory/stock | OWNER, MANAGER | Stok branch aktif (+ `?itemType`, `?lowStock=true`, OWNER: `?branchId`) |
+| GET | /inventory/stock/:itemType/:itemId/movements | OWNER, MANAGER | Kartu stok, filter tanggal, paginated (OWNER: `?branchId`) |
 | POST | /inventory/stock-in | OWNER, MANAGER | Barang masuk (multi item sekaligus) |
 
 **POST /inventory/stock-in**
 ```json
 {
+  "branchId": "uuid", // Opsional, hanya dipakai OWNER; non-OWNER diabaikan (branch dari JWT)
   "itemType": "MATERIAL",
   "items": [ { "itemId": "uuid", "quantity": 10, "unitCost": 25000 } ],
   "note": "Pembelian supplier X"
@@ -249,8 +250,8 @@ Atomik: movement `STOCK_IN` per item + update StockLevel.
 
 | Method | Path | Deskripsi |
 |---|---|---|
-| GET | /stock-opnames | List + filter status/tanggal |
-| POST | /stock-opnames | Create DRAFT. `{ opnameDate, itemType }` — server snapshot systemQty semua item aktif branch |
+| GET | /stock-opnames | List + filter status/tanggal (OWNER: `?branchId`) |
+| POST | /stock-opnames | Create DRAFT. `{ branchId?, opnameDate, itemType }` — server snapshot systemQty semua item aktif branch. `branchId` opsional hanya dipakai OWNER; non-OWNER diabaikan (branch dari JWT). |
 | GET | /stock-opnames/:id | Detail + items |
 | PATCH | /stock-opnames/:id | Edit DRAFT: `{ items: [{ itemId, physicalQty, note? }] }` (partial update items) |
 | POST | /stock-opnames/:id/submit | DRAFT → SUBMITTED (atomik) |

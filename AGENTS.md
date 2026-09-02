@@ -72,6 +72,12 @@ Baca semua file di `docs/` SEBELUM menulis kode apa pun.
     yang memindahkan user HANYA boleh berbasis status sesi
     TERVALIDASI (user dari /auth/me), dilarang berbasis presence
     cookie. Simulasi alur loop wajib diuraikan di laporan.
+    Berlaku juga untuk skenario role: modul ber-cabang wajib
+    diuji dua persona — role DENGAN cabang aktif (MANAGER/
+    KASHIER) dan role TANPA cabang aktif (OWNER, activeBranchId
+    null) — keduanya wajib berakhir pada UX yang benar, bukan
+    pesan error guard. Skenario ini lahir dari bug nyata Tugas 4
+    (OWNER terblokir kartu stok meski 104 test PASS).
 
 ---
 

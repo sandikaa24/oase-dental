@@ -66,6 +66,12 @@ Baca semua file di `docs/` SEBELUM menulis kode apa pun.
 14. **Perubahan file di luar batas tugas WAJIB dilaporkan di AWAL
     laporan dengan alasan** — tidak boleh tersembunyi di daftar
     file.
+15. **Setiap guard sesi/redirect wajib diuji skenario ghost token**
+    (cookie valid di client, invalid/revoked di DB) dan dibuktikan
+    berakhir di form login — bukan infinite redirect loop. Guard
+    yang memindahkan user HANYA boleh berbasis status sesi
+    TERVALIDASI (user dari /auth/me), dilarang berbasis presence
+    cookie. Simulasi alur loop wajib diuraikan di laporan.
 
 ---
 

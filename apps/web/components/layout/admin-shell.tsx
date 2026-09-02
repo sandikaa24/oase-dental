@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Sidebar } from './sidebar';
 import { Header } from './header';
@@ -8,6 +9,7 @@ import { useAuth } from '@/lib/auth-context';
 import { Skeleton } from '@/components/ui/skeleton';
 
 export function AdminShell({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [queryClient] = useState(
     () =>
@@ -22,7 +24,15 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   );
   const { isLoading, user } = useAuth();
 
-  if (isLoading && !user) {
+  // Tutup state "admin kosong" saat ghost token gagal di-hydrate (sesi invalid/revoked)
+  useEffect(() => {
+    if (!isLoading && !user) {
+      router.replace('/login');
+    }
+  }, [isLoading, user, router]);
+
+  // Tampilkan skeleton selama memuat sesi atau jika user belum ter-hydrate (mencegah flash konten kosong)
+  if (isLoading || !user) {
     return (
       <div className="flex h-screen w-full bg-background">
         <div className="hidden md:flex w-64 flex-col bg-surface border-r border-border p-4 space-y-4">

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { Button } from '@/components/ui/button';
@@ -11,17 +11,24 @@ import { Sparkles } from 'lucide-react';
 
 export default function LoginPage() {
   const router = useRouter();
-  const { login } = useAuth();
+  const { user, isLoading: authLoading, login } = useAuth();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Client guard: hanya redirect jika user TERVALIDASI dari session (bukan sekadar presence cookie)
+  useEffect(() => {
+    if (!authLoading && user) {
+      router.replace('/admin');
+    }
+  }, [user, authLoading, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    setIsLoading(true);
+    setIsSubmitting(true);
 
     try {
       await login(email, password);
@@ -33,7 +40,7 @@ export default function LoginPage() {
         setError('Gagal masuk. Silakan periksa kredensial Anda.');
       }
     } finally {
-      setIsLoading(false);
+      setIsSubmitting(false);
     }
   };
 
@@ -78,7 +85,7 @@ export default function LoginPage() {
                   onChange={(e) => setEmail(e.target.value)}
                   required
                   autoComplete="email"
-                  disabled={isLoading}
+                  disabled={isSubmitting || authLoading}
                 />
               </div>
 
@@ -91,7 +98,7 @@ export default function LoginPage() {
                   onChange={(e) => setPassword(e.target.value)}
                   required
                   autoComplete="current-password"
-                  disabled={isLoading}
+                  disabled={isSubmitting || authLoading}
                 />
               </div>
 
@@ -100,7 +107,8 @@ export default function LoginPage() {
                 variant="primary"
                 size="md"
                 className="w-full mt-2"
-                isLoading={isLoading}
+                isLoading={isSubmitting}
+                disabled={authLoading}
               >
                 Masuk
               </Button>

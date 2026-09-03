@@ -4,11 +4,40 @@ const itemTypeEnum = z.enum(['SERVICE']);
 const paymentMethodEnum = z.enum(['CASH', 'DEBIT', 'QRIS_TRANSFER']);
 const transactionStatusEnum = z.enum(['DRAFT', 'PAID', 'CANCELLED']);
 
-export const transactionItemInputSchema = z.object({
-  itemType: itemTypeEnum.optional().default('SERVICE'),
-  itemId: z.string().uuid('itemId harus berupa UUID valid'),
-  quantity: z.number().int().min(1, 'Quantity minimal 1'),
-});
+export const transactionItemInputSchema = z
+  .object({
+    itemType: itemTypeEnum.optional().default('SERVICE'),
+    itemId: z.string().uuid('itemId harus berupa UUID valid'),
+    quantity: z.number().int().min(1, 'Quantity minimal 1'),
+    price: z
+      .union([z.number(), z.string()])
+      .optional()
+      .transform((val) => {
+        if (val === undefined || val === null || val === '') return undefined;
+        if (typeof val === 'string') {
+          const cleaned = val.replace(/[^0-9.]/g, '').trim();
+          return cleaned;
+        }
+        return String(val);
+      })
+      .refine(
+        (val) => {
+          if (val === undefined) return true;
+          const num = parseFloat(val);
+          return !isNaN(num) && num > 0;
+        },
+        { message: 'Harga item harus lebih besar dari 0' }
+      )
+      .refine(
+        (val) => {
+          if (val === undefined) return true;
+          const num = parseFloat(val);
+          return !isNaN(num) && num <= 999_999_999;
+        },
+        { message: 'Harga item maksimal 999.999.999 (9 digit)' }
+      ),
+  })
+  .strict();
 
 export const createTransactionSchema = z
   .object({

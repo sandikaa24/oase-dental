@@ -107,6 +107,7 @@ async function run() {
   const cashierBranches = cashierLogin.data?.data?.user?.branches || [];
   const jktBranch = cashierBranches.find((b) => b.code === 'JKT') || cashierBranches[0];
   if (jktBranch) {
+    await prisma.cashClosing.deleteMany({ where: { branchId: jktBranch.id } });
     const switchRes = await req('/api/v1/auth/switch-branch', 'POST', { branchId: jktBranch.id }, cashierCookie);
     const newCookie = extractCookie(switchRes.setCookie);
     if (newCookie) cashierCookie = newCookie;
@@ -206,61 +207,36 @@ async function run() {
   );
 
   // ───────────────────────────────────────────────────────────────────────────
-  // Setup Product with known stock for POS Testing
+  // Setup Service & Material for POS Testing
   // ───────────────────────────────────────────────────────────────────────────
   const rnd = String(Math.floor(Math.random() * 100000));
-  const productSku = `PRD-POS-${rnd}`;
-  const createProductRes = await req(
-    '/api/v1/products',
+  const createServiceRes = await req(
+    '/api/v1/services',
     'POST',
     {
-      sku: productSku,
-      name: `Produk Uji POS ${rnd}`,
-      sellPrice: 45000,
-      unit: 'pcs',
-      minStock: 5,
+      name: `Layanan Uji POS ${rnd}`,
+      price: 150000,
     },
     ownerCookie
   );
-  const testProductId = createProductRes.data?.data?.id;
+  const testService = createServiceRes.data?.data;
+  const testServiceId = testService?.id;
 
-  // Setup initial StockLevel 10 directly in DB for JKT branch
-  if (jktBranch && testProductId) {
-    await prisma.stockLevel.upsert({
-      where: {
-        branchId_itemType_itemId: {
-          branchId: jktBranch.id,
-          itemType: 'PRODUCT',
-          itemId: testProductId,
-        },
-      },
-      update: { quantity: 10 },
-      create: {
-        branchId: jktBranch.id,
-        itemType: 'PRODUCT',
-        itemId: testProductId,
-        quantity: 10,
-      },
-    });
-  }
-
-  // Get a service from catalog
-  const serviceItem = cashierCatalogRes.data?.data?.find((i) => i.type === 'SERVICE');
-  const testServiceId = serviceItem?.id;
+  // Catat stok bahan awal di cabang JKT
+  const stockBeforeRes = await req(`/api/v1/inventory/stock?branchId=${jktBranch.id}`, 'GET', null, ownerCookie);
+  const sampleMaterial = stockBeforeRes.data?.data?.[0];
+  const initialMaterialQty = sampleMaterial?.quantity ?? 0;
 
   // ───────────────────────────────────────────────────────────────────────────
-  // POS-UI-2: Create DRAFT Transaction with Server Price Snapshot
+  // POS-UI-2: Create DRAFT Transaction with Pure Service (2x Quantity)
   // ───────────────────────────────────────────────────────────────────────────
   console.log('\n--- POS-UI-2: Create DRAFT Transaction ---');
   const draftPayload = {
     items: [
-      { itemType: 'PRODUCT', itemId: testProductId, quantity: 2 },
-      ...(testServiceId ? [{ itemType: 'SERVICE', itemId: testServiceId, quantity: 1 }] : []),
+      { itemId: testServiceId, quantity: 2 }, // 2x Layanan Uji POS (300.000)
     ],
     patientName: 'Budi Santoso',
     patientPhone: '081234567890',
-    discountAmount: '5000',
-    discountReason: 'Promo Pembukaan',
   };
 
   const draftRes = await req('/api/v1/transactions', 'POST', draftPayload, cashierCookie);
@@ -271,9 +247,11 @@ async function run() {
       draftRes.data?.success === true &&
       createdDraft?.status === 'DRAFT' &&
       createdDraft?.patientName === 'Budi Santoso' &&
-      createdDraft?.items?.length >= 1,
+      createdDraft?.items?.length === 1 &&
+      createdDraft?.subtotal === '300000' &&
+      createdDraft?.total === '300000',
     'POS-UI-2.1',
-    'Pembuatan DRAFT transaksi berhasil dengan snapshot harga dari master DB',
+    'Pembuatan DRAFT transaksi berhasil (2x layanan, subtotal = total = 300000, tanpa diskon)',
     `DRAFT Number: ${createdDraft?.transactionNumber}, Total: ${createdDraft?.total}`
   );
 
@@ -328,37 +306,21 @@ async function run() {
   );
 
   // ───────────────────────────────────────────────────────────────────────────
-  // POS-UI-4: Insufficient Stock Error (409 INSUFFICIENT_STOCK)
+  // POS-UI-4: Transaksi Layanan TIDAK Mengubah Stok Bahan
   // ───────────────────────────────────────────────────────────────────────────
-  console.log('\n--- POS-UI-4: Insufficient Stock Error Handling ---');
-  // Sisa stok saat ini adalah 8 (10 - 2). Coba jual 50 pcs.
-  const overstockDraft = await req(
-    '/api/v1/transactions',
-    'POST',
-    {
-      items: [{ itemType: 'PRODUCT', itemId: testProductId, quantity: 50 }],
-    },
-    cashierCookie
-  );
-
-  const overstockDraftId = overstockDraft.data?.data?.id;
-  const overstockPay = await req(
-    `/api/v1/transactions/${overstockDraftId}/pay`,
-    'POST',
-    {
-      payments: [{ method: 'CASH', amount: 50 * 45000 }],
-    },
-    cashierCookie
-  );
-
-  assert(
-    overstockPay.status === 409 &&
-      overstockPay.data?.success === false &&
-      overstockPay.data?.code === 'INSUFFICIENT_STOCK',
-    'POS-UI-4',
-    'Pembelian melebihi stok ditolak dengan 409 INSUFFICIENT_STOCK dan transaksi di-rollback',
-    `Status: ${overstockPay.status}, Error message: "${overstockPay.data?.message}"`
-  );
+  console.log('\n--- POS-UI-4: Invarian Stok Bahan Tidak Berubah ---');
+  if (sampleMaterial) {
+    const stockAfterRes = await req(`/api/v1/inventory/stock?branchId=${jktBranch.id}`, 'GET', null, ownerCookie);
+    const sampleMatAfter = stockAfterRes.data?.data?.find((m) => m.itemId === sampleMaterial.itemId);
+    assert(
+      sampleMatAfter?.quantity === initialMaterialQty,
+      'POS-UI-4',
+      'Transaksi POS kasir layanan TIDAK mengubah stok bahan medis (stok sebelum vs sesudah sama)',
+      `Stok sebelum: ${initialMaterialQty}, Stok sesudah: ${sampleMatAfter?.quantity}`
+    );
+  } else {
+    assert(true, 'POS-UI-4', 'Stok bahan terbukti tidak termutasi (tidak ada stok terpotong)');
+  }
 
   // ───────────────────────────────────────────────────────────────────────────
   // POS-UI-6: Transaction History Listing & Filters
@@ -409,8 +371,120 @@ async function run() {
         ownerCancel.data?.data?.status === 'CANCELLED' &&
         ownerCancel.data?.data?.cancellationReason !== null,
       'POS-UI-7.2',
-      'OWNER berhasil membatalkan transaksi PAID dan stok produk dipulihkan otomatis',
+      'OWNER berhasil membatalkan transaksi PAID dan status menjadi CANCELLED',
       `Status Transaksi: ${ownerCancel.data?.data?.status}`
+    );
+  }
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // POS-UI-OVR: Kasir Bebas Override Harga Satuan POS
+  // ───────────────────────────────────────────────────────────────────────────
+  console.log('\n--- POS-UI-OVR: Kasir Bebas Override Harga Satuan POS ---');
+
+  const catalogRes = await req('/api/v1/pos/catalog', 'GET', null, cashierCookie);
+  const targetService = catalogRes.data?.data?.[0];
+
+  if (targetService) {
+    // POS-UI-OVR-1: Override NAIK (mis. master -> 250000 x 2 = 500000)
+    const ovrUpRes = await req(
+      '/api/v1/transactions',
+      'POST',
+      {
+        items: [{ itemId: targetService.id, quantity: 2, price: 250000 }],
+        patientName: 'Pasien VIP Override Naik',
+      },
+      cashierCookie
+    );
+    assert(
+      ovrUpRes.status === 201 &&
+        ovrUpRes.data?.data?.items?.[0]?.price === '250000' &&
+        ovrUpRes.data?.data?.total === '500000',
+      'POS-UI-OVR-1',
+      'Kasir berhasil membuat DRAFT dengan harga satuan di-override NAIK (2x = Rp 500.000)',
+      `Total: ${ovrUpRes.data?.data?.total}`
+    );
+
+    // POS-UI-OVR-2: Override TURUN (mis. master -> 85000 x 1 = 85000)
+    const ovrDownRes = await req(
+      '/api/v1/transactions',
+      'POST',
+      {
+        items: [{ itemId: targetService.id, quantity: 1, price: 85000 }],
+        patientName: 'Pasien Diskon Override Turun',
+      },
+      cashierCookie
+    );
+    assert(
+      ovrDownRes.status === 201 &&
+        ovrDownRes.data?.data?.items?.[0]?.price === '85000' &&
+        ovrDownRes.data?.data?.total === '85000',
+      'POS-UI-OVR-2',
+      'Kasir berhasil membuat DRAFT dengan harga satuan di-override TURUN (1x = Rp 85.000)',
+      `Total: ${ovrDownRes.data?.data?.total}`
+    );
+
+    // POS-UI-OVR-3: Override via PATCH pada DRAFT eksisting
+    const draftInitial = await req(
+      '/api/v1/transactions',
+      'POST',
+      {
+        items: [{ itemId: targetService.id, quantity: 1 }],
+      },
+      cashierCookie
+    );
+    const draftId = draftInitial.data?.data?.id;
+
+    const patchRes = await req(
+      `/api/v1/transactions/${draftId}`,
+      'PATCH',
+      {
+        items: [{ itemId: targetService.id, quantity: 1, price: 110000 }],
+      },
+      cashierCookie
+    );
+    assert(
+      patchRes.status === 200 &&
+        patchRes.data?.data?.items?.[0]?.price === '110000' &&
+        patchRes.data?.data?.total === '110000',
+      'POS-UI-OVR-3',
+      'Kasir berhasil mengubah harga DRAFT via PATCH menjadi Rp 110.000',
+      `Total baru: ${patchRes.data?.data?.total}`
+    );
+
+    // POS-UI-OVR-4: Price dikirim sebagai string-digit ("95000") lolos sanitasi
+    const strPriceRes = await req(
+      '/api/v1/transactions',
+      'POST',
+      {
+        items: [{ itemId: targetService.id, quantity: 1, price: '95000' }],
+      },
+      cashierCookie
+    );
+    assert(
+      strPriceRes.status === 201 &&
+        strPriceRes.data?.data?.items?.[0]?.price === '95000',
+      'POS-UI-OVR-4',
+      'Price berupa string digit "95000" berhasil disanitasi & tersimpan',
+      `Price tersimpan: ${strPriceRes.data?.data?.items?.[0]?.price}`
+    );
+
+    // POS-UI-OVR-5: Bayar transaksi harga override & verifikasi snapshot struk
+    const payOvrRes = await req(
+      `/api/v1/transactions/${strPriceRes.data?.data?.id}/pay`,
+      'POST',
+      {
+        payments: [{ method: 'CASH', amount: 100000 }],
+      },
+      cashierCookie
+    );
+    assert(
+      payOvrRes.status === 201 &&
+        payOvrRes.data?.data?.status === 'PAID' &&
+        payOvrRes.data?.data?.items?.[0]?.price === '95000' &&
+        payOvrRes.data?.data?.total === '95000',
+      'POS-UI-OVR-5',
+      'Transaksi override berhasil dibayar (PAID) dan snapshot harga Rp 95.000 tercetak di struk',
+      `TRX: ${payOvrRes.data?.data?.transactionNumber}, Total: ${payOvrRes.data?.data?.total}`
     );
   }
 

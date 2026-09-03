@@ -1,9 +1,12 @@
 /**
- * FASE 2 — TUGAS 2: POS (Transactions, TransactionItems, Payment, Stock Deduction, Cancellation)
- * Bukti kriteria POS-1 s/d POS-12.
- *
- * Jalankan saat dev server aktif: node apps/web/scripts/phase2-task2-test.mjs
- * Override base URL: API_BASE=http://localhost:3000/api/v1
+ * FASE 2 — TUGAS 2: POS TRANSAKSI & PEMBAYARAN LAYANAN MURNI
+ * 
+ * Model Bisnis Baru:
+ * - Transaksi kasir murni untuk layanan medis klinik (tanpa produk fisik)
+ * - Tanpa diskon (Subtotal == Total)
+ * - Transaksi kasir TIDAK menyentuh stok bahan (GET stock sebelum/sesudah pay = sama)
+ * - Quantity layanan mendukung perkalian (misal 2x tindakan)
+ * - Anti-tamper harga, snapshot harga master, & role guarding
  */
 
 import { PrismaClient } from '@prisma/client';
@@ -74,11 +77,11 @@ function assert(label, condition, detail = '') {
 
 async function run() {
   console.log('══════════════════════════════════════════════════════════');
-  console.log('=== STARTING PHASE 2 TASK 2 POS TESTS ===');
+  console.log('=== STARTING PHASE 2 TASK 2 POS TESTS (MURNI LAYANAN) ===');
   console.log('══════════════════════════════════════════════════════════\n');
 
   // ─── POS-1: Setup ───
-  console.log('─── POS-1. Setup Data & Akun ───');
+  console.log('─── POS-1. Setup Data Layanan & Akun Kasir ───');
   const ownerLogin = await login('owner@oase.id');
   const ownerCookie = ownerLogin.cookie;
   assert('Login OWNER berhasil', ownerLogin.status === 200 && !!ownerCookie);
@@ -91,55 +94,40 @@ async function run() {
 
   const rnd = String(Math.floor(Math.random() * 100000));
 
-  // 1. Buat Product & Service Master
-  const prodRes = await req(
-    '/products',
-    'POST',
-    {
-      name: 'Produk POS ' + rnd,
-      sku: 'PRD-POS-' + rnd,
-      sellPrice: 50000,
-      unit: 'pcs',
-      minStock: 5,
-    },
-    ownerCookie
-  );
-  assert('Create product master berhasil', prodRes.status === 201);
-  const testProduct = prodRes.data?.data;
+  // Pastikan cabang JKT tidak terkunci closing dari pengujian sebelumnya
+  await prisma.cashClosing.deleteMany({ where: { branchId: jkt.id } });
 
-  const svcRes = await req(
+  // 1. Buat 2 Layanan Medis Master (tanpa durationMinutes)
+  const svc1Res = await req(
     '/services',
     'POST',
     {
       name: 'Layanan Tambal Gigi ' + rnd,
       price: 100000,
-      durationMinutes: 30,
     },
     ownerCookie
   );
-  assert('Create service master berhasil', svcRes.status === 201);
-  const testService = svcRes.data?.data;
+  assert('Create service 1 master berhasil (tanpa durationMinutes)', svc1Res.status === 201);
+  const testService1 = svc1Res.data?.data;
 
-  // 2. Setup StockLevel awal untuk produk di cabang JKT via Prisma langsung (POS-1)
-  await prisma.stockLevel.upsert({
-    where: {
-      branchId_itemType_itemId: {
-        branchId: jkt.id,
-        itemType: 'PRODUCT',
-        itemId: testProduct.id,
-      },
+  const svc2Res = await req(
+    '/services',
+    'POST',
+    {
+      name: 'Layanan Scaling Gigi ' + rnd,
+      price: 75000,
     },
-    create: {
-      branchId: jkt.id,
-      itemType: 'PRODUCT',
-      itemId: testProduct.id,
-      quantity: 10,
-    },
-    update: {
-      quantity: 10,
-    },
-  });
-  console.log('  Setup StockLevel JKT untuk product diset ke 10');
+    ownerCookie
+  );
+  assert('Create service 2 master berhasil', svc2Res.status === 201);
+  const testService2 = svc2Res.data?.data;
+
+  // 2. Catat saldo stok bahan awal di cabang JKT untuk bukti POS tidak mengubah stok bahan
+  const materialsRes = await req(`/inventory/stock?branchId=${jkt.id}`, 'GET', null, ownerCookie);
+  const materialsList = materialsRes.data?.data ?? [];
+  const sampleMaterial = materialsList[0];
+  const initialMaterialStock = sampleMaterial?.quantity ?? 0;
+  console.log(`  Bahan sampel: ${sampleMaterial?.name || 'Bahan Klinis'} (Stok awal: ${initialMaterialStock})`);
 
   // 3. Buat Cashier baru untuk test POS
   const empRes = await req(
@@ -199,15 +187,15 @@ async function run() {
   cashierCookie = extractAccessCookie(switchRes.setCookie);
   assert('Cashier login & switch-branch ke JKT berhasil', switchRes.status === 200);
 
-  // ─── POS-2: POST /transactions (Create DRAFT) & Pay ───
-  console.log('\n─── POS-2. Create DRAFT & Pay (2x Product @50k + 1x Service @100k) ───');
+  // ─── POS-2: POST /transactions (Create DRAFT) & Pay dengan Quantity Layanan 2x ───
+  console.log('\n─── POS-2. Create DRAFT (2x Service1 @100k + 1x Service2 @75k) & Pay ───');
   const t2_create = await req(
     '/transactions',
     'POST',
     {
       items: [
-        { itemType: 'PRODUCT', itemId: testProduct.id, quantity: 2 },
-        { itemType: 'SERVICE', itemId: testService.id, quantity: 1 },
+        { itemId: testService1.id, quantity: 2 }, // 2x Layanan 1 (200.000)
+        { itemId: testService2.id, quantity: 1 }, // 1x Layanan 2 (75.000)
       ],
       patientName: 'Pasien Test ' + rnd,
       patientPhone: '08123456789',
@@ -216,29 +204,40 @@ async function run() {
   );
   show('POS-2 Create DRAFT', t2_create);
   assert('POS-2: status 201 DRAFT', t2_create.status === 201);
-  assert('POS-2: subtotal 200000', t2_create.data?.data?.subtotal === '200000', `subtotal=${t2_create.data?.data?.subtotal}`);
-  assert('POS-2: total 200000', t2_create.data?.data?.total === '200000', `total=${t2_create.data?.data?.total}`);
+  assert('POS-2: subtotal 275000 (layanan 2x dihitung akurat)', t2_create.data?.data?.subtotal === '275000', `subtotal=${t2_create.data?.data?.subtotal}`);
+  assert('POS-2: total sama dengan subtotal 275000 (tanpa diskon)', t2_create.data?.data?.total === '275000', `total=${t2_create.data?.data?.total}`);
   assert('POS-2: status awal DRAFT', t2_create.data?.data?.status === 'DRAFT');
   const trx1Id = t2_create.data?.data?.id;
 
-  // Lakukan Pembayaran
+  // Lakukan Pembayaran CASH 300.000
   const t2_pay = await req(
     `/transactions/${trx1Id}/pay`,
     'POST',
     {
-      payments: [{ method: 'CASH', amount: 250000 }],
+      payments: [{ method: 'CASH', amount: 300000 }],
     },
     cashierCookie
   );
   show('POS-2 Bayar Transaksi', t2_pay);
   assert('POS-2: pay status 201', t2_pay.status === 201);
   assert('POS-2: status berubah jadi PAID', t2_pay.data?.data?.status === 'PAID');
-  assert('POS-2: change kembalian 50000', t2_pay.data?.data?.change === '50000', `change=${t2_pay.data?.data?.change}`);
+  assert('POS-2: change kembalian 25000', t2_pay.data?.data?.change === '25000', `change=${t2_pay.data?.data?.change}`);
   assert(
     'POS-2: transactionNumber format TRX-YYYYMMDD-XXXXX',
     /^TRX-\d{8}-\d{5}$/.test(t2_pay.data?.data?.transactionNumber ?? ''),
     `trxNumber=${t2_pay.data?.data?.transactionNumber}`
   );
+
+  // Bukti Transaksi Sukses TIDAK Mengubah Stok Bahan
+  if (sampleMaterial) {
+    const materialsAfterRes = await req(`/inventory/stock?branchId=${jkt.id}`, 'GET', null, ownerCookie);
+    const sampleMatAfter = materialsAfterRes.data?.data?.find((m) => m.itemId === sampleMaterial.itemId);
+    assert(
+      'POS-2: Transaksi sukses TIDAK mengubah stok bahan (stok sebelum vs sesudah bayar sama)',
+      sampleMatAfter?.quantity === initialMaterialStock,
+      `Awal: ${initialMaterialStock}, Setelah Transaksi: ${sampleMatAfter?.quantity}`
+    );
+  }
 
   // ─── POS-3: Konsistensi DB ───
   console.log('\n─── POS-3. Konsistensi DB (Kueri Prisma Langsung) ───');
@@ -246,28 +245,15 @@ async function run() {
     where: { id: trx1Id },
     include: { items: true, payments: true },
   });
-  assert('POS-3: DB total == 200000', dbTrx1?.total.toString() === '200000');
+  assert('POS-3: DB total == 275000', dbTrx1?.total.toString() === '275000');
   assert('POS-3: DB items count == 2', dbTrx1?.items.length === 2);
   assert('POS-3: DB payments count == 1', dbTrx1?.payments.length === 1);
 
-  // Cek StockLevel & InventoryMovement di DB
-  const dbStock = await prisma.stockLevel.findUnique({
-    where: {
-      branchId_itemType_itemId: {
-        branchId: jkt.id,
-        itemType: 'PRODUCT',
-        itemId: testProduct.id,
-      },
-    },
-  });
-  assert('POS-3: StockLevel berkurang dari 10 menjadi 8', dbStock?.quantity === 8, `stock=${dbStock?.quantity}`);
-
+  // Verifikasi DB: Transaksi layanan TIDAK menghasilkan InventoryMovement
   const dbMovements = await prisma.inventoryMovement.findMany({
     where: { referenceId: trx1Id },
   });
-  assert('POS-3: InventoryMovement tercatat 1 baris untuk product', dbMovements.length === 1);
-  assert('POS-3: Movement quantityDelta == -2', dbMovements[0]?.quantityDelta === -2);
-  assert('POS-3: Movement referenceType == TRANSACTION', dbMovements[0]?.referenceType === 'TRANSACTION');
+  assert('POS-3: DB 0 InventoryMovement tercipta dari transaksi layanan murni', dbMovements.length === 0);
 
   // ─── POS-4: Pembayaran Kurang → 400 VALIDATION_ERROR ───
   console.log('\n─── POS-4. Pembayaran Kurang (paid < total) → 400 ───');
@@ -275,7 +261,7 @@ async function run() {
     '/transactions',
     'POST',
     {
-      items: [{ itemType: 'PRODUCT', itemId: testProduct.id, quantity: 1 }],
+      items: [{ itemId: testService1.id, quantity: 1 }],
     },
     cashierCookie
   );
@@ -284,7 +270,7 @@ async function run() {
     `/transactions/${trx4Id}/pay`,
     'POST',
     {
-      payments: [{ method: 'CASH', amount: 30000 }], // total 50000, bayar 30000
+      payments: [{ method: 'CASH', amount: 50000 }], // total 100000, bayar 50000
     },
     cashierCookie
   );
@@ -297,7 +283,7 @@ async function run() {
     '/transactions',
     'POST',
     {
-      items: [{ itemType: 'PRODUCT', itemId: testProduct.id, quantity: 0 }],
+      items: [{ itemId: testService1.id, quantity: 0 }],
     },
     cashierCookie
   );
@@ -307,73 +293,31 @@ async function run() {
     '/transactions',
     'POST',
     {
-      items: [{ itemType: 'PRODUCT', itemId: '00000000-0000-0000-0000-000000000000', quantity: 1 }],
+      items: [{ itemId: '00000000-0000-0000-0000-000000000000', quantity: 1 }],
     },
     cashierCookie
   );
   assert('POS-5: itemId acak ditolak (400)', t5_randItem.status === 400);
 
-  // ─── POS-6: Anti-tamper Harga Client ───
-  console.log('\n─── POS-6. Anti-tamper Harga Client ───');
+  // ─── POS-6: Anti-tamper LineTotal / Subtotal / Total dari Client ───
+  console.log('\n─── POS-6. Anti-tamper LineTotal / Subtotal / Total dari Client ───');
   const t6_tamper = await req(
     '/transactions',
     'POST',
     {
       items: [
         {
-          itemType: 'PRODUCT',
-          itemId: testProduct.id,
+          itemId: testService1.id,
           quantity: 2,
-          price: 1, // coba palsukan harga jadi Rp 1
+          lineTotal: 1000,
         },
       ],
+      total: 1000,
     },
     cashierCookie
   );
   show('POS-6 Anti-tamper', t6_tamper);
-  assert('POS-6: subtotal tetap dihitung dari harga master DB (100000)', t6_tamper.data?.data?.subtotal === '100000', `subtotal=${t6_tamper.data?.data?.subtotal}`);
-
-  // ─── POS-7: Stok Kurang → 409 INSUFFICIENT_STOCK & Atomik Rollback ───
-  console.log('\n─── POS-7. Stok Kurang → 409 INSUFFICIENT_STOCK & Rollback Atomik ───');
-  const t7_create = await req(
-    '/transactions',
-    'POST',
-    {
-      items: [{ itemType: 'PRODUCT', itemId: testProduct.id, quantity: 50 }], // stok sisa 8
-    },
-    cashierCookie
-  );
-  const trx7Id = t7_create.data?.data?.id;
-
-  const t7_pay = await req(
-    `/transactions/${trx7Id}/pay`,
-    'POST',
-    {
-      payments: [{ method: 'CASH', amount: 3000000 }],
-    },
-    cashierCookie
-  );
-  show('POS-7 Stok Kurang', t7_pay);
-  assert('POS-7: status 409 Conflict', t7_pay.status === 409);
-  assert('POS-7: error code INSUFFICIENT_STOCK', t7_pay.data?.code === 'INSUFFICIENT_STOCK');
-
-  // Verifikasi Atomik Rollback di Database: Transaksi tidak menjadi PAID dan stok tidak berubah
-  const dbTrx7 = await prisma.transaction.findUnique({ where: { id: trx7Id } });
-  assert('POS-7: DB status transaksi tetap DRAFT', dbTrx7?.status === 'DRAFT');
-  const dbPayments7 = await prisma.transactionPayment.findMany({ where: { transactionId: trx7Id } });
-  assert('POS-7: DB tidak ada payment tersimpan', dbPayments7.length === 0);
-  const dbMovements7 = await prisma.inventoryMovement.findMany({ where: { referenceId: trx7Id } });
-  assert('POS-7: DB 0 InventoryMovement tercipta saat rollback', dbMovements7.length === 0);
-  const dbStock7 = await prisma.stockLevel.findUnique({
-    where: {
-      branchId_itemType_itemId: {
-        branchId: jkt.id,
-        itemType: 'PRODUCT',
-        itemId: testProduct.id,
-      },
-    },
-  });
-  assert('POS-7: DB saldo stok tetap 8 (tidak berkurang)', dbStock7?.quantity === 8);
+  assert('POS-6: manipulasi lineTotal/total dari client ditolak server (400)', t6_tamper.status === 400);
 
   // ─── POS-8: Tanpa switch-branch → 400 ───
   console.log('\n─── POS-8. Tanpa switch-branch → 400 ───');
@@ -383,7 +327,7 @@ async function run() {
     '/transactions',
     'POST',
     {
-      items: [{ itemType: 'PRODUCT', itemId: testProduct.id, quantity: 1 }],
+      items: [{ itemId: testService1.id, quantity: 1 }],
     },
     cashier2NoSwitch
   );
@@ -409,7 +353,7 @@ async function run() {
   assert('POS-9b: MANAGER ditolak GET /transactions (403 FORBIDDEN)', t9b_mgr.status === 403);
 
   // ─── POS-10: VOID / Cancel Transaksi PAID [OWNER] ───
-  console.log('\n─── POS-10. Cancel Transaksi PAID (OWNER) & Stok Kembali ───');
+  console.log('\n─── POS-10. Cancel Transaksi PAID (OWNER) ───');
   // CASHIER coba cancel -> 403
   const t10_cashierCancel = await req(
     `/transactions/${trx1Id}/cancel`,
@@ -424,29 +368,12 @@ async function run() {
   const t10_ownerCancel = await req(
     `/transactions/${trx1Id}/cancel`,
     'POST',
-    { reason: 'Pasien meminta pembatalan transaksi dan refund' },
+    { reason: 'Pasien meminta pembatalan transaksi tindakan' },
     ownerCookie
   );
   show('POS-10 OWNER cancel', t10_ownerCancel);
   assert('POS-10: OWNER cancel sukses (200 OK)', t10_ownerCancel.status === 200);
   assert('POS-10: status berubah jadi CANCELLED', t10_ownerCancel.data?.data?.status === 'CANCELLED');
-
-  // Verifikasi DB: Stok bertambah kembali 2 (dari 8 menjadi 10)
-  const dbStockAfterCancel = await prisma.stockLevel.findUnique({
-    where: {
-      branchId_itemType_itemId: {
-        branchId: jkt.id,
-        itemType: 'PRODUCT',
-        itemId: testProduct.id,
-      },
-    },
-  });
-  assert('POS-10: Stok kembali pulih ke 10 di StockLevel', dbStockAfterCancel?.quantity === 10, `stock=${dbStockAfterCancel?.quantity}`);
-
-  const cancelMovement = await prisma.inventoryMovement.findFirst({
-    where: { referenceId: trx1Id, quantityDelta: 2 },
-  });
-  assert('POS-10: InventoryMovement pemulihan stok (+2) tercatat di DB', !!cancelMovement);
 
   // ─── POS-11: GET Detail Transaksi ───
   console.log('\n─── POS-11. GET Detail Transaksi & Format Serialisasi Uang ───');
@@ -457,65 +384,42 @@ async function run() {
   assert('POS-11: items berupa array lengkap', Array.isArray(t11_detail.data?.data?.items) && t11_detail.data?.data?.items.length === 2);
   assert('POS-11: item price & lineTotal berupa string desimal', typeof t11_detail.data?.data?.items[0]?.price === 'string');
 
-  // ─── POS-12: Regresi Mini Uang & Decimal Precision ───
+  // ─── POS-12: Presisi Aritmatika Uang Decimal Tanpa Diskon ───
   console.log('\n─── POS-12. Presisi Aritmatika Uang Decimal ───');
-  // Buat 1 product dengan harga berdesimal 12345.5
-  const prodDecRes = await req(
-    '/products',
+  // Buat 1 layanan dengan harga berdesimal 12345.5
+  const svcDecRes = await req(
+    '/services',
     'POST',
     {
-      name: 'Produk Decimal ' + rnd,
-      sku: 'PRD-DEC-' + rnd,
-      sellPrice: 12345.5,
-      unit: 'pcs',
-      minStock: 0,
+      name: 'Layanan Decimal ' + rnd,
+      price: 12345.5,
     },
     ownerCookie
   );
-  assert('POS-12: create product decimal berhasil', prodDecRes.status === 201);
-  const decProd = prodDecRes.data?.data;
-  await prisma.stockLevel.upsert({
-    where: {
-      branchId_itemType_itemId: {
-        branchId: jkt.id,
-        itemType: 'PRODUCT',
-        itemId: decProd.id,
-      },
-    },
-    create: {
-      branchId: jkt.id,
-      itemType: 'PRODUCT',
-      itemId: decProd.id,
-      quantity: 100,
-    },
-    update: {
-      quantity: 100,
-    },
-  });
+  assert('POS-12: create service decimal berhasil', svcDecRes.status === 201);
+  const decSvc = svcDecRes.data?.data;
 
   const t12_create = await req(
     '/transactions',
     'POST',
     {
-      items: [{ itemType: 'PRODUCT', itemId: decProd.id, quantity: 3 }],
-      discountAmount: '1000.5',
-      discountReason: 'Diskon promo member',
+      items: [{ itemId: decSvc.id, quantity: 3 }],
     },
     cashierCookie
   );
-  // 3 * 12345.5 = 37036.5 - 1000.5 = 36036
+  // 3 * 12345.5 = 37036.5 (total == subtotal, tanpa diskon)
   show('POS-12 Decimal Test', t12_create);
   assert('POS-12: subtotal persis 37036.5', t12_create.data?.data?.subtotal === '37036.5', `subtotal=${t12_create.data?.data?.subtotal}`);
-  assert('POS-12: total persis 36036 tanpa float artifact', t12_create.data?.data?.total === '36036', `total=${t12_create.data?.data?.total}`);
+  assert('POS-12: total persis 37036.5 tanpa float artifact', t12_create.data?.data?.total === '37036.5', `total=${t12_create.data?.data?.total}`);
 
   // ─── POS-13: Bukti Snapshot Master Price ───
   console.log('\n─── POS-13. Bukti Snapshot Master Price ───');
-  // Buat transaksi baru untuk testProduct (harga master saat ini 50000) dan selesaikan pembayaran
+  // Buat transaksi baru untuk testService1 (harga master saat ini 100000) dan selesaikan pembayaran
   const t13_draft = await req(
     '/transactions',
     'POST',
     {
-      items: [{ itemType: 'PRODUCT', itemId: testProduct.id, quantity: 1 }],
+      items: [{ itemId: testService1.id, quantity: 1 }],
     },
     cashierCookie
   );
@@ -524,34 +428,149 @@ async function run() {
     `/transactions/${trx13Id}/pay`,
     'POST',
     {
-      payments: [{ method: 'CASH', amount: 50000 }],
+      payments: [{ method: 'CASH', amount: 100000 }],
     },
     cashierCookie
   );
 
-  // Naikkan harga testProduct di master menjadi 95000
+  // Naikkan harga testService1 di master menjadi 175000
   const t13_patchMaster = await req(
-    `/products/${testProduct.id}`,
+    `/services/${testService1.id}`,
     'PATCH',
-    { sellPrice: 95000 },
+    { price: 175000 },
     ownerCookie
   );
-  assert('POS-13: update harga master product berhasil (95000)', t13_patchMaster.status === 200);
+  assert('POS-13: update harga master service berhasil (175000)', t13_patchMaster.status === 200);
 
-  // Detail transaksi lama harus tetap 50000 (tidak terpengaruh perubahan harga master)
+  // Detail transaksi lama harus tetap 100000 (tidak terpengaruh kenaikan harga master)
   const t13_detail = await req(`/transactions/${trx13Id}`, 'GET', null, cashierCookie);
   show('POS-13 Detail Transaksi setelah Master Berubah', t13_detail);
-  assert('POS-13: price item transaksi lama tetap 50000', t13_detail.data?.data?.items[0]?.price === '50000', `price=${t13_detail.data?.data?.items[0]?.price}`);
-  assert('POS-13: total transaksi lama tetap 50000 (snapshot terbukti)', t13_detail.data?.data?.total === '50000', `total=${t13_detail.data?.data?.total}`);
+  assert('POS-13: price item transaksi lama tetap 100000', t13_detail.data?.data?.items[0]?.price === '100000', `price=${t13_detail.data?.data?.items[0]?.price}`);
+  assert('POS-13: total transaksi lama tetap 100000 (snapshot terbukti)', t13_detail.data?.data?.total === '100000', `total=${t13_detail.data?.data?.total}`);
 
-  console.log('\n══════════════════════════════════════════════════════════');
-  console.log('=== PHASE 2 TASK 2 POS TESTS SELESAI ===');
-  if (process.exitCode === 1) {
-    console.error('⚠️  Ada pengujian yang GAGAL');
-  } else {
-    console.log('✅ Semua POS-1 s/d POS-12 HIJAU');
-  }
-  console.log('══════════════════════════════════════════════════════════');
+  // ─── POS-OVR: FITUR KASIR OVERRIDE HARGA SATUAN POS ───
+  console.log('\n─── POS-OVR: Fitur Kasir Bebas Override Harga Satuan ───');
+
+  // POS-OVR-1: Override NAIK (100.000 -> 135.000 x 2 = 270.000)
+  const ovr1_res = await req(
+    '/transactions',
+    'POST',
+    {
+      items: [{ itemId: testService2.id, quantity: 2, price: 135000 }],
+    },
+    cashierCookie
+  );
+  show('POS-OVR-1 Override Naik', ovr1_res);
+  assert('POS-OVR-1: create draft dengan harga naik berhasil (201)', ovr1_res.status === 201);
+  assert('POS-OVR-1: snapshot price tersimpan 135000', ovr1_res.data?.data?.items[0]?.price === '135000');
+  assert('POS-OVR-1: total terhitung 270000 (135rb x 2)', ovr1_res.data?.data?.total === '270000');
+
+  // POS-OVR-2: Override TURUN (100.000 -> 80.000 x 1 = 80.000)
+  const ovr2_res = await req(
+    '/transactions',
+    'POST',
+    {
+      items: [{ itemId: testService2.id, quantity: 1, price: 80000 }],
+    },
+    cashierCookie
+  );
+  show('POS-OVR-2 Override Turun', ovr2_res);
+  assert('POS-OVR-2: create draft dengan harga turun berhasil (201)', ovr2_res.status === 201);
+  assert('POS-OVR-2: snapshot price tersimpan 80000', ovr2_res.data?.data?.items[0]?.price === '80000');
+  assert('POS-OVR-2: total terhitung 80000', ovr2_res.data?.data?.total === '80000');
+
+  // POS-OVR-3: Tanpa Override (fallback ke harga master testService2 = 75000)
+  const ovr3_res = await req(
+    '/transactions',
+    'POST',
+    {
+      items: [{ itemId: testService2.id, quantity: 1 }],
+    },
+    cashierCookie
+  );
+  show('POS-OVR-3 Tanpa Override', ovr3_res);
+  assert('POS-OVR-3: create draft tanpa price berhasil (201)', ovr3_res.status === 201);
+  assert('POS-OVR-3: price otomatis mengambil master service (75000)', ovr3_res.data?.data?.items[0]?.price === '75000');
+  assert('POS-OVR-3: total sama dengan master service (75000)', ovr3_res.data?.data?.total === '75000');
+
+  // POS-OVR-4: Validasi Penolakan Harga Invalid
+  const ovr4_zero = await req(
+    '/transactions',
+    'POST',
+    {
+      items: [{ itemId: testService2.id, quantity: 1, price: 0 }],
+    },
+    cashierCookie
+  );
+  assert('POS-OVR-4: price = 0 ditolak (400)', ovr4_zero.status === 400);
+
+  const ovr4_negative = await req(
+    '/transactions',
+    'POST',
+    {
+      items: [{ itemId: testService2.id, quantity: 1, price: -50000 }],
+    },
+    cashierCookie
+  );
+  assert('POS-OVR-4: price < 0 ditolak (400)', ovr4_negative.status === 400);
+
+  const ovr4_overflow = await req(
+    '/transactions',
+    'POST',
+    {
+      items: [{ itemId: testService2.id, quantity: 1, price: 1000000000 }],
+    },
+    cashierCookie
+  );
+  assert('POS-OVR-4: price > 999.999.999 ditolak (400)', ovr4_overflow.status === 400);
+
+  // POS-OVR-5: Override pada DRAFT Eksisting via PATCH
+  const ovr5_draft = await req(
+    '/transactions',
+    'POST',
+    {
+      items: [{ itemId: testService2.id, quantity: 1 }], // default master
+    },
+    cashierCookie
+  );
+  const draftId = ovr5_draft.data?.data?.id;
+  const ovr5_patch = await req(
+    `/transactions/${draftId}`,
+    'PATCH',
+    {
+      items: [{ itemId: testService2.id, quantity: 1, price: 125000 }],
+    },
+    cashierCookie
+  );
+  show('POS-OVR-5 PATCH Draft Price', ovr5_patch);
+  assert('POS-OVR-5: update draft dengan harga override berhasil (200)', ovr5_patch.status === 200);
+  assert('POS-OVR-5: price draft terupdate menjadi 125000', ovr5_patch.data?.data?.items[0]?.price === '125000');
+  assert('POS-OVR-5: total draft terupdate menjadi 125000', ovr5_patch.data?.data?.total === '125000');
+
+  // POS-OVR-6: Price Dikirim sebagai STRING Digit ("80000") lolos sanitasi
+  const ovr6_res = await req(
+    '/transactions',
+    'POST',
+    {
+      items: [{ itemId: testService2.id, quantity: 1, price: "80000" }],
+    },
+    cashierCookie
+  );
+  show('POS-OVR-6 String Price', ovr6_res);
+  assert('POS-OVR-6: price string "80000" berhasil (201)', ovr6_res.status === 201);
+  assert('POS-OVR-6: price string tersanitasi desimal 80000', ovr6_res.data?.data?.items[0]?.price === '80000');
+
+  // POS-OVR-7: Penolakan field lineTotal/subtotal/total dari client
+  const ovr7_tamper = await req(
+    '/transactions',
+    'POST',
+    {
+      items: [{ itemId: testService2.id, quantity: 1, lineTotal: 1000 }],
+      total: 1000,
+    },
+    cashierCookie
+  );
+  assert('POS-OVR-7: manipulasi client lineTotal/total ditolak (400)', ovr7_tamper.status === 400);
 }
 
 run()

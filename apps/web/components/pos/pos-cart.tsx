@@ -15,15 +15,22 @@ import {
   CreditCard,
   FileText,
   RotateCcw,
+  PenLine,
 } from 'lucide-react';
+import { cn } from '@/lib/utils';
+
+interface ExtendedCartItem extends PosCartItem {
+  originalPrice?: string;
+}
 
 interface PosCartProps {
-  items: PosCartItem[];
+  items: ExtendedCartItem[];
   patientName: string;
   patientPhone: string;
   onUpdatePatientName: (name: string) => void;
   onUpdatePatientPhone: (phone: string) => void;
   onUpdateQuantity: (itemId: string, newQty: number) => void;
+  onUpdatePrice?: (itemId: string, newPrice: string) => void;
   onRemoveItem: (itemId: string) => void;
   onClearCart: () => void;
   onSaveDraft: () => void;
@@ -39,6 +46,7 @@ export function PosCart({
   onUpdatePatientName,
   onUpdatePatientPhone,
   onUpdateQuantity,
+  onUpdatePrice,
   onRemoveItem,
   onClearCart,
   onSaveDraft,
@@ -48,7 +56,7 @@ export function PosCart({
 }: PosCartProps) {
   // Hitung subtotal & total tampilan di client menggunakan integer cents (total = subtotal, tanpa diskon)
   const subtotalCents = items.reduce((acc, item) => {
-    return acc + decimalToCents(item.price) * item.quantity;
+    return acc + decimalToCents(item.price || '0') * item.quantity;
   }, 0);
 
   const totalCents = subtotalCents;
@@ -126,20 +134,66 @@ export function PosCart({
         ) : (
           <div className="space-y-2.5">
             {items.map((item) => {
-              const itemTotalCents = decimalToCents(item.price) * item.quantity;
+              const itemTotalCents = decimalToCents(item.price || '0') * item.quantity;
+              const isOverridden =
+                Boolean(item.originalPrice) &&
+                parseFloat(item.price || '0') !== parseFloat(item.originalPrice || '0');
 
               return (
                 <div
                   key={item.id}
-                  className="p-3 rounded-lg border border-border bg-surface hover:border-slate-300 transition-colors space-y-2"
+                  className={cn(
+                    "p-3 rounded-lg border bg-surface transition-colors space-y-2",
+                    isOverridden ? "border-amber-200 bg-amber-50/20" : "border-border hover:border-slate-300"
+                  )}
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <div className="space-y-0.5 flex-1 min-w-0">
+                    <div className="space-y-1 flex-1 min-w-0">
                       <div className="text-xs font-semibold text-foreground truncate">
                         {item.name}
                       </div>
-                      <div className="text-[11px] text-muted">
-                        {formatRupiah(item.price)}
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <div className={cn(
+                          "flex items-center h-6 rounded border bg-white px-1.5 focus-within:ring-1 focus-within:ring-primary transition-colors",
+                          isOverridden
+                            ? "border-amber-300 focus-within:border-amber-500"
+                            : "border-slate-200 focus-within:border-primary"
+                        )}>
+                          <span className="text-[10px] font-medium text-slate-400 mr-1 select-none">Rp</span>
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            value={item.price}
+                            onChange={(e) => {
+                              const raw = e.target.value.replace(/[^0-9]/g, '');
+                              onUpdatePrice?.(item.itemId, raw);
+                            }}
+                            className={cn(
+                              "w-20 text-[11px] bg-transparent text-foreground focus:outline-hidden",
+                              isOverridden ? "font-bold text-amber-900" : "font-semibold"
+                            )}
+                            title="Harga satuan (dapat disesuaikan)"
+                            aria-label={`Harga satuan ${item.name}`}
+                          />
+                        </div>
+
+                        {isOverridden ? (
+                          <span
+                            className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-amber-100/70 text-amber-800 border border-amber-200 text-[10px] font-medium select-none"
+                            title={`Harga master: ${formatRupiah(item.originalPrice || '')}`}
+                          >
+                            <PenLine className="h-2.5 w-2.5 text-amber-600" />
+                            <span>Disesuaikan</span>
+                          </span>
+                        ) : (
+                          <span
+                            className="inline-flex items-center gap-0.5 text-[10px] text-muted hover:text-slate-600 select-none cursor-default"
+                            title="Harga satuan dapat disesuaikan kasir"
+                          >
+                            <PenLine className="h-2.5 w-2.5 text-slate-400" />
+                            <span>Bisa disesuaikan</span>
+                          </span>
+                        )}
                       </div>
                     </div>
 

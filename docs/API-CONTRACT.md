@@ -177,14 +177,28 @@ Response 200:
 ```json
 {
   "items": [
-    { "itemId": "uuid", "quantity": 1 }
+    { "itemId": "uuid", "quantity": 2, "price": 120000 }
   ],
-  "patientName": null,
-  "patientPhone": null
+  "patientName": "Sulastri",
+  "patientPhone": "081234567890"
 }
 ```
-Server: snapshot name/price dari master layanan, hitung subtotal dan total (total = subtotal, tanpa diskon).
-Transaksi tidak menyentuh inventaris/stok.
+Field `items[].price` bersifat opsional (number / string digit, > 0, maks 9 digit):
+- Jika diisi kasir: harga satuan di-override bebas ke atas maupun ke bawah.
+- Jika tidak diisi: server otomatis fallback menggunakan harga master `Service.price`.
+- `lineTotal`, `subtotal`, dan `total` SELALU dihitung di server-side (`total = subtotal`). Input field `lineTotal`/`subtotal`/`total` dari client ditolak (`400 VALIDATION_ERROR`).
+- Transaksi tidak menyentuh inventaris/stok bahan medis.
+
+**PATCH /transactions/:id** (edit DRAFT)
+```json
+{
+  "items": [
+    { "itemId": "uuid", "quantity": 1, "price": 85000 }
+  ],
+  "patientName": "Sulastri"
+}
+```
+Hanya berlaku untuk transaksi berstatus `DRAFT`. Item dan harga dapat disesuaikan ulang sebelum pembayaran.
 
 **POST /transactions/:id/pay**
 ```json

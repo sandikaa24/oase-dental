@@ -136,10 +136,17 @@ export default function PosPage() {
           itemType: 'SERVICE',
           name: item.name,
           price: item.price,
+          originalPrice: item.price,
           quantity: 1,
         },
       ];
     });
+  };
+
+  const handleUpdatePrice = (itemId: string, newPrice: string) => {
+    setCartItems((prev) =>
+      prev.map((ci) => (ci.itemId === itemId ? { ...ci, price: newPrice } : ci))
+    );
   };
 
   const handleUpdateQuantity = (itemId: string, newQty: number) => {
@@ -176,6 +183,7 @@ export default function PosPage() {
         items: cartItems.map((ci) => ({
           itemId: ci.itemId,
           quantity: ci.quantity,
+          price: parseFloat(ci.price) > 0 ? parseFloat(ci.price) : undefined,
         })),
         patientName: patientName.trim() || null,
         patientPhone: patientPhone.trim() || null,
@@ -227,6 +235,7 @@ export default function PosPage() {
         items: cartItems.map((ci) => ({
           itemId: ci.itemId,
           quantity: ci.quantity,
+          price: parseFloat(ci.price) > 0 ? parseFloat(ci.price) : undefined,
         })),
         patientName: patientName.trim() || null,
         patientPhone: patientPhone.trim() || null,
@@ -292,14 +301,18 @@ export default function PosPage() {
     setPatientPhone(trx.patientPhone || '');
 
     setCartItems(
-      trx.items.map((i) => ({
-        id: `cart-${i.id}`,
-        itemId: i.itemId,
-        itemType: 'SERVICE',
-        name: i.name,
-        price: i.price,
-        quantity: i.quantity,
-      }))
+      trx.items.map((i) => {
+        const cat = catalogItems.find((c) => c.id === i.itemId);
+        return {
+          id: `cart-${i.id}`,
+          itemId: i.itemId,
+          itemType: 'SERVICE',
+          name: i.name,
+          price: i.price,
+          originalPrice: cat?.price || i.price,
+          quantity: i.quantity,
+        };
+      })
     );
 
     setActiveTab('POS');
@@ -440,6 +453,7 @@ export default function PosPage() {
               onUpdatePatientName={setPatientName}
               onUpdatePatientPhone={setPatientPhone}
               onUpdateQuantity={handleUpdateQuantity}
+              onUpdatePrice={handleUpdatePrice}
               onRemoveItem={handleRemoveItem}
               onClearCart={handleClearCart}
               onSaveDraft={handleSaveDraft}

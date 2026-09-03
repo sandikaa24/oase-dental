@@ -75,6 +75,7 @@ export async function createTransaction(
       itemId: string;
       quantity: number;
       itemType?: 'SERVICE';
+      price?: string | number;
     }>;
     patientName?: string | null;
     patientPhone?: string | null;
@@ -117,14 +118,16 @@ export async function createTransaction(
         `Layanan dengan ID ${item.itemId} tidak ditemukan atau sudah tidak aktif`
       );
     }
-    const lineTotal = service.price.mul(item.quantity);
+    const effectivePrice =
+      item.price !== undefined ? new Prisma.Decimal(item.price) : service.price;
+    const lineTotal = effectivePrice.mul(item.quantity);
     subtotal = subtotal.add(lineTotal);
     resolvedItems.push({
       serviceId: service.id,
       itemId: service.id,
       name: service.name,
       nameEn: service.nameEn,
-      price: service.price,
+      price: effectivePrice,
       quantity: item.quantity,
       lineTotal,
     });
@@ -287,6 +290,7 @@ export async function updateTransaction(
       itemId: string;
       quantity: number;
       itemType?: 'SERVICE';
+      price?: string | number;
     }>;
     patientName?: string | null;
     patientPhone?: string | null;
@@ -338,14 +342,16 @@ export async function updateTransaction(
           `Layanan dengan ID ${item.itemId} tidak ditemukan atau sudah tidak aktif`
         );
       }
-      const lineTotal = service.price.mul(item.quantity);
+      const effectivePrice =
+        item.price !== undefined ? new Prisma.Decimal(item.price) : service.price;
+      const lineTotal = effectivePrice.mul(item.quantity);
       subtotal = subtotal.add(lineTotal);
       resolvedItems.push({
         serviceId: service.id,
         itemId: service.id,
         name: service.name,
         nameEn: service.nameEn,
-        price: service.price,
+        price: effectivePrice,
         quantity: item.quantity,
         lineTotal,
       });
@@ -415,11 +421,13 @@ export async function deleteTransaction(
  * Helper: Cek apakah tanggal transaksi berada dalam periode tutup kas yang berstatus CLOSED.
  */
 async function assertClosingNotLocked(branchId: string, transactionDate: Date) {
+  const { workDate } = getJakartaDateTime();
+  const checkDate = transactionDate < workDate ? transactionDate : workDate;
   const lockedClosing = await prisma.cashClosing.findFirst({
     where: {
       branchId,
       status: 'CLOSED',
-      closingDate: { gte: transactionDate },
+      closingDate: { gte: checkDate },
     },
   });
 
@@ -509,7 +517,7 @@ export async function payTransaction(
   // Eksekusi atomik dalam $transaction
   const paidTransaction = await prisma.$transaction(async (tx) => {
     // 1. Generate Nomor Transaksi Resmi (TRX-YYYYMMDD-XXXXX)
-    const seq = await tx.numberSequence.upsert({
+    let seq = await tx.numberSequence.upsert({
       where: {
         branchId_scope_seqDate: {
           branchId: existing.branchId,
@@ -529,8 +537,24 @@ export async function payTransaction(
     });
 
     const dateCompact = dateStr.replace(/-/g, '');
-    const seqPadded = seq.lastSeq.toString().padStart(5, '0');
-    const officialTrxNumber = `TRX-${dateCompact}-${seqPadded}`;
+    let seqPadded = seq.lastSeq.toString().padStart(5, '0');
+    let officialTrxNumber = `TRX-${dateCompact}-${seqPadded}`;
+
+    // Penjaga keunikan jika urutan sudah terpakai
+    let existingTrx = await tx.transaction.findUnique({
+      where: { transactionNumber: officialTrxNumber },
+    });
+    while (existingTrx) {
+      seq = await tx.numberSequence.update({
+        where: { id: seq.id },
+        data: { lastSeq: { increment: 1 } },
+      });
+      seqPadded = seq.lastSeq.toString().padStart(5, '0');
+      officialTrxNumber = `TRX-${dateCompact}-${seqPadded}`;
+      existingTrx = await tx.transaction.findUnique({
+        where: { transactionNumber: officialTrxNumber },
+      });
+    }
 
     // 2. Simpan Catatan Pembayaran
     await tx.transactionPayment.createMany({

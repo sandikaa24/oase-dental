@@ -184,18 +184,16 @@ async function run() {
   // V-3: Request Langsung CASHIER ke Endpoint Master Data
   // ───────────────────────────────────────────────────────────────────────────
   console.log('\n--- V-3: Endpoint Master Data Access Guard ---');
-  const cashierProductsRes = await req('/api/v1/products', 'GET', null, cashierCookie);
   const cashierServicesRes = await req('/api/v1/services', 'GET', null, cashierCookie);
   const cashierCategoriesRes = await req('/api/v1/categories', 'GET', null, cashierCookie);
   const cashierMaterialsRes = await req('/api/v1/materials', 'GET', null, cashierCookie);
 
   assert(
-    cashierProductsRes.status === 403 &&
-      cashierServicesRes.status === 403 &&
+    cashierServicesRes.status === 403 &&
       cashierCategoriesRes.status === 403 &&
       cashierMaterialsRes.status === 403,
     'V-3',
-    'Request langsung CASHIER ke master data (products, services, categories, materials) ditolak dengan 403 FORBIDDEN'
+    'Request langsung CASHIER ke master data (services, categories, materials) ditolak dengan 403 FORBIDDEN'
   );
 
   // ───────────────────────────────────────────────────────────────────────────

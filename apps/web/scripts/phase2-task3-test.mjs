@@ -1,8 +1,12 @@
 /**
- * FASE 2 — TUGAS 3: INVENTORY (Stock-in, Movement Card, Stock Opname & Kanari POS)
- * Bukti kriteria INV-1 s/d INV-10.
- *
- * Jalankan saat dev server aktif: node apps/web/scripts/phase2-task3-test.mjs
+ * FASE 2 — TUGAS 3: INVENTORY BAHAN MEDIS & KARTU STOK
+ * 
+ * Model Bisnis Baru:
+ * - Inventaris murni Bahan Medis (MATERIAL)
+ * - Stock-In, Stock Opname, Stock-Out Manual
+ * - Riwayat Kartu Stok (STOCK_IN, OPNAME, MANUAL_ADJUSTMENT)
+ * - Penjagaan Stok Tidak Boleh Negatif (Rollback atomik)
+ * - Integrasi POS Layanan Murni (tidak memutasi stok bahan)
  */
 
 import { PrismaClient } from '@prisma/client';
@@ -73,7 +77,7 @@ function assert(label, condition, detail = '') {
 
 async function run() {
   console.log('══════════════════════════════════════════════════════════');
-  console.log('=== STARTING PHASE 2 TASK 3 INVENTORY TESTS ===');
+  console.log('=== STARTING PHASE 2 TASK 3 INVENTORY TESTS (BAHAN MEDIS) ===');
   console.log('══════════════════════════════════════════════════════════\n');
 
   // ─── INV-1: Setup Data & Akun ───
@@ -90,22 +94,7 @@ async function run() {
 
   const rnd = String(Math.floor(Math.random() * 100000));
 
-  // 1. Buat Product & Material Master baru
-  const prodRes = await req(
-    '/products',
-    'POST',
-    {
-      name: 'Produk Inventory ' + rnd,
-      sku: 'PRD-INV-' + rnd,
-      sellPrice: 50000,
-      unit: 'pcs',
-      minStock: 10,
-    },
-    ownerCookie
-  );
-  assert('Create product master berhasil', prodRes.status === 201);
-  const testProduct = prodRes.data?.data;
-
+  // 1. Buat Material Master baru
   const matRes = await req(
     '/materials',
     'POST',
@@ -113,7 +102,7 @@ async function run() {
       name: 'Material Inventory ' + rnd,
       sku: 'MTL-INV-' + rnd,
       unit: 'ampul',
-      minStock: 20,
+      minStock: 10,
     },
     ownerCookie
   );
@@ -181,27 +170,27 @@ async function run() {
   const cashierCookie = extractAccessCookie(cashierSwitchRes.setCookie);
   assert('Cashier login & switch-branch ke JKT berhasil', cashierSwitchRes.status === 200);
 
-  // Pastikan stok awal produk di JKT kosong / 0
+  // Pastikan stok awal bahan di JKT kosong / 0
   const initStock = await prisma.stockLevel.findUnique({
     where: {
       branchId_itemType_itemId: {
         branchId: jkt.id,
-        itemType: 'PRODUCT',
-        itemId: testProduct.id,
+        itemType: 'MATERIAL',
+        itemId: testMaterial.id,
       },
     },
   });
-  assert('INV-1: Stok awal produk di JKT adalah 0 / belum ada', !initStock || initStock.quantity === 0);
+  assert('INV-1: Stok awal bahan di JKT adalah 0 / belum ada', !initStock || initStock.quantity === 0);
 
   // ─── INV-2: Stock-in (+50) ───
-  console.log('\n─── INV-2. Stock-in (+50 pcs) [MANAGER] ───');
+  console.log('\n─── INV-2. Stock-in (+50 ampul) [MANAGER] ───');
   const inv2_stockIn = await req(
     '/inventory/stock-in',
     'POST',
     {
-      itemType: 'PRODUCT',
-      items: [{ itemId: testProduct.id, quantity: 50, unitCost: 35000 }],
-      note: 'Pembelian stok awal dari distributor',
+      itemType: 'MATERIAL',
+      items: [{ itemId: testMaterial.id, quantity: 50, unitCost: 35000 }],
+      note: 'Pembelian stok awal bahan dari distributor',
     },
     mgrCookie
   );
@@ -213,8 +202,8 @@ async function run() {
     where: {
       branchId_itemType_itemId: {
         branchId: jkt.id,
-        itemType: 'PRODUCT',
-        itemId: testProduct.id,
+        itemType: 'MATERIAL',
+        itemId: testMaterial.id,
       },
     },
   });
@@ -223,7 +212,7 @@ async function run() {
   const dbMovementInv2 = await prisma.inventoryMovement.findFirst({
     where: {
       branchId: jkt.id,
-      itemId: testProduct.id,
+      itemId: testMaterial.id,
       referenceType: 'STOCK_IN',
     },
   });
@@ -241,8 +230,8 @@ async function run() {
     'POST',
     {
       opnameDate: opnameDateStr,
-      itemType: 'PRODUCT',
-      note: 'Opname bulanan rutin cabang JKT',
+      itemType: 'MATERIAL',
+      note: 'Opname bulanan rutin bahan cabang JKT',
     },
     mgrCookie
   );
@@ -250,7 +239,7 @@ async function run() {
   assert('INV-3: status 201 DRAFT', inv3_create.status === 201);
   const opnameId = inv3_create.data?.data?.id;
 
-  const itemSnapshot = inv3_create.data?.data?.items?.find((i) => i.itemId === testProduct.id);
+  const itemSnapshot = inv3_create.data?.data?.items?.find((i) => i.itemId === testMaterial.id);
   assert('INV-3: systemQty ter-snapshot 50', itemSnapshot?.systemQty === 50, `sysQty=${itemSnapshot?.systemQty}`);
 
   // 2. Input Hasil Hitung Fisik (PATCH)
@@ -260,9 +249,9 @@ async function run() {
     {
       items: [
         {
-          itemId: testProduct.id,
+          itemId: testMaterial.id,
           physicalQty: 45,
-          note: '5 pcs rusak saat pengiriman',
+          note: '5 ampul pecah saat pengiriman',
         },
       ],
     },
@@ -287,8 +276,8 @@ async function run() {
     where: {
       branchId_itemType_itemId: {
         branchId: jkt.id,
-        itemType: 'PRODUCT',
-        itemId: testProduct.id,
+        itemType: 'MATERIAL',
+        itemId: testMaterial.id,
       },
     },
   });
@@ -297,36 +286,28 @@ async function run() {
   const opnameMovement = await prisma.inventoryMovement.findFirst({
     where: {
       referenceId: opnameId,
-      itemId: testProduct.id,
+      itemId: testMaterial.id,
     },
   });
   assert('INV-3: DB InventoryMovement OPNAME quantityDelta == -5', opnameMovement?.quantityDelta === -5);
 
-  // ─── INV-4: Riwayat Kartu Stok (3 Sumber: STOCK_IN, OPNAME, TRANSACTION) ───
+  // ─── INV-4: Riwayat Kartu Stok (3 Sumber: STOCK_IN, OPNAME, MANUAL_ADJUSTMENT) ───
   console.log('\n─── INV-4. Riwayat Movement Kartu Stok (3 Sumber Terpadu) ───');
-  // Lakukan 1 transaksi POS (beli 2 pcs testProduct)
-  const trxRes = await req(
-    '/transactions',
+  // Lakukan 1 Stock Out Manual (2 ampul dipakai)
+  const stockOutRes = await req(
+    '/inventory/stock-out',
     'POST',
     {
-      items: [{ itemType: 'PRODUCT', itemId: testProduct.id, quantity: 2 }],
+      items: [{ itemId: testMaterial.id, quantity: 2, reasonType: 'MANUAL_ADJUSTMENT' }],
+      note: 'Pemakaian di poli gigi',
     },
-    cashierCookie
+    mgrCookie
   );
-  const trxId = trxRes.data?.data?.id;
-  const payRes = await req(
-    `/transactions/${trxId}/pay`,
-    'POST',
-    {
-      payments: [{ method: 'CASH', amount: 100000 }],
-    },
-    cashierCookie
-  );
-  assert('POS Transaksi beli 2 pcs sukses dibayar (PAID)', payRes.status === 201);
+  assert('Stock Out manual 2 ampul sukses (201 Created)', stockOutRes.status === 201);
 
-  // Ambil kartu stok via GET /inventory/stock/PRODUCT/:id/movements
+  // Ambil kartu stok via GET /inventory/stock/MATERIAL/:id/movements
   const cardRes = await req(
-    `/inventory/stock/PRODUCT/${testProduct.id}/movements`,
+    `/inventory/stock/MATERIAL/${testMaterial.id}/movements`,
     'GET',
     null,
     mgrCookie
@@ -337,18 +318,18 @@ async function run() {
   const movements = cardRes.data?.data?.movements ?? [];
   const hasStockIn = movements.some((m) => m.referenceType === 'STOCK_IN' && m.quantityDelta === 50);
   const hasOpname = movements.some((m) => m.referenceType === 'OPNAME' && m.quantityDelta === -5);
-  const hasTransaction = movements.some((m) => m.referenceType === 'TRANSACTION' && m.quantityDelta === -2);
+  const hasStockOut = movements.some((m) => m.referenceType === 'MANUAL_ADJUSTMENT' && m.quantityDelta === -2);
 
   assert('INV-4: Movement STOCK_IN (+50) ada di kartu stok', hasStockIn);
   assert('INV-4: Movement OPNAME (-5) ada di kartu stok', hasOpname);
-  assert('INV-4: Movement TRANSACTION (-2) ada di kartu stok', hasTransaction);
+  assert('INV-4: Movement MANUAL_ADJUSTMENT (-2) ada di kartu stok', hasStockOut);
 
   // ─── INV-5: Konsistensi Akumulasi Movement ───
   console.log('\n─── INV-5. Konsistensi Akumulasi Movement vs Saldo StockLevel ───');
   const allDbMovements = await prisma.inventoryMovement.findMany({
     where: {
       branchId: jkt.id,
-      itemId: testProduct.id,
+      itemId: testMaterial.id,
     },
   });
   const sumDelta = allDbMovements.reduce((sum, m) => sum + m.quantityDelta, 0);
@@ -357,8 +338,8 @@ async function run() {
     where: {
       branchId_itemType_itemId: {
         branchId: jkt.id,
-        itemType: 'PRODUCT',
-        itemId: testProduct.id,
+        itemType: 'MATERIAL',
+        itemId: testMaterial.id,
       },
     },
   });
@@ -371,8 +352,8 @@ async function run() {
     '/inventory/stock-in',
     'POST',
     {
-      itemType: 'PRODUCT',
-      items: [{ itemId: testProduct.id, quantity: 5 }],
+      itemType: 'MATERIAL',
+      items: [{ itemId: testMaterial.id, quantity: 5 }],
     },
     cashierCookie
   );
@@ -384,7 +365,7 @@ async function run() {
   const cashierOpname = await req(
     '/stock-opnames',
     'POST',
-    { opnameDate: '2026-12-31', itemType: 'PRODUCT' },
+    { opnameDate: '2026-12-31', itemType: 'MATERIAL' },
     cashierCookie
   );
   assert('INV-6: CASHIER ditolak POST /stock-opnames (403 FORBIDDEN)', cashierOpname.status === 403);
@@ -405,7 +386,7 @@ async function run() {
     'POST',
     {
       opnameDate: opnameDate2Str,
-      itemType: 'PRODUCT',
+      itemType: 'MATERIAL',
     },
     mgrCookie
   );
@@ -416,25 +397,19 @@ async function run() {
     `/stock-opnames/${opname2Id}`,
     'PATCH',
     {
-      items: [{ itemId: testProduct.id, physicalQty: 0 }],
+      items: [{ itemId: testMaterial.id, physicalQty: 0 }],
     },
     mgrCookie
   );
 
-  // Kurangi stok di DB menjadi 10 via POS (beli 33 pcs)
-  const trxDrain = await req(
-    '/transactions',
+  // Kurangi stok di DB menjadi 10 via Stock Out (keluarkan 33 ampul)
+  await req(
+    '/inventory/stock-out',
     'POST',
     {
-      items: [{ itemType: 'PRODUCT', itemId: testProduct.id, quantity: 33 }],
+      items: [{ itemId: testMaterial.id, quantity: 33, reasonType: 'MANUAL_ADJUSTMENT' }],
     },
-    cashierCookie
-  );
-  await req(
-    `/transactions/${trxDrain.data?.data?.id}/pay`,
-    'POST',
-    { payments: [{ method: 'CASH', amount: 2000000 }] },
-    cashierCookie
+    mgrCookie
   );
   // Stok saat ini adalah 10. Jika delta -43 dieksekusi -> 10 - 43 = -33 (negatif!)
 
@@ -453,8 +428,8 @@ async function run() {
     where: {
       branchId_itemType_itemId: {
         branchId: jkt.id,
-        itemType: 'PRODUCT',
-        itemId: testProduct.id,
+        itemType: 'MATERIAL',
+        itemId: testMaterial.id,
       },
     },
   });
@@ -466,8 +441,8 @@ async function run() {
     '/inventory/stock-in',
     'POST',
     {
-      itemType: 'PRODUCT',
-      items: [{ itemId: testProduct.id, quantity: 0 }],
+      itemType: 'MATERIAL',
+      items: [{ itemId: testMaterial.id, quantity: 0 }],
     },
     mgrCookie
   );
@@ -477,7 +452,7 @@ async function run() {
     '/inventory/stock-in',
     'POST',
     {
-      itemType: 'PRODUCT',
+      itemType: 'MATERIAL',
       items: [{ itemId: '00000000-0000-0000-0000-000000000000', quantity: 10 }],
     },
     mgrCookie
@@ -487,14 +462,13 @@ async function run() {
   const inv8_dupDate = await req(
     '/stock-opnames',
     'POST',
-    { opnameDate: opnameDateStr, itemType: 'PRODUCT' },
+    { opnameDate: opnameDateStr, itemType: 'MATERIAL' },
     mgrCookie
   );
   assert('INV-8: Create opname tanggal sama ditolak (409 DUPLICATE)', inv8_dupDate.status === 409);
 
   // ─── INV-9: IDOR & Branch Scope ───
   console.log('\n─── INV-9. IDOR & Branch Scope ───');
-  // Buat opname di cabang BDG oleh OWNER
   const bdgDateStr = `2026-05-${String(rndDay).padStart(2, '0')}`;
   const bdgOpname = await prisma.stockOpname.upsert({
     where: {
@@ -517,12 +491,24 @@ async function run() {
 
   // ─── INV-10: Regresi Kanari POS & Integrasi Utuh ───
   console.log('\n─── INV-10. Regresi Kanari POS & Integrasi Utuh ───');
-  // Jalankan 1 transaksi POS lagi untuk membuktikan seluruh alur POS tetap berfungsi
+  // 1. Buat 1 layanan medis
+  const svcRes = await req(
+    '/services',
+    'POST',
+    {
+      name: 'Layanan Kanari ' + rnd,
+      price: 150000,
+    },
+    ownerCookie
+  );
+  const canarySvc = svcRes.data?.data;
+
+  // 2. Transaksi POS kasir untuk layanan medis
   const t10_draft = await req(
     '/transactions',
     'POST',
     {
-      items: [{ itemType: 'PRODUCT', itemId: testProduct.id, quantity: 5 }],
+      items: [{ itemId: canarySvc.id, quantity: 2 }],
     },
     cashierCookie
   );
@@ -536,17 +522,17 @@ async function run() {
   );
   assert('INV-10: Pay POS Transaksi berhasil (201)', t10_pay.status === 201);
 
-  const finalStockAfterAll = await prisma.stockLevel.findUnique({
+  // 3. Stok bahan tidak terpengaruh oleh transaksi POS
+  const stockAfterPos = await prisma.stockLevel.findUnique({
     where: {
       branchId_itemType_itemId: {
         branchId: jkt.id,
-        itemType: 'PRODUCT',
-        itemId: testProduct.id,
+        itemType: 'MATERIAL',
+        itemId: testMaterial.id,
       },
     },
   });
-  // Stok awal 10 - 5 = 5
-  assert('INV-10: Stok akhir berkurang persis 5 menjadi 5', finalStockAfterAll?.quantity === 5, `finalQty=${finalStockAfterAll?.quantity}`);
+  assert('INV-10: Saldo stok bahan TIDAK berubah setelah transaksi POS kasir (tetap 10)', stockAfterPos?.quantity === 10, `stock=${stockAfterPos?.quantity}`);
 
   console.log('\n══════════════════════════════════════════════════════════');
   console.log('=== PHASE 2 TASK 3 INVENTORY TESTS SELESAI ===');

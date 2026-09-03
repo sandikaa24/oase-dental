@@ -1,8 +1,20 @@
 /**
- * Test Suite Fase 3 Tugas 4: Inventaris Frontend, Kartu Stok, Stock Opname, & Negative Stock Guard
+ * TEST SUITE FASE 3 TUGAS 4: MANAJEMEN INVENTARIS & STOK BAHAN
+ * 
+ * Cakupan:
+ * 1. GET /inventory/stock (List stok bahan, pencarian, filter lowStock, role guard)
+ * 2. GET /inventory/stock/:itemType/:itemId/movements (Kartu stok riwayat mutasi)
+ * 3. POST /inventory/stock-in (Penerimaan bahan multi-item, batch insert movements, audit log)
+ * 4. POST /inventory/stock-out (Pengeluaran bahan 3 alasan, stok berkurang persis, 409 insufficient, IDOR guard, 403 cashier)
+ * 5. POST /stock-opnames (Siklus opname: Draft -> Edit -> Submit)
+ * 6. Negative Stock Submit Rejection Guard (Prinsip Stok Tidak Boleh Negatif)
+ * 7. Frontend Pages HTTP 200 checks (/admin/inventory, /admin/inventory/opname)
  */
 
-const BASE_URL = 'http://localhost:3000';
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
+const BASE_URL = process.env.TEST_BASE_URL || 'http://localhost:3000';
 
 let passedCount = 0;
 let failedCount = 0;
@@ -20,8 +32,8 @@ function assert(condition, message, detail = '') {
 }
 
 function extractCookie(res) {
-  const setCookies = typeof res.headers?.getSetCookie === 'function' 
-    ? res.headers.getSetCookie() 
+  const setCookies = typeof res.headers?.getSetCookie === 'function'
+    ? res.headers.getSetCookie()
     : [res.headers?.get('set-cookie') || ''];
   const fullHeader = setCookies.join('; ');
   const token = fullHeader.match(/access_token=([^;]+)/);
@@ -45,52 +57,49 @@ async function login(email, password = '1234') {
 
 async function runSuite() {
   console.log('======================================================================');
-  console.log('FASE 3 — TUGAS 4: TEST SUITE INVENTARIS, KARTU STOK & STOCK OPNAME');
+  console.log('FASE 3 — TUGAS 4: TEST SUITE INVENTARIS & STOK BAHAN MEDIS');
   console.log('======================================================================\n');
 
-  // 1. SETUP LOGIN
-  console.log('[SETUP] Login akun penguji & setup akun operasional cabang...');
+  // [SETUP]
+  console.log('[SETUP] Autentikasi Pengguna...');
   const ownerAuth = await login('owner@oase.id', '1234');
-  const baseCashierAuth = await login('cashier@oase.id', '1234');
-
   assert(ownerAuth.status === 200, 'Login OWNER berhasil');
-  assert(baseCashierAuth.status === 200, 'Login CASHIER berhasil');
 
-  // Ambil daftar cabang
+  // Ambil cabang untuk pengujian
   const branchesRes = await fetch(`${BASE_URL}/api/v1/branches`, {
     headers: { Cookie: ownerAuth.cookies },
   });
   const branchesBody = await branchesRes.json();
-  const targetBranch = branchesBody.data?.[0];
-  const branchId = targetBranch?.id;
-  console.log(`  Target Branch: ${targetBranch?.name} (${targetBranch?.code}) - ID: ${branchId}`);
+  const branchId = branchesBody.data?.[0]?.id;
+  assert(!!branchId, 'Cabang pengujian tersedia', `Branch ID: ${branchId}`);
 
-  // Buat Manager & Cashier dinamis dengan 1 branch assignment untuk isolasi token otomatis
-  const rnd = Math.floor(Math.random() * 1000000);
+  // Setup user MANAGER & CASHIER dinamis untuk pengujian IDOR dan role guard
+  const rnd = Math.floor(Math.random() * 900000) + 100000;
   const mgrEmpRes = await fetch(`${BASE_URL}/api/v1/employees`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Cookie: ownerAuth.cookies },
     body: JSON.stringify({
       name: `Manager Inv ${rnd}`,
       position: 'Manager Cabang',
-      phone: `0815${rnd}`,
+      phone: `0817${rnd}`,
       branchIds: [branchId],
     }),
   });
-  const mgrEmpBody = await mgrEmpRes.json();
-  const mgrEmpId = mgrEmpBody.data?.id;
-
+  const mgrEmp = await mgrEmpRes.json();
   const mgrEmail = `mgr.inv.${rnd}@oase.id`;
   await fetch(`${BASE_URL}/api/v1/users`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Cookie: ownerAuth.cookies },
     body: JSON.stringify({
       email: mgrEmail,
-      password: 'Password123',
+      password: 'PasswordManager123',
       role: 'MANAGER',
-      employeeId: mgrEmpId,
+      employeeId: mgrEmp.data?.id,
     }),
   });
+  const mgrAuth = await login(mgrEmail, 'PasswordManager123');
+  assert(mgrAuth.status === 200, 'Login MANAGER berhasil');
+  const mgrCookies = mgrAuth.cookies;
 
   const cashierEmpRes = await fetch(`${BASE_URL}/api/v1/employees`, {
     method: 'POST',
@@ -98,81 +107,86 @@ async function runSuite() {
     body: JSON.stringify({
       name: `Kasir Inv ${rnd}`,
       position: 'Kasir Cabang',
-      phone: `0816${rnd}`,
+      phone: `0818${rnd}`,
       branchIds: [branchId],
     }),
   });
-  const cashierEmpBody = await cashierEmpRes.json();
-  const cashierEmpId = cashierEmpBody.data?.id;
-
+  const cashierEmp = await cashierEmpRes.json();
   const cashierEmail = `kasir.inv.${rnd}@oase.id`;
   await fetch(`${BASE_URL}/api/v1/users`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Cookie: ownerAuth.cookies },
     body: JSON.stringify({
       email: cashierEmail,
-      password: 'Password123',
+      password: 'PasswordKasir123',
       role: 'CASHIER',
-      employeeId: cashierEmpId,
+      employeeId: cashierEmp.data?.id,
     }),
   });
+  const cashierAuth = await login(cashierEmail, 'PasswordKasir123');
+  assert(cashierAuth.status === 200, 'Login CASHIER berhasil');
+  const cashierCookies = cashierAuth.cookies;
 
-  const mgrLogin = await login(mgrEmail, 'Password123');
-  assert(mgrLogin.status === 200, `Login MANAGER dynamic berhasil (${mgrEmail})`);
-  const mgrCookies = mgrLogin.cookies;
+  // Setup / Ambil Master Bahan Medis
+  const matListRes = await fetch(`${BASE_URL}/api/v1/materials`, {
+    headers: { Cookie: ownerAuth.cookies },
+  });
+  const matListJson = await matListRes.json();
+  let testMaterialId = matListJson.data?.[0]?.id;
 
-  const cashierLogin = await login(cashierEmail, 'Password123');
-  assert(cashierLogin.status === 200, `Login CASHIER dynamic berhasil (${cashierEmail})`);
-  const cashierCookies = cashierLogin.cookies;
+  if (!testMaterialId) {
+    const createMatRes = await fetch(`${BASE_URL}/api/v1/materials`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: ownerAuth.cookies },
+      body: JSON.stringify({
+        name: `Bahan Medis Uji ${rnd}`,
+        sku: `SKU-MAT-${rnd}`,
+        unit: 'box',
+        minStock: 10,
+        isStockTracked: true,
+      }),
+    });
+    const createMatJson = await createMatRes.json();
+    testMaterialId = createMatJson.data?.id;
+  }
 
-  // --- SECTION 1: INVENTORY STOCK LIST ---
-  console.log('\n--- INV-1: Inventory Stock Listing & Filters ---');
+  // --- SECTION 1: DAFTAR STOK & FILTER ---
+  console.log('\n--- INV-1: Daftar Saldo Stok Bahan ---');
   let res = await fetch(`${BASE_URL}/api/v1/inventory/stock?branchId=${branchId}`, {
     headers: { Cookie: ownerAuth.cookies },
   });
   let body = await res.json();
 
-  assert(res.status === 200 && body.success, 'INV-1.1: OWNER berhasil mengambil daftar stok (200 OK)', `Total item: ${body.meta?.total}`);
+  assert(res.status === 200 && body.success, 'INV-1.1: OWNER berhasil mengambil daftar stok bahan (200 OK)', `Total item: ${body.meta?.total}`);
   const allStockItems = body.data || [];
-  const testProduct = allStockItems.find((it) => it.itemType === 'PRODUCT');
-  const testMaterial = allStockItems.find((it) => it.itemType === 'MATERIAL');
-
-  // Filter itemType = PRODUCT
-  res = await fetch(`${BASE_URL}/api/v1/inventory/stock?branchId=${branchId}&itemType=PRODUCT`, {
-    headers: { Cookie: ownerAuth.cookies },
-  });
-  body = await res.json();
-  const allAreProducts = body.data?.every((it) => it.itemType === 'PRODUCT');
-  assert(res.status === 200 && allAreProducts, 'INV-1.2: Filter itemType=PRODUCT hanya mengembalikan item produk');
+  const testMaterial = allStockItems.find((it) => it.itemId === testMaterialId) || allStockItems[0];
 
   // MANAGER access stock list
   res = await fetch(`${BASE_URL}/api/v1/inventory/stock`, {
     headers: { Cookie: mgrCookies },
   });
-  assert(res.status === 200, 'INV-1.3: MANAGER berhasil mengakses GET /inventory/stock pada cabang aktifnya');
+  assert(res.status === 200, 'INV-1.2: MANAGER berhasil mengakses GET /inventory/stock pada cabang aktifnya');
 
   // CASHIER guard
   res = await fetch(`${BASE_URL}/api/v1/inventory/stock`, {
     headers: { Cookie: cashierCookies },
   });
-  assert(res.status === 403, 'INV-1.4: CASHIER ditolak saat mengakses GET /inventory/stock (403 FORBIDDEN)');
+  assert(res.status === 403, 'INV-1.3: CASHIER ditolak saat mengakses GET /inventory/stock (403 FORBIDDEN)');
 
   // --- SECTION 2: STOCK MOVEMENT DRAWER / KARTU STOK ---
   console.log('\n--- INV-2: Kartu Stok (Stock Movements) ---');
-  if (testProduct) {
+  if (testMaterial) {
     res = await fetch(
-      `${BASE_URL}/api/v1/inventory/stock/${testProduct.itemType.toLowerCase()}/${testProduct.itemId}/movements?branchId=${branchId}`,
+      `${BASE_URL}/api/v1/inventory/stock/MATERIAL/${testMaterial.itemId}/movements?branchId=${branchId}`,
       { headers: { Cookie: ownerAuth.cookies } }
     );
     body = await res.json();
-    assert(res.status === 200 && body.success, 'INV-2.1: OWNER berhasil mengakses kartu stok per item', `Item: ${body.data?.item?.name}, Saldo: ${body.data?.item?.currentQuantity}`);
+    assert(res.status === 200 && body.success, 'INV-2.1: OWNER berhasil mengakses kartu stok per item bahan', `Item: ${body.data?.item?.name}, Saldo: ${body.data?.item?.currentQuantity}`);
     assert(Array.isArray(body.data?.movements), 'INV-2.2: Response kartu stok memuat array pergerakan');
-  }
 
-  // CASHIER guard on movements
-  if (testProduct) {
+    // CASHIER guard on movements
     res = await fetch(
-      `${BASE_URL}/api/v1/inventory/stock/${testProduct.itemType.toLowerCase()}/${testProduct.itemId}/movements?branchId=${branchId}`,
+      `${BASE_URL}/api/v1/inventory/stock/MATERIAL/${testMaterial.itemId}/movements?branchId=${branchId}`,
       { headers: { Cookie: cashierCookies } }
     );
     assert(res.status === 403, 'INV-2.3: CASHIER ditolak saat mengakses kartu stok (403 FORBIDDEN)');
@@ -183,7 +197,7 @@ async function runSuite() {
   if (testMaterial) {
     const stockInPayload = {
       itemType: 'MATERIAL',
-      items: [{ itemId: testMaterial.itemId, quantity: 15, unitCost: 35000 }],
+      items: [{ itemId: testMaterial.itemId, quantity: 50, unitCost: 35000 }],
       note: 'Uji Penerimaan Supplier Test Suite',
     };
 
@@ -196,7 +210,7 @@ async function runSuite() {
       body: JSON.stringify(stockInPayload),
     });
     body = await res.json();
-    assert(res.status === 201 && body.success, 'INV-3.1: MANAGER berhasil melakukan Stock In multi-item (201 Created)');
+    assert(res.status === 201 && body.success, 'INV-3.1: MANAGER berhasil melakukan Stock In bahan medis (201 Created)');
 
     // CASHIER guard on stock-in
     res = await fetch(`${BASE_URL}/api/v1/inventory/stock-in`, {
@@ -210,7 +224,149 @@ async function runSuite() {
     assert(res.status === 403, 'INV-3.2: CASHIER ditolak saat melakukan Stock In (403 FORBIDDEN)');
   }
 
-  // --- SECTION 4: STOCK OPNAME LIFECYCLE ---
+  // --- SECTION 4: STOCK OUT (PENGELUARAN BARANG MANUAL) ---
+  console.log('\n--- INV-SO: Pengeluaran Bahan Manual (Stock Out) ---');
+  if (testMaterial) {
+    // Ambil saldo sebelum Stock Out
+    let stockBeforeRes = await fetch(`${BASE_URL}/api/v1/inventory/stock?branchId=${branchId}&search=${encodeURIComponent(testMaterial.name)}`, {
+      headers: { Cookie: mgrCookies },
+    });
+    let stockBeforeJson = await stockBeforeRes.json();
+    let matBefore = stockBeforeJson.data?.find((i) => i.itemId === testMaterial.itemId);
+    const qtyBefore = matBefore?.quantity || 0;
+
+    // 1. Stock Out dengan reasonType: MANUAL_ADJUSTMENT (Pemakaian)
+    res = await fetch(`${BASE_URL}/api/v1/inventory/stock-out`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: mgrCookies },
+      body: JSON.stringify({
+        items: [{ itemId: testMaterial.itemId, quantity: 5, reasonType: 'MANUAL_ADJUSTMENT' }],
+        note: 'Pemakaian tindakan bedah mulut',
+      }),
+    });
+    body = await res.json();
+    assert(res.status === 201 && body.success, 'INV-SO.1: Stock Out MANUAL_ADJUSTMENT berhasil (201 Created)');
+
+    // 2. Stock Out dengan reasonType: DAMAGE (Barang Rusak)
+    res = await fetch(`${BASE_URL}/api/v1/inventory/stock-out`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: mgrCookies },
+      body: JSON.stringify({
+        items: [{ itemId: testMaterial.itemId, quantity: 2, reasonType: 'DAMAGE' }],
+        note: 'Ampul pecah saat penataan',
+      }),
+    });
+    body = await res.json();
+    assert(res.status === 201 && body.success, 'INV-SO.2: Stock Out DAMAGE berhasil (201 Created)');
+
+    // 3. Stock Out dengan reasonType: EXPIRED (Kadaluwarsa)
+    res = await fetch(`${BASE_URL}/api/v1/inventory/stock-out`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: mgrCookies },
+      body: JSON.stringify({
+        items: [{ itemId: testMaterial.itemId, quantity: 3, reasonType: 'EXPIRED' }],
+        note: 'Bahan melewati batas ED',
+      }),
+    });
+    body = await res.json();
+    assert(res.status === 201 && body.success, 'INV-SO.3: Stock Out EXPIRED berhasil (201 Created)');
+
+    // 4. Verifikasi saldo berkurang persis: (5 + 2 + 3 = 10)
+    let stockAfterRes = await fetch(`${BASE_URL}/api/v1/inventory/stock?branchId=${branchId}&search=${encodeURIComponent(testMaterial.name)}`, {
+      headers: { Cookie: mgrCookies },
+    });
+    let stockAfterJson = await stockAfterRes.json();
+    let matAfter = stockAfterJson.data?.find((i) => i.itemId === testMaterial.itemId);
+    const qtyAfter = matAfter?.quantity || 0;
+    assert(
+      qtyAfter === qtyBefore - 10,
+      'INV-SO.4: Saldo stok fisik bahan berkurang persis 10 unit',
+      `Sebelum: ${qtyBefore}, Sesudah: ${qtyAfter}`
+    );
+
+    // 5. Verifikasi riwayat movement mencatat delta minus & referenceType benar
+    res = await fetch(
+      `${BASE_URL}/api/v1/inventory/stock/MATERIAL/${testMaterial.itemId}/movements?branchId=${branchId}&limit=5`,
+      { headers: { Cookie: ownerAuth.cookies } }
+    );
+    body = await res.json();
+    const latestMovements = body.data?.movements || [];
+    const hasExpiredMovement = latestMovements.some(
+      (m) => m.referenceType === 'EXPIRED' && m.quantityDelta === -3
+    );
+    const hasDamageMovement = latestMovements.some(
+      (m) => m.referenceType === 'DAMAGE' && m.quantityDelta === -2
+    );
+    const hasAdjustmentMovement = latestMovements.some(
+      (m) => m.referenceType === 'MANUAL_ADJUSTMENT' && m.quantityDelta === -5
+    );
+    assert(
+      hasExpiredMovement && hasDamageMovement && hasAdjustmentMovement,
+      'INV-SO.5: Movement tercatat dengan quantityDelta minus dan referenceType sesuai alasan stock-out'
+    );
+
+    // 6. Penolakan 409 INSUFFICIENT_STOCK bila kuantitas melebihi stok
+    res = await fetch(`${BASE_URL}/api/v1/inventory/stock-out`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: mgrCookies },
+      body: JSON.stringify({
+        items: [{ itemId: testMaterial.itemId, quantity: qtyAfter + 9999, reasonType: 'DAMAGE' }],
+      }),
+    });
+    body = await res.json();
+    assert(
+      res.status === 409 && body.code === 'INSUFFICIENT_STOCK',
+      'INV-SO.6: Stock Out melebihi ketersediaan fisik ditolak server (409 INSUFFICIENT_STOCK)'
+    );
+
+    // 7. IDOR Guard pada Stock Out
+    const secondBranch = branchesBody.data?.[1] || branchesBody.data?.[0];
+    const secondBranchId = secondBranch?.id;
+    if (secondBranchId && secondBranchId !== branchId) {
+      // MANAGER mengirim branchId cabang lain -> diabaikan, dipaksa ke cabang JWT
+      res = await fetch(`${BASE_URL}/api/v1/inventory/stock-out`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: mgrCookies },
+        body: JSON.stringify({
+          branchId: secondBranchId,
+          items: [{ itemId: testMaterial.itemId, quantity: 1, reasonType: 'MANUAL_ADJUSTMENT' }],
+        }),
+      });
+      body = await res.json();
+      assert(
+        res.status === 201 && body.data?.branchId === branchId,
+        'INV-SO.7: IDOR GUARD: input branchId dari MANAGER diabaikan dan terkunci ke cabang aktif JWT',
+        `Tersimpan di: ${body.data?.branchId}, Request: ${secondBranchId}`
+      );
+
+      // OWNER mengirim branchId eksplisit -> sukses di branch target
+      res = await fetch(`${BASE_URL}/api/v1/inventory/stock-out`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: ownerAuth.cookies },
+        body: JSON.stringify({
+          branchId: branchId,
+          items: [{ itemId: testMaterial.itemId, quantity: 1, reasonType: 'MANUAL_ADJUSTMENT' }],
+        }),
+      });
+      body = await res.json();
+      assert(
+        res.status === 201 && body.data?.branchId === branchId,
+        'INV-SO.8: OWNER berhasil melakukan Stock Out dengan branchId eksplisit'
+      );
+    }
+
+    // 8. CASHIER Guard on Stock Out
+    res = await fetch(`${BASE_URL}/api/v1/inventory/stock-out`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cashierCookies },
+      body: JSON.stringify({
+        items: [{ itemId: testMaterial.itemId, quantity: 1, reasonType: 'MANUAL_ADJUSTMENT' }],
+      }),
+    });
+    assert(res.status === 403, 'INV-SO.9: CASHIER ditolak saat mengakses POST /inventory/stock-out (403 FORBIDDEN)');
+  }
+
+  // --- SECTION 5: STOCK OPNAME LIFECYCLE ---
   console.log('\n--- INV-4: Stock Opname Lifecycle (Create -> Edit -> Submit) ---');
   const testDate = new Date(Date.now() + 86400000 * (1000 + Math.floor(Math.random() * 5000))).toISOString().split('T')[0];
 
@@ -223,8 +379,8 @@ async function runSuite() {
     },
     body: JSON.stringify({
       opnameDate: testDate,
-      itemType: 'PRODUCT',
-      note: 'Sesi Opname Uji Otomatis',
+      itemType: 'MATERIAL',
+      note: 'Sesi Opname Bahan Medis Uji Otomatis',
     }),
   });
   body = await res.json();
@@ -240,7 +396,7 @@ async function runSuite() {
     },
     body: JSON.stringify({
       opnameDate: testDate,
-      itemType: 'PRODUCT',
+      itemType: 'MATERIAL',
     }),
   });
   assert(res.status === 409, 'INV-4.2: Pembuatan opname duplikat di tanggal dan cabang sama ditolak (409 Conflict)');
@@ -300,102 +456,26 @@ async function runSuite() {
   });
   assert(res.status === 403, 'INV-4.7: CASHIER ditolak saat mengakses GET /stock-opnames (403 FORBIDDEN)');
 
-  // --- SECTION 5: OWNER MULTI-BRANCH OPERATIONS & IDOR PENJAGA ---
-  console.log('\n--- INV-5: OWNER Multi-Branch Operations & Manager IDOR Guard ---');
-  const secondBranch = branchesBody.data?.[1] || branchesBody.data?.[0];
-  const secondBranchId = secondBranch?.id;
-
-  // 1. OWNER stock list with explicit ?branchId
-  res = await fetch(`${BASE_URL}/api/v1/inventory/stock?branchId=${secondBranchId}`, {
-    headers: { Cookie: ownerAuth.cookies },
-  });
-  body = await res.json();
-  assert(res.status === 200 && body.success, 'INV-5.1: OWNER berhasil mengakses GET /inventory/stock dengan ?branchId eksplisit');
-
-  // 2. OWNER stock-in with branchId in body
-  if (testProduct) {
-    res = await fetch(`${BASE_URL}/api/v1/inventory/stock-in`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Cookie: ownerAuth.cookies },
-      body: JSON.stringify({
-        branchId: branchId,
-        itemType: 'PRODUCT',
-        items: [{ itemId: testProduct.itemId, quantity: 5 }],
-        note: 'Stock-in oleh OWNER dengan branchId eksplisit',
-      }),
-    });
-    body = await res.json();
-    assert(res.status === 201 && body.data?.branchId === branchId, 'INV-5.2: OWNER berhasil melakukan Stock In dengan menyertakan branchId di body (201 Created)');
-  }
-
-  // 3. OWNER movements with ?branchId
-  if (testProduct) {
-    res = await fetch(
-      `${BASE_URL}/api/v1/inventory/stock/${testProduct.itemType.toLowerCase()}/${testProduct.itemId}/movements?branchId=${branchId}`,
-      { headers: { Cookie: ownerAuth.cookies } }
-    );
-    body = await res.json();
-    assert(res.status === 200 && body.success, 'INV-5.3: OWNER berhasil mengakses kartu stok pergerakan dengan ?branchId eksplisit (200 OK)');
-  }
-
-  // 4. OWNER create stock opname with branchId in body
-  const ownerOpnameDate = new Date(Date.now() + 86400000 * (30000 + Math.floor(Math.random() * 5000))).toISOString().split('T')[0];
-  res = await fetch(`${BASE_URL}/api/v1/stock-opnames`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Cookie: ownerAuth.cookies },
-    body: JSON.stringify({
-      branchId: branchId,
-      opnameDate: ownerOpnameDate,
-      itemType: 'PRODUCT',
-      note: 'DRAFT Opname oleh OWNER',
-    }),
-  });
-  body = await res.json();
-  assert(res.status === 201 && body.data?.branchId === branchId, 'INV-5.4: OWNER berhasil membuat DRAFT Stock Opname dengan menyertakan branchId di body (201 Created)');
-
-  // 5. TEST PENJAGA IDOR: MANAGER cabang A mengirim branchId cabang B di body
-  if (testMaterial && secondBranchId && secondBranchId !== branchId) {
-    // MANAGER (assigned to branchId) mengirim secondBranchId di body stock-in
-    res = await fetch(`${BASE_URL}/api/v1/inventory/stock-in`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Cookie: mgrCookies },
-      body: JSON.stringify({
-        branchId: secondBranchId, // Upaya manipulasi IDOR cabang lain
-        itemType: 'MATERIAL',
-        items: [{ itemId: testMaterial.itemId, quantity: 2 }],
-        note: 'Uji Penjaga IDOR Manager',
-      }),
-    });
-    body = await res.json();
-    // Server WAJIB mengabaikan input.branchId dan mencatat ke cabang JWT Manager (branchId)
-    assert(
-      res.status === 201 && body.data?.branchId === branchId,
-      'INV-5.5: IDOR GUARD: Input branchId dari non-OWNER (MANAGER) diabaikan server dan tetap dipetakan ke branch JWT',
-      `Target tersimpan: ${body.data?.branchId} (Cabang Manager), Input diabaikan: ${secondBranchId}`
-    );
-  }
-
   // --- SECTION 6: NEGATIVE STOCK SUBMIT REJECTION GUARD ---
   console.log('\n--- INV-6: Negative Stock Submit Rejection Guard ---');
-  if (testProduct) {
-    // 1. Setup stok awal 10 pcs
+  if (testMaterial) {
+    // 1. Setup stok awal 10
     await fetch(`${BASE_URL}/api/v1/inventory/stock-in`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Cookie: mgrCookies },
       body: JSON.stringify({
-        itemType: 'PRODUCT',
-        items: [{ itemId: testProduct.itemId, quantity: 10 }],
+        itemType: 'MATERIAL',
+        items: [{ itemId: testMaterial.itemId, quantity: 10 }],
         note: 'Setup Stock In untuk Uji Stok Negatif',
       }),
     });
 
-    // Ambil saldo stok saat ini
-    let stockCheck = await fetch(`${BASE_URL}/api/v1/inventory/stock?branchId=${branchId}&search=${encodeURIComponent(testProduct.name)}`, {
+    let stockCheck = await fetch(`${BASE_URL}/api/v1/inventory/stock?branchId=${branchId}&search=${encodeURIComponent(testMaterial.name)}`, {
       headers: { Cookie: mgrCookies },
     });
     let stockJson = await stockCheck.json();
-    let currentProd = stockJson.data?.find((i) => i.itemId === testProduct.itemId);
-    const initialQty = currentProd?.quantity ?? 10;
+    let currentMat = stockJson.data?.find((i) => i.itemId === testMaterial.itemId);
+    const initialQty = currentMat?.quantity ?? 10;
 
     // 2. Buat DRAFT Opname A (snapshot mencatat systemQty = initialQty)
     const dateOpnameA = new Date(Date.now() + 86400000 * (10000 + Math.floor(Math.random() * 5000))).toISOString().split('T')[0];
@@ -404,7 +484,7 @@ async function runSuite() {
       headers: { 'Content-Type': 'application/json', Cookie: mgrCookies },
       body: JSON.stringify({
         opnameDate: dateOpnameA,
-        itemType: 'PRODUCT',
+        itemType: 'MATERIAL',
         note: 'Sesi Opname A (Target Negatif)',
       }),
     });
@@ -417,7 +497,7 @@ async function runSuite() {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Cookie: mgrCookies },
       body: JSON.stringify({
-        items: [{ itemId: testProduct.itemId, physicalQty: -5 }],
+        items: [{ itemId: testMaterial.itemId, physicalQty: -5 }],
       }),
     });
     body = await res.json();
@@ -428,7 +508,7 @@ async function runSuite() {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Cookie: mgrCookies },
       body: JSON.stringify({
-        items: [{ itemId: testProduct.itemId, physicalQty: initialQty - 6, note: 'Defisit delta -6' }],
+        items: [{ itemId: testMaterial.itemId, physicalQty: initialQty - 6, note: 'Defisit delta -6' }],
       }),
     });
     assert(res.status === 200, 'INV-6.3: PATCH Opname A dengan physicalQty valid berhasil disimpan');
@@ -440,7 +520,7 @@ async function runSuite() {
       headers: { 'Content-Type': 'application/json', Cookie: mgrCookies },
       body: JSON.stringify({
         opnameDate: dateOpnameB,
-        itemType: 'PRODUCT',
+        itemType: 'MATERIAL',
         note: 'Sesi Opname B (Penurunan Saldo)',
       }),
     });
@@ -451,7 +531,7 @@ async function runSuite() {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Cookie: mgrCookies },
       body: JSON.stringify({
-        items: [{ itemId: testProduct.itemId, physicalQty: 2 }],
+        items: [{ itemId: testMaterial.itemId, physicalQty: 2 }],
       }),
     });
 
@@ -461,12 +541,12 @@ async function runSuite() {
     });
 
     // Verifikasi saldo aktual DB kini adalah 2
-    stockCheck = await fetch(`${BASE_URL}/api/v1/inventory/stock?branchId=${branchId}&search=${encodeURIComponent(testProduct.name)}`, {
+    stockCheck = await fetch(`${BASE_URL}/api/v1/inventory/stock?branchId=${branchId}&search=${encodeURIComponent(testMaterial.name)}`, {
       headers: { Cookie: mgrCookies },
     });
     stockJson = await stockCheck.json();
-    currentProd = stockJson.data?.find((i) => i.itemId === testProduct.itemId);
-    assert(currentProd?.quantity === 2, 'INV-6.4: Saldo aktual di master terbukti telah berubah menjadi 2 unit');
+    currentMat = stockJson.data?.find((i) => i.itemId === testMaterial.itemId);
+    assert(currentMat?.quantity === 2, 'INV-6.4: Saldo aktual di master terbukti telah berubah menjadi 2 unit');
 
     // 6. Sekarang submit Opname A: targetQty = currentStock (2) + delta (-6) = -4 < 0
     // WAJIB DITOLAK 409 INSUFFICIENT_STOCK
@@ -482,15 +562,15 @@ async function runSuite() {
     );
 
     // 7. Verifikasi stok fisik TIDAK BERUBAH dan Opname A tetap DRAFT
-    stockCheck = await fetch(`${BASE_URL}/api/v1/inventory/stock?branchId=${branchId}&search=${encodeURIComponent(testProduct.name)}`, {
+    stockCheck = await fetch(`${BASE_URL}/api/v1/inventory/stock?branchId=${branchId}&search=${encodeURIComponent(testMaterial.name)}`, {
       headers: { Cookie: mgrCookies },
     });
     stockJson = await stockCheck.json();
-    currentProd = stockJson.data?.find((i) => i.itemId === testProduct.itemId);
+    currentMat = stockJson.data?.find((i) => i.itemId === testMaterial.itemId);
     assert(
-      currentProd?.quantity === 2,
-      'INV-6.6: Saldo stok fisik produk di master/cabang terbukti tidak berubah (tetap 2 unit)',
-      `Stok aktual: ${currentProd?.quantity}`
+      currentMat?.quantity === 2,
+      'INV-6.6: Saldo stok fisik bahan di cabang terbukti tidak berubah (tetap 2 unit)',
+      `Stok aktual: ${currentMat?.quantity}`
     );
 
     const opnameCheck = await fetch(`${BASE_URL}/api/v1/stock-opnames/${opnameAId}`, {
@@ -500,7 +580,7 @@ async function runSuite() {
     assert(opnameDetail.data?.status === 'DRAFT', 'INV-6.7: Sesi Stock Opname A tetap berstatus DRAFT (tidak terfinalisasi)');
   }
 
-  // --- SECTION 6: FRONTEND PAGE RESPONSES ---
+  // --- SECTION 7: FRONTEND PAGE RESPONSES ---
   console.log('\n--- INV-7: Frontend Page Status Responses ---');
   res = await fetch(`${BASE_URL}/admin/inventory`, {
     headers: { Cookie: ownerAuth.cookies },

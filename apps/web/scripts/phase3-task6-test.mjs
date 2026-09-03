@@ -341,27 +341,26 @@ async function runSuite() {
     `ActiveBranchId: ${e2eCashierAuth.body.data?.user?.activeBranchId}`
   );
 
-  // 6. OWNER Melakukan Stock-In di Cabang Baru via branchId eksplisit
-  // Ambil produk master
-  const prodRes = await fetch(`${BASE_URL}/api/v1/products`, {
+  // 6. OWNER Melakukan Stock-In Bahan di Cabang Baru via branchId eksplisit
+  const matRes = await fetch(`${BASE_URL}/api/v1/materials`, {
     headers: { Cookie: ownerAuth.cookies },
   });
-  const prodBody = await prodRes.json();
-  const targetProdId = prodBody.data?.[0]?.id;
+  const matBody = await matRes.json();
+  const targetMatId = matBody.data?.[0]?.id;
 
-  if (targetProdId) {
+  if (targetMatId) {
     res = await fetch(`${BASE_URL}/api/v1/inventory/stock-in`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Cookie: ownerAuth.cookies },
       body: JSON.stringify({
         branchId: e2eBranchId,
-        itemType: 'PRODUCT',
-        items: [{ itemId: targetProdId, quantity: 20, unitCost: 15000 }],
-        note: 'Stok awal cabang baru',
+        itemType: 'MATERIAL',
+        items: [{ itemId: targetMatId, quantity: 20, unitCost: 15000 }],
+        note: 'Stok awal bahan di cabang baru',
       }),
     });
     body = await res.json();
-    assert(res.status === 201 && body.success, 'E2E-1.6: OWNER berhasil melakukan Stock-In barang di cabang baru (201 Created)');
+    assert(res.status === 201 && body.success, 'E2E-1.6: OWNER berhasil melakukan Stock-In bahan di cabang baru (201 Created)');
   }
 
   // --- SECTION 6: ROLE GUARDING & PAGE RESPONSES ---

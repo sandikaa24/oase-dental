@@ -845,6 +845,25 @@ export async function submitStockOpname(
       const delta = it.physicalQty - it.systemQty;
       if (delta === 0) continue; // D-I3: delta 0 tanpa movement row
 
+      // Periksa saldo aktual saat ini agar tidak negatif
+      const currentLevel = await tx.stockLevel.findUnique({
+        where: {
+          branchId_itemType_itemId: {
+            branchId: existing.branchId,
+            itemType: it.itemType,
+            itemId: it.itemId,
+          },
+        },
+      });
+
+      const currentQty = currentLevel?.quantity ?? 0;
+      if (currentQty + delta < 0) {
+        throw new ConflictError(
+          `Penyesuaian opname untuk item ${it.itemId} menghasilkan stok negatif (${currentQty + delta}). Transaksi dibatalkan.`,
+          'INSUFFICIENT_STOCK'
+        );
+      }
+
       await tx.stockLevel.upsert({
         where: {
           branchId_itemType_itemId: {

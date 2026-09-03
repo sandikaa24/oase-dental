@@ -32,7 +32,7 @@ export function LeaveRequestModal({ isOpen, onClose }: LeaveRequestModalProps) {
 
   const createMutation = useMutation({
     mutationFn: async () => {
-      return fetchApi('/leave-requests', {
+      return fetchApi('/api/v1/leave-requests', {
         method: 'POST',
         body: JSON.stringify({
           type,

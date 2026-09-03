@@ -60,7 +60,7 @@ export function MyLeavesTab({
       sp.set('page', String(page));
       sp.set('limit', '10');
       if (statusFilter) sp.set('status', statusFilter);
-      return fetchApi<LeaveRecord[]>(`/leave-requests?${sp.toString()}`);
+      return fetchApi<LeaveRecord[]>(`/api/v1/leave-requests?${sp.toString()}`);
     },
     enabled: hasEmployeeProfile,
   });
@@ -68,7 +68,7 @@ export function MyLeavesTab({
   // Mutasi Pembatalan (Cancel)
   const cancelMutation = useMutation({
     mutationFn: async (id: string) => {
-      return fetchApi(`/leave-requests/${id}/cancel`, {
+      return fetchApi(`/api/v1/leave-requests/${id}/cancel`, {
         method: 'POST',
       });
     },

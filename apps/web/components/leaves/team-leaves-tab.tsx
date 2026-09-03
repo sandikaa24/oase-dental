@@ -36,7 +36,7 @@ export function TeamLeavesTab({
   // Ambil data cabang untuk filter OWNER
   const { data: branchRes } = useQuery<ApiResponse<Array<{ id: string; name: string; code: string }>>>({
     queryKey: ['branches', 'active'],
-    queryFn: () => fetchApi<Array<{ id: string; name: string; code: string }>>('/branches?active=true'),
+    queryFn: () => fetchApi<Array<{ id: string; name: string; code: string }>>('/api/v1/branches?active=true'),
     enabled: isOwner,
   });
 
@@ -61,7 +61,7 @@ export function TeamLeavesTab({
       sp.set('limit', '10');
       if (statusFilter) sp.set('status', statusFilter);
       if (isOwner && branchFilter) sp.set('branchId', branchFilter);
-      return fetchApi<LeaveRecord[]>(`/leave-requests?${sp.toString()}`);
+      return fetchApi<LeaveRecord[]>(`/api/v1/leave-requests?${sp.toString()}`);
     },
   });
 
@@ -76,7 +76,7 @@ export function TeamLeavesTab({
       decision: 'APPROVED' | 'REJECTED';
       note?: string;
     }) => {
-      return fetchApi(`/leave-requests/${id}/decide`, {
+      return fetchApi(`/api/v1/leave-requests/${id}/decide`, {
         method: 'POST',
         body: JSON.stringify({
           decision,

@@ -43,7 +43,7 @@ export function StockTable({
     return (
       <EmptyState
         title="Tidak Ada Data Stok"
-        description="Tidak ditemukan item yang sesuai dengan filter pencarian atau cabang aktif."
+        description="Tidak ditemukan bahan medis yang sesuai dengan filter pencarian atau cabang aktif."
       />
     );
   }
@@ -55,9 +55,8 @@ export function StockTable({
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-50 border-b border-border text-slate-500 uppercase tracking-wider font-semibold">
               <tr>
-                <th className="py-3 px-4">Tipe</th>
                 <th className="py-3 px-4">SKU</th>
-                <th className="py-3 px-4">Nama Item</th>
+                <th className="py-3 px-4">Nama Bahan Medis</th>
                 <th className="py-3 px-4 text-right">Stok Fisik</th>
                 <th className="py-3 px-4">Satuan</th>
                 <th className="py-3 px-4 text-right">Min. Stok</th>
@@ -73,17 +72,6 @@ export function StockTable({
                     key={item.id}
                     className="hover:bg-slate-50/70 transition-colors"
                   >
-                    <td className="py-3 px-4 whitespace-nowrap">
-                      <span
-                        className={`inline-block px-2 py-0.5 rounded font-medium text-[11px] ${
-                          item.itemType === 'PRODUCT'
-                            ? 'bg-blue-50 text-blue-700 border border-blue-200'
-                            : 'bg-purple-50 text-purple-700 border border-purple-200'
-                        }`}
-                      >
-                        {item.itemType === 'PRODUCT' ? 'PRODUK' : 'BAHAN'}
-                      </span>
-                    </td>
                     <td className="py-3 px-4 font-mono text-slate-600 whitespace-nowrap">
                       {item.sku}
                     </td>

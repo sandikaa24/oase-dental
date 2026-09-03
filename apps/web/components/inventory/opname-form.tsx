@@ -246,9 +246,8 @@ export function OpnameForm({ initialData, onRefresh }: OpnameFormProps) {
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-50/80 border-b border-border text-slate-500 uppercase tracking-wider font-semibold">
               <tr>
-                <th className="py-3 px-4">Tipe</th>
                 <th className="py-3 px-4">SKU</th>
-                <th className="py-3 px-4">Nama Item</th>
+                <th className="py-3 px-4">Nama Bahan Medis</th>
                 <th className="py-3 px-4 text-right">Stok Sistem</th>
                 <th className="py-3 px-4 text-right">Stok Fisik</th>
                 <th className="py-3 px-4 text-right">Selisih</th>
@@ -268,17 +267,6 @@ export function OpnameForm({ initialData, onRefresh }: OpnameFormProps) {
                       isInvalidNegativeStock ? 'bg-red-50/50' : isDiff ? 'bg-amber-50/30' : ''
                     }`}
                   >
-                    <td className="py-3 px-4 whitespace-nowrap">
-                      <span
-                        className={`inline-block px-2 py-0.5 rounded font-medium text-[11px] ${
-                          item.itemType === 'PRODUCT'
-                            ? 'bg-blue-50 text-blue-700 border border-blue-200'
-                            : 'bg-purple-50 text-purple-700 border border-purple-200'
-                        }`}
-                      >
-                        {item.itemType === 'PRODUCT' ? 'PRODUK' : 'BAHAN'}
-                      </span>
-                    </td>
                     <td className="py-3 px-4 font-mono text-slate-600 whitespace-nowrap">
                       {item.sku}
                     </td>

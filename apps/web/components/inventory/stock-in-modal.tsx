@@ -3,9 +3,8 @@
 import React, { useState } from 'react';
 import { fetchApi } from '@/lib/api-client';
 import { formatThousand, sanitizeDigits } from '@/lib/format/currency';
-import { StockItem, ItemType } from './inventory-types';
+import { StockItem } from './inventory-types';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { ErrorBanner } from '@/components/ui/placeholder';
 import { Plus, Trash2, X, PackagePlus } from 'lucide-react';
 
@@ -30,7 +29,6 @@ export function StockInModal({
   onSuccess,
   availableItems,
 }: StockInModalProps) {
-  const [itemType, setItemType] = useState<ItemType>('MATERIAL');
   const [note, setNote] = useState('');
   const [rows, setRows] = useState<StockInRow[]>([
     { itemId: '', quantity: '1', unitCost: '' },
@@ -39,8 +37,6 @@ export function StockInModal({
   const [error, setError] = useState<string | null>(null);
 
   if (!open) return null;
-
-  const filteredCatalog = availableItems.filter((it) => it.itemType === itemType);
 
   const handleAddRow = () => {
     setRows([...rows, { itemId: '', quantity: '1', unitCost: '' }]);
@@ -76,7 +72,7 @@ export function StockInModal({
     // Validasi baris
     const invalidRow = rows.find((r) => !r.itemId || !r.quantity || parseInt(r.quantity, 10) <= 0);
     if (invalidRow) {
-      setError('Pastikan semua baris item terpilih dan kuantitas lebih dari 0.');
+      setError('Pastikan semua baris bahan terpilih dan kuantitas lebih dari 0.');
       return;
     }
 
@@ -84,7 +80,7 @@ export function StockInModal({
     try {
       const payload = {
         branchId: branchId || undefined,
-        itemType,
+        itemType: 'MATERIAL' as const,
         items: rows.map((r) => ({
           itemId: r.itemId,
           quantity: parseInt(r.quantity, 10),
@@ -98,13 +94,16 @@ export function StockInModal({
         body: JSON.stringify(payload),
       });
 
-      onSuccess();
+      // Reset
+      setRows([{ itemId: '', quantity: '1', unitCost: '' }]);
+      setNote('');
       onOpenChange(false);
+      onSuccess();
     } catch (err: unknown) {
       if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError('Gagal memproses penerimaan barang.');
+        setError('Terjadi kesalahan saat memproses penerimaan barang');
       }
     } finally {
       setIsSubmitting(false);
@@ -113,163 +112,129 @@ export function StockInModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="w-full max-w-2xl bg-surface rounded-xl shadow-2xl border border-border flex flex-col max-h-[90vh] overflow-hidden">
-        {/* Modal Header */}
-        <div className="p-4 sm:p-6 border-b border-border flex items-center justify-between bg-slate-50/50">
-          <div className="flex items-center gap-3">
+      <div className="w-full max-w-2xl bg-surface rounded-xl shadow-2xl border border-border p-6 space-y-4 max-h-[90vh] flex flex-col animate-in zoom-in-95 duration-200">
+        {/* Header Modal */}
+        <div className="flex items-center justify-between border-b border-border pb-3">
+          <div className="flex items-center gap-2">
             <div className="p-2 rounded-lg bg-primary-soft text-primary">
               <PackagePlus className="h-5 w-5" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-foreground">Penerimaan Barang (Stock In)</h2>
-              <p className="text-xs text-muted">
-                Catat barang/bahan yang masuk ke stok cabang aktif secara multi-item
+              <h3 className="text-base font-bold text-foreground">
+                Penerimaan Bahan Masuk (Stock In)
+              </h3>
+              <p className="text-[11px] text-muted">
+                Catat penambahan saldo fisik bahan medis ke cabang aktif
               </p>
             </div>
           </div>
           <button
             type="button"
             onClick={() => onOpenChange(false)}
-            className="p-1.5 rounded-lg text-muted hover:text-foreground hover:bg-slate-200/60 transition-colors"
+            className="p-1 rounded-md text-muted hover:text-foreground hover:bg-slate-100 transition-colors"
           >
-            <X className="h-5 w-5" />
+            <X className="h-4 w-4" />
           </button>
         </div>
 
-        {/* Form Content */}
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
-          {error && <ErrorBanner title="Penerimaan Gagal" message={error} />}
+        {error && (
+          <ErrorBanner title="Validasi Gagal" message={error} />
+        )}
 
-          {/* Tipe Item Selector */}
-          <div className="space-y-1">
-            <label className="text-xs font-semibold text-slate-700">Jenis Item</label>
-            <div className="grid grid-cols-2 gap-2">
-              <button
+        <form onSubmit={handleSubmit} className="space-y-4 flex-1 overflow-y-auto pr-1">
+          {/* List Input Baris Item */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-slate-700">Daftar Bahan Masuk</label>
+              <Button
                 type="button"
-                onClick={() => {
-                  setItemType('MATERIAL');
-                  setRows([{ itemId: '', quantity: '1', unitCost: '' }]);
-                }}
-                className={`py-2 px-3 rounded-lg border text-xs font-medium text-center transition-all ${
-                  itemType === 'MATERIAL'
-                    ? 'border-primary bg-primary-soft text-primary font-semibold'
-                    : 'border-border bg-white text-slate-600 hover:bg-slate-50'
-                }`}
-              >
-                Bahan Klinis (MATERIAL)
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setItemType('PRODUCT');
-                  setRows([{ itemId: '', quantity: '1', unitCost: '' }]);
-                }}
-                className={`py-2 px-3 rounded-lg border text-xs font-medium text-center transition-all ${
-                  itemType === 'PRODUCT'
-                    ? 'border-primary bg-primary-soft text-primary font-semibold'
-                    : 'border-border bg-white text-slate-600 hover:bg-slate-50'
-                }`}
-              >
-                Produk Jual (PRODUCT)
-              </button>
-            </div>
-          </div>
-
-          {/* Item Rows Table */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between text-xs font-semibold text-slate-700">
-              <span>Daftar Item Masuk</span>
-              <button
-                type="button"
+                variant="secondary"
+                size="sm"
                 onClick={handleAddRow}
-                className="text-primary hover:underline flex items-center gap-1 text-xs"
+                className="h-7 text-xs flex items-center gap-1"
               >
-                <Plus className="h-3.5 w-3.5" />
-                <span>Tambah Item</span>
-              </button>
+                <Plus className="h-3 w-3" />
+                <span>Tambah Baris</span>
+              </Button>
             </div>
 
             <div className="space-y-2">
               {rows.map((row, idx) => (
-                <div
-                  key={idx}
-                  className="p-3 rounded-lg border border-border bg-slate-50/60 flex flex-col sm:flex-row items-start sm:items-center gap-2"
-                >
-                    <div className="flex-1 w-full sm:w-auto">
-                      <select
-                        value={row.itemId}
-                        onChange={(e) => handleRowChange(idx, 'itemId', e.target.value)}
-                        required
-                        className="w-full h-9 rounded-md border border-border bg-white px-3 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
-                      >
-                        <option value="">-- Pilih Item {itemType === 'PRODUCT' ? 'Produk' : 'Bahan'} --</option>
-                        {filteredCatalog.map((it) => (
-                          <option key={it.itemId} value={it.itemId}>
-                            {it.name} ({it.sku}) — Stok: {it.quantity} {it.unit}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div className="w-28">
-                      <Input
-                        type="text"
-                        inputMode="numeric"
-                        autoComplete="off"
-                        placeholder="Jumlah"
-                        value={row.quantity}
-                        onChange={(e) => handleRowChange(idx, 'quantity', e.target.value)}
-                        className="h-9 text-xs text-right font-mono"
-                        required
-                      />
-                    </div>
-
-                    <div className="w-36">
-                      <Input
-                        type="text"
-                        inputMode="numeric"
-                        autoComplete="off"
-                        prefix="Rp"
-                        placeholder="Biaya/Satuan"
-                        value={row.unitCost ? formatThousand(row.unitCost) : ''}
-                        onChange={(e) => handleRowChange(idx, 'unitCost', e.target.value)}
-                        className="h-9 text-xs text-right font-mono"
-                      />
-                    </div>
-
-                    {rows.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveRow(idx)}
-                        className="p-2 text-danger hover:bg-red-50 rounded-md transition-colors"
-                        title="Hapus baris"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    )}
+                <div key={idx} className="flex items-center gap-2 p-2 rounded-lg border border-border bg-slate-50/60">
+                  {/* Dropdown Bahan */}
+                  <div className="flex-1 min-w-[180px]">
+                    <select
+                      required
+                      value={row.itemId}
+                      onChange={(e) => handleRowChange(idx, 'itemId', e.target.value)}
+                      className="w-full h-8 rounded border border-border bg-white px-2 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+                    >
+                      <option value="">-- Pilih Bahan Medis --</option>
+                      {availableItems.map((it) => (
+                        <option key={it.itemId} value={it.itemId}>
+                          {it.name} ({it.sku}) - Saat ini: {it.quantity} {it.unit}
+                        </option>
+                      ))}
+                    </select>
                   </div>
-                ))}
+
+                  {/* Input Kuantitas */}
+                  <div className="w-24 shrink-0">
+                    <input
+                      type="text"
+                      required
+                      placeholder="Jumlah"
+                      value={row.quantity}
+                      onChange={(e) => handleRowChange(idx, 'quantity', e.target.value)}
+                      className="w-full h-8 rounded border border-border bg-white px-2 text-xs text-right font-mono font-semibold focus:ring-1 focus:ring-primary focus:outline-none"
+                    />
+                  </div>
+
+                  {/* Input Harga Beli (Opsional) */}
+                  <div className="w-36 shrink-0 relative">
+                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-muted">Rp</span>
+                    <input
+                      type="text"
+                      placeholder="Biaya/Satuan"
+                      value={formatThousand(row.unitCost)}
+                      onChange={(e) => handleRowChange(idx, 'unitCost', e.target.value)}
+                      className="w-full h-8 rounded border border-border bg-white pl-7 pr-2 text-xs text-right font-mono focus:ring-1 focus:ring-primary focus:outline-none"
+                    />
+                  </div>
+
+                  {/* Tombol Hapus Baris */}
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveRow(idx)}
+                    disabled={rows.length === 1}
+                    className="p-1.5 rounded text-muted hover:text-danger-text hover:bg-slate-200 disabled:opacity-30 transition-colors"
+                    title="Hapus baris"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              ))}
             </div>
           </div>
 
-          {/* Catatan Penerimaan */}
+          {/* Catatan / Keterangan (Opsional) */}
           <div className="space-y-1">
-            <label className="text-xs font-semibold text-slate-700">Catatan / Referensi Supplier (Opsional)</label>
-            <input
-              type="text"
-              placeholder="Contoh: Faktur No. INV-2026/09/001 dari PT Dentalindo"
+            <label className="text-xs font-semibold text-slate-700">Catatan Penerimaan (Opsional)</label>
+            <textarea
+              rows={2}
+              placeholder="Contoh: No. Faktur PO-2026/09/01 dari Supplier Dental Medika..."
               value={note}
               onChange={(e) => setNote(e.target.value)}
-              className="w-full h-9 rounded-md border border-border bg-white px-3 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+              className="w-full p-2.5 rounded-md border border-border bg-white text-xs text-foreground placeholder:text-muted focus:ring-1 focus:ring-primary focus:outline-none"
             />
           </div>
 
           {/* Footer Actions */}
-          <div className="pt-4 border-t border-border flex items-center justify-end gap-2">
+          <div className="flex items-center justify-end gap-2 pt-3 border-t border-border">
             <Button
               type="button"
               variant="secondary"
-              size="md"
+              size="sm"
               onClick={() => onOpenChange(false)}
               disabled={isSubmitting}
             >
@@ -278,10 +243,12 @@ export function StockInModal({
             <Button
               type="submit"
               variant="primary"
-              size="md"
-              isLoading={isSubmitting}
+              size="sm"
+              disabled={isSubmitting}
+              className="gap-1.5"
             >
-              Simpan Penerimaan
+              <PackagePlus className="h-4 w-4" />
+              <span>{isSubmitting ? 'Menyimpan...' : 'Simpan Barang Masuk'}</span>
             </Button>
           </div>
         </form>

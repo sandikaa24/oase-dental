@@ -1,4 +1,4 @@
-export type ItemType = 'PRODUCT' | 'MATERIAL';
+export type ItemType = 'MATERIAL';
 
 export type MovementType =
   | 'STOCK_IN'
@@ -7,6 +7,8 @@ export type MovementType =
   | 'DAMAGE'
   | 'EXPIRED'
   | 'OPNAME';
+
+export type StockOutReason = 'MANUAL_ADJUSTMENT' | 'DAMAGE' | 'EXPIRED';
 
 export type OpnameStatus = 'DRAFT' | 'SUBMITTED';
 

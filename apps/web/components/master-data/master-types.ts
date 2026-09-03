@@ -22,19 +22,6 @@ export interface Service {
   updatedAt: string;
 }
 
-export interface Product {
-  id: string;
-  name: string;
-  sku: string;
-  sellPrice: string | number;
-  unit: string;
-  minStock: number;
-  active: boolean;
-  deletedAt?: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
 export interface Material {
   id: string;
   name: string;
@@ -48,4 +35,4 @@ export interface Material {
   updatedAt: string;
 }
 
-export type MasterTabType = 'services' | 'products' | 'materials' | 'categories';
+export type MasterTabType = 'services' | 'materials' | 'categories';

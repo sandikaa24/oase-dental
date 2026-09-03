@@ -48,8 +48,6 @@ export default function PosPage() {
   const [cartItems, setCartItems] = useState<PosCartItem[]>([]);
   const [patientName, setPatientName] = useState('');
   const [patientPhone, setPatientPhone] = useState('');
-  const [discountAmount, setDiscountAmount] = useState('0');
-  const [discountReason, setDiscountReason] = useState('');
   const [activeDraftId, setActiveDraftId] = useState<string | null>(null);
 
   // Modals & Process States
@@ -135,12 +133,10 @@ export default function PosPage() {
         {
           id: `cart-${Date.now()}-${item.id}`,
           itemId: item.id,
-          itemType: item.type,
+          itemType: 'SERVICE',
           name: item.name,
           price: item.price,
           quantity: 1,
-          availableStock: item.stock,
-          unit: item.unit,
         },
       ];
     });
@@ -164,8 +160,6 @@ export default function PosPage() {
     setCartItems([]);
     setPatientName('');
     setPatientPhone('');
-    setDiscountAmount('0');
-    setDiscountReason('');
     setActiveDraftId(null);
     setGlobalError(null);
   };
@@ -180,14 +174,11 @@ export default function PosPage() {
 
       const payload = {
         items: cartItems.map((ci) => ({
-          itemType: ci.itemType,
           itemId: ci.itemId,
           quantity: ci.quantity,
         })),
         patientName: patientName.trim() || null,
         patientPhone: patientPhone.trim() || null,
-        discountAmount: discountAmount.trim() || '0',
-        discountReason: discountReason.trim() || null,
       };
 
       let res;
@@ -234,14 +225,11 @@ export default function PosPage() {
       // Step 1: Pastikan transaksi tersimpan sebagai draft (atau update jika sudah ada)
       const payload = {
         items: cartItems.map((ci) => ({
-          itemType: ci.itemType,
           itemId: ci.itemId,
           quantity: ci.quantity,
         })),
         patientName: patientName.trim() || null,
         patientPhone: patientPhone.trim() || null,
-        discountAmount: discountAmount.trim() || '0',
-        discountReason: discountReason.trim() || null,
       };
 
       let trxId = activeDraftId;
@@ -280,9 +268,7 @@ export default function PosPage() {
       }
     } catch (err: unknown) {
       if (err instanceof ApiError) {
-        if (err.code === 'INSUFFICIENT_STOCK') {
-          setPaymentError(`Pembayaran gagal: Stok produk tidak mencukupi. ${err.message}`);
-        } else if (err.code === 'CLOSING_PERIOD_LOCKED') {
+        if (err.code === 'CLOSING_PERIOD_LOCKED') {
           setPaymentError('Pembayaran ditolak: Periode kasir sudah ditutup (Closing).');
         } else {
           setPaymentError(err.message || 'Pembayaran gagal diproses');
@@ -304,19 +290,15 @@ export default function PosPage() {
     setActiveDraftId(trx.id);
     setPatientName(trx.patientName || '');
     setPatientPhone(trx.patientPhone || '');
-    setDiscountAmount(trx.discountAmount || '0');
-    setDiscountReason(trx.discountReason || '');
 
     setCartItems(
       trx.items.map((i) => ({
         id: `cart-${i.id}`,
         itemId: i.itemId,
-        itemType: i.itemType,
+        itemType: 'SERVICE',
         name: i.name,
         price: i.price,
         quantity: i.quantity,
-        availableStock: null,
-        unit: i.unit,
       }))
     );
 
@@ -331,7 +313,7 @@ export default function PosPage() {
     setReceiptModalOpen(true);
   };
 
-  // Cancel Transaction (Owner only)
+  // Open Cancel Modal
   const handleOpenCancelModal = (trx: PosTransaction) => {
     setTrxToCancel(trx);
     setCancelReason('');
@@ -365,12 +347,11 @@ export default function PosPage() {
     }
   };
 
-  // Calculate Subtotal and Total for Cart Header
+  // Calculate Subtotal and Total for Cart Header (Total = Subtotal, tanpa diskon)
   const subtotalNum = cartItems.reduce((acc, item) => {
     return acc + (parseFloat(item.price) || 0) * item.quantity;
   }, 0);
-  const discountNum = parseFloat(discountAmount) || 0;
-  const totalNum = Math.max(0, subtotalNum - discountNum);
+  const totalNum = subtotalNum;
 
   return (
     <div className="space-y-4">
@@ -381,7 +362,7 @@ export default function PosPage() {
             Point of Sale (POS) Kasir
           </h1>
           <p className="text-xs text-muted mt-0.5">
-            Pencatatan transaksi layanan tindakan dan penjualan produk klinik
+            Pencatatan transaksi layanan tindakan medis klinik
           </p>
         </div>
 
@@ -456,12 +437,8 @@ export default function PosPage() {
               items={cartItems}
               patientName={patientName}
               patientPhone={patientPhone}
-              discountAmount={discountAmount}
-              discountReason={discountReason}
               onUpdatePatientName={setPatientName}
               onUpdatePatientPhone={setPatientPhone}
-              onUpdateDiscountAmount={setDiscountAmount}
-              onUpdateDiscountReason={setDiscountReason}
               onUpdateQuantity={handleUpdateQuantity}
               onRemoveItem={handleRemoveItem}
               onClearCart={handleClearCart}
@@ -512,31 +489,29 @@ export default function PosPage() {
           <DialogHeader>
             <DialogTitle>Batalkan Transaksi</DialogTitle>
             <DialogDescription>
-              Transaksi {trxToCancel.transactionNumber} akan dibatalkan dan stok produk akan dipulihkan
+              Transaksi {trxToCancel.transactionNumber} akan dibatalkan dan status diubah menjadi CANCELLED
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-3 py-3">
             <div className="space-y-1">
               <label className="text-xs font-semibold text-slate-700">
-                Alasan Pembatalan (Wajib min. 10 karakter)
+                Alasan Pembatalan <span className="text-danger-text">* (min. 10 karakter)</span>
               </label>
               <textarea
                 value={cancelReason}
                 onChange={(e) => setCancelReason(e.target.value)}
-                placeholder="Contoh: Kesalahan input tindakan oleh kasir atau permintaan pembatalan pasien..."
+                placeholder="Contoh: Pasien keliru memilih tindakan, dibatalkan atas permintaan pasien..."
                 rows={3}
-                className="w-full p-2.5 text-xs rounded-md border border-border bg-surface text-foreground placeholder:text-muted focus:outline-hidden focus:ring-1 focus:ring-danger-border"
+                className="w-full p-2.5 text-xs rounded-md border border-border bg-white text-foreground placeholder:text-muted focus:ring-1 focus:ring-primary focus:outline-none"
               />
+              <span className="text-[10px] text-muted">
+                {cancelReason.trim().length}/10 karakter minimum
+              </span>
             </div>
-            {cancelReason.trim().length > 0 && cancelReason.trim().length < 10 && (
-              <p className="text-[11px] text-danger-text">
-                * Alasan pembatalan minimal 10 karakter (saat ini: {cancelReason.trim().length})
-              </p>
-            )}
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="gap-2">
             <Button
               type="button"
               variant="secondary"
@@ -553,7 +528,7 @@ export default function PosPage() {
               onClick={handleConfirmCancel}
               disabled={isCancelling || cancelReason.trim().length < 10}
             >
-              {isCancelling ? 'Membatalkan...' : 'Konfirmasi Batal'}
+              {isCancelling ? 'Membatalkan...' : 'Konfirmasi Pembatalan'}
             </Button>
           </DialogFooter>
         </Dialog>

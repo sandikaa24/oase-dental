@@ -6,10 +6,11 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth-context';
 import { fetchApi } from '@/lib/api-client';
 import { Permission } from '@oase/shared';
-import { StockItem, ItemType } from '@/components/inventory/inventory-types';
+import { StockItem } from '@/components/inventory/inventory-types';
 import { StockTable } from '@/components/inventory/stock-table';
 import { StockMovementDrawer } from '@/components/inventory/stock-movement-drawer';
 import { StockInModal } from '@/components/inventory/stock-in-modal';
+import { StockOutModal } from '@/components/inventory/stock-out-modal';
 import { BranchSelector } from '@/components/inventory/branch-selector';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -17,6 +18,7 @@ import { ErrorBanner, EmptyState } from '@/components/ui/placeholder';
 import {
   Package,
   PackagePlus,
+  PackageMinus,
   ClipboardList,
   Search,
   AlertTriangle,
@@ -46,21 +48,20 @@ export default function InventoryPage() {
   const effectiveBranchId = user?.role === 'OWNER' ? selectedBranchId : (user?.activeBranchId || selectedBranchId);
 
   const [search, setSearch] = useState('');
-  const [itemType, setItemType] = useState<ItemType | ''>('');
   const [lowStockOnly, setLowStockOnly] = useState(false);
   const [page, setPage] = useState(1);
 
   const [selectedItemForDrawer, setSelectedItemForDrawer] = useState<StockItem | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [stockInModalOpen, setStockInModalOpen] = useState(false);
+  const [stockOutModalOpen, setStockOutModalOpen] = useState(false);
 
-  // TanStack Query untuk fetch data stok
+  // TanStack Query untuk fetch data stok bahan
   const { data, isLoading, isError, error } = useQuery({
     queryKey: [
       'inventory-stock',
       effectiveBranchId,
       search,
-      itemType,
       lowStockOnly,
       page,
     ],
@@ -68,7 +69,6 @@ export default function InventoryPage() {
       let url = `/api/v1/inventory/stock?page=${page}&limit=20`;
       if (effectiveBranchId) url += `&branchId=${effectiveBranchId}`;
       if (search.trim()) url += `&search=${encodeURIComponent(search.trim())}`;
-      if (itemType) url += `&itemType=${itemType}`;
       if (lowStockOnly) url += `&lowStock=true`;
 
       return fetchApi<StockItem[]>(url);
@@ -120,10 +120,10 @@ export default function InventoryPage() {
             </div>
             <div>
               <h1 className="text-2xl font-bold tracking-tight text-foreground">
-                Inventaris &amp; Stok
+                Inventaris &amp; Stok Bahan
               </h1>
               <p className="text-xs text-muted">
-                Pantau saldo fisik, kartu stok pergerakan barang, dan penerimaan per cabang
+                Pantau saldo fisik, kartu stok pergerakan barang, penerimaan, dan pengeluaran bahan
               </p>
             </div>
           </div>
@@ -145,6 +145,18 @@ export default function InventoryPage() {
               <span>Stock Opname</span>
             </Button>
           </Link>
+
+          {/* Tombol Stock Out di samping Stock In */}
+          <Button
+            variant="secondary"
+            size="md"
+            onClick={() => setStockOutModalOpen(true)}
+            disabled={!effectiveBranchId}
+            className="flex items-center gap-1.5 text-xs text-danger-text border-danger-border hover:bg-danger-bg"
+          >
+            <PackageMinus className="h-4 w-4 text-danger-icon" />
+            <span>Stock Out</span>
+          </Button>
 
           <Button
             variant="primary"
@@ -168,7 +180,7 @@ export default function InventoryPage() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted" />
               <input
                 type="text"
-                placeholder="Cari nama item atau SKU..."
+                placeholder="Cari nama bahan medis atau SKU..."
                 value={search}
                 onChange={(e) => {
                   setSearch(e.target.value);
@@ -179,59 +191,15 @@ export default function InventoryPage() {
               />
             </div>
 
-            {/* Type Filter Buttons */}
-            <div className="flex flex-wrap items-center gap-1.5">
-              <button
-                type="button"
-                onClick={() => {
-                  setItemType('');
-                  setPage(1);
-                }}
-                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-                  itemType === ''
-                    ? 'bg-primary text-white font-semibold shadow-xs'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                }`}
-              >
-                Semua Item
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setItemType('MATERIAL');
-                  setPage(1);
-                }}
-                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-                  itemType === 'MATERIAL'
-                    ? 'bg-primary text-white font-semibold shadow-xs'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                }`}
-              >
-                Bahan Klinis (MATERIAL)
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setItemType('PRODUCT');
-                  setPage(1);
-                }}
-                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-                  itemType === 'PRODUCT'
-                    ? 'bg-primary text-white font-semibold shadow-xs'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                }`}
-              >
-                Produk Jual (PRODUCT)
-              </button>
-
-              {/* Toggle Low Stock */}
+            {/* Toggle Low Stock */}
+            <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={() => {
                   setLowStockOnly(!lowStockOnly);
                   setPage(1);
                 }}
-                className={`ml-2 px-3 py-1.5 rounded-md text-xs font-medium flex items-center gap-1 transition-all ${
+                className={`px-3 py-1.5 rounded-md text-xs font-medium flex items-center gap-1.5 transition-all ${
                   lowStockOnly
                     ? 'bg-warning-bg text-warning-text border border-amber-300 font-semibold'
                     : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
@@ -287,6 +255,25 @@ export default function InventoryPage() {
         onSuccess={() => {
           queryClient.invalidateQueries({
             queryKey: ['inventory-stock', effectiveBranchId],
+          });
+          queryClient.invalidateQueries({
+            queryKey: ['stock-movements'],
+          });
+        }}
+        availableItems={stockList}
+      />
+
+      {/* Modal Stock Out (Fitur Baru) */}
+      <StockOutModal
+        open={stockOutModalOpen}
+        branchId={effectiveBranchId}
+        onOpenChange={setStockOutModalOpen}
+        onSuccess={() => {
+          queryClient.invalidateQueries({
+            queryKey: ['inventory-stock', effectiveBranchId],
+          });
+          queryClient.invalidateQueries({
+            queryKey: ['stock-movements'],
           });
         }}
         availableItems={stockList}

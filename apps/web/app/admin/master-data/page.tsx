@@ -8,7 +8,6 @@ import { fetchApi } from '@/lib/api-client';
 import { Permission } from '@oase/shared';
 import { MasterTabType, Category } from '@/components/master-data/master-types';
 import { ServicesTab } from '@/components/master-data/services-tab';
-import { ProductsTab } from '@/components/master-data/products-tab';
 import { MaterialsTab } from '@/components/master-data/materials-tab';
 import { CategoriesTab } from '@/components/master-data/categories-tab';
 import { Card, CardContent } from '@/components/ui/card';
@@ -16,7 +15,6 @@ import { Button } from '@/components/ui/button';
 import {
   Database,
   Stethoscope,
-  ShoppingBag,
   Boxes,
   Tags,
   ShieldX,
@@ -72,7 +70,6 @@ export default function MasterDataPage() {
 
   const tabs: { id: MasterTabType; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
     { id: 'services', label: 'Layanan Medis', icon: Stethoscope },
-    { id: 'products', label: 'Produk Penjualan', icon: ShoppingBag },
     { id: 'materials', label: 'Bahan Klinis', icon: Boxes },
     { id: 'categories', label: 'Kategori Tindakan', icon: Tags },
   ];
@@ -91,7 +88,7 @@ export default function MasterDataPage() {
                 Master Data Klinik
               </h1>
               <p className="text-xs text-muted">
-                Katalog global tindakan medis, produk penjualan POS, bahan klinis, dan kategori
+                Katalog global tindakan medis, bahan klinis, dan kategori
               </p>
             </div>
           </div>
@@ -124,7 +121,6 @@ export default function MasterDataPage() {
       {/* Tab Content Panels */}
       <div>
         {activeTab === 'services' && <ServicesTab categories={categories} />}
-        {activeTab === 'products' && <ProductsTab />}
         {activeTab === 'materials' && <MaterialsTab />}
         {activeTab === 'categories' && <CategoriesTab />}
       </div>

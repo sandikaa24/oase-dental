@@ -44,7 +44,7 @@ export default function StockOpnameListPage() {
   // Modal Create DRAFT state
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [opnameDate, setOpnameDate] = useState(() => new Date().toISOString().split('T')[0]);
-  const [itemType, setItemType] = useState<ItemType>('MATERIAL');
+  const itemType: ItemType = 'MATERIAL';
   const [note, setNote] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
@@ -300,29 +300,8 @@ export default function StockOpnameListPage() {
               {/* Jenis Item */}
               <div className="space-y-1">
                 <label className="text-xs font-semibold text-slate-700">Kategori Item</label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setItemType('MATERIAL')}
-                    className={`py-2 px-3 rounded-lg border text-xs font-medium text-center transition-all ${
-                      itemType === 'MATERIAL'
-                        ? 'border-primary bg-primary-soft text-primary font-semibold'
-                        : 'border-border bg-white text-slate-600 hover:bg-slate-50'
-                    }`}
-                  >
-                    Bahan (MATERIAL)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setItemType('PRODUCT')}
-                    className={`py-2 px-3 rounded-lg border text-xs font-medium text-center transition-all ${
-                      itemType === 'PRODUCT'
-                        ? 'border-primary bg-primary-soft text-primary font-semibold'
-                        : 'border-border bg-white text-slate-600 hover:bg-slate-50'
-                    }`}
-                  >
-                    Produk (PRODUCT)
-                  </button>
+                <div className="py-2 px-3 rounded-lg border border-primary bg-primary-soft text-primary text-xs font-semibold text-center">
+                  Bahan Klinis (MATERIAL)
                 </div>
               </div>
 

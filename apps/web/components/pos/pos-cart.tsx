@@ -3,34 +3,26 @@
 import React from 'react';
 import { type PosCartItem } from './pos-types';
 import { formatRupiah } from '@/lib/formatters';
-import { formatThousand, sanitizeDigits, decimalToCents, centsToDecimal } from '@/lib/format/currency';
+import { decimalToCents, centsToDecimal } from '@/lib/format/currency';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/components/ui/card';
 import {
   Trash2,
   Plus,
   Minus,
-  AlertTriangle,
   ShoppingCart,
   User,
-  Tag,
   CreditCard,
   FileText,
   RotateCcw,
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
 
 interface PosCartProps {
   items: PosCartItem[];
   patientName: string;
   patientPhone: string;
-  discountAmount: string;
-  discountReason: string;
   onUpdatePatientName: (name: string) => void;
   onUpdatePatientPhone: (phone: string) => void;
-  onUpdateDiscountAmount: (amount: string) => void;
-  onUpdateDiscountReason: (reason: string) => void;
   onUpdateQuantity: (itemId: string, newQty: number) => void;
   onRemoveItem: (itemId: string) => void;
   onClearCart: () => void;
@@ -44,12 +36,8 @@ export function PosCart({
   items,
   patientName,
   patientPhone,
-  discountAmount,
-  discountReason,
   onUpdatePatientName,
   onUpdatePatientPhone,
-  onUpdateDiscountAmount,
-  onUpdateDiscountReason,
   onUpdateQuantity,
   onRemoveItem,
   onClearCart,
@@ -58,24 +46,12 @@ export function PosCart({
   isSavingDraft,
   activeDraftId,
 }: PosCartProps) {
-  // Hitung subtotal tampilan di client menggunakan integer cents
+  // Hitung subtotal & total tampilan di client menggunakan integer cents (total = subtotal, tanpa diskon)
   const subtotalCents = items.reduce((acc, item) => {
     return acc + decimalToCents(item.price) * item.quantity;
   }, 0);
 
-  const discountCents = decimalToCents(discountAmount);
-  const totalCents = Math.max(0, subtotalCents - discountCents);
-
-  // Periksa apakah ada produk yang melebihi batas stok tersedia
-  const hasInsufficientStock = items.some(
-    (item) =>
-      item.itemType === 'PRODUCT' &&
-      item.availableStock !== null &&
-      item.quantity > item.availableStock
-  );
-
-  // Validasi diskon: alasan wajib jika diskon > 0
-  const isDiscountInvalid = discountCents > 0 && !discountReason.trim();
+  const totalCents = subtotalCents;
 
   return (
     <Card className="flex flex-col h-full border border-border shadow-xs">
@@ -121,79 +97,52 @@ export function PosCart({
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            <div>
-              <input
-                type="text"
-                placeholder="Nama Pasien..."
-                value={patientName}
-                onChange={(e) => onUpdatePatientName(e.target.value)}
-                className="w-full px-2.5 py-1 text-xs rounded border border-border bg-surface text-foreground placeholder:text-muted focus:outline-hidden focus:ring-1 focus:ring-primary"
-              />
-            </div>
-            <div>
-              <input
-                type="tel"
-                placeholder="No. WhatsApp / HP..."
-                value={patientPhone}
-                onChange={(e) => onUpdatePatientPhone(e.target.value)}
-                className="w-full px-2.5 py-1 text-xs rounded border border-border bg-surface text-foreground placeholder:text-muted focus:outline-hidden focus:ring-1 focus:ring-primary"
-              />
-            </div>
+            <input
+              type="text"
+              placeholder="Nama Pasien"
+              value={patientName}
+              onChange={(e) => onUpdatePatientName(e.target.value)}
+              className="w-full h-8 px-2.5 py-1 text-xs rounded border border-border bg-surface text-foreground placeholder:text-muted focus:outline-hidden focus:ring-1 focus:ring-primary"
+            />
+            <input
+              type="tel"
+              placeholder="No. WhatsApp / HP"
+              value={patientPhone}
+              onChange={(e) => onUpdatePatientPhone(e.target.value)}
+              className="w-full h-8 px-2.5 py-1 text-xs rounded border border-border bg-surface text-foreground placeholder:text-muted focus:outline-hidden focus:ring-1 focus:ring-primary"
+            />
           </div>
         </div>
 
-        {/* Cart Line Items */}
+        {/* Cart Items List */}
         {items.length === 0 ? (
-          <div className="py-8 text-center text-muted text-xs space-y-2">
-            <ShoppingCart className="h-8 w-8 mx-auto text-slate-300 stroke-[1.5]" />
-            <p>Keranjang masih kosong</p>
+          <div className="py-12 text-center text-muted space-y-2">
+            <ShoppingCart className="h-10 w-10 mx-auto text-slate-300 stroke-1" />
+            <p className="text-xs">Keranjang transaksi masih kosong</p>
             <p className="text-[11px] text-slate-400">
-              Pilih tindakan layanan atau produk di katalog untuk ditambahkan
+              Pilih tindakan atau layanan medis pada katalog di samping
             </p>
           </div>
         ) : (
           <div className="space-y-2.5">
             {items.map((item) => {
-              const isOverStock =
-                item.itemType === 'PRODUCT' &&
-                item.availableStock !== null &&
-                item.quantity > item.availableStock;
-
               const itemTotalCents = decimalToCents(item.price) * item.quantity;
 
               return (
                 <div
                   key={item.id}
-                  className={cn(
-                    'p-2.5 rounded-lg border transition-all space-y-2',
-                    isOverStock
-                      ? 'border-danger-border bg-danger-bg/20'
-                      : 'border-border bg-surface hover:border-slate-300'
-                  )}
+                  className="p-3 rounded-lg border border-border bg-surface hover:border-slate-300 transition-colors space-y-2"
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5">
-                        <span
-                          className={cn(
-                            'text-[9px] font-bold px-1 py-0.2 rounded uppercase',
-                            item.itemType === 'SERVICE'
-                              ? 'bg-teal-100 text-teal-800'
-                              : 'bg-blue-100 text-blue-800'
-                          )}
-                        >
-                          {item.itemType === 'SERVICE' ? 'Layanan' : 'Produk'}
-                        </span>
-                        <h4 className="text-xs font-semibold text-foreground truncate" title={item.name}>
-                          {item.name}
-                        </h4>
+                    <div className="space-y-0.5 flex-1 min-w-0">
+                      <div className="text-xs font-semibold text-foreground truncate">
+                        {item.name}
                       </div>
-                      <p className="text-[11px] text-muted mt-0.5">
+                      <div className="text-[11px] text-muted">
                         {formatRupiah(item.price)}
-                      </p>
+                      </div>
                     </div>
 
-                    {/* Delete item */}
                     <button
                       type="button"
                       onClick={() => onRemoveItem(item.itemId)}
@@ -203,16 +152,6 @@ export function PosCart({
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
                   </div>
-
-                  {/* Inline warning for insufficient stock */}
-                  {isOverStock && (
-                    <div className="flex items-center gap-1.5 text-[11px] text-danger-text font-medium bg-danger-bg p-1.5 rounded border border-danger-border">
-                      <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                      <span>
-                        Stok tidak mencukupi (Tersedia: {item.availableStock ?? 0})
-                      </span>
-                    </div>
-                  )}
 
                   {/* Quantity controls & Line total */}
                   <div className="flex items-center justify-between pt-1 border-t border-slate-100">
@@ -247,54 +186,6 @@ export function PosCart({
             })}
           </div>
         )}
-
-        {/* Discount section */}
-        {items.length > 0 && (
-          <div className="pt-2 border-t border-border space-y-2">
-            <div className="flex items-center justify-between text-xs font-medium text-slate-700">
-              <span className="flex items-center gap-1">
-                <Tag className="h-3.5 w-3.5 text-muted" />
-                <span>Diskon Khusus (Opsional)</span>
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <div>
-                <Input
-                  id="discount-amount-input"
-                  prefix="Rp"
-                  type="text"
-                  inputMode="numeric"
-                  autoComplete="off"
-                  placeholder="0"
-                  value={formatThousand(discountAmount)}
-                  onChange={(e) => onUpdateDiscountAmount(sanitizeDigits(e.target.value))}
-                  className="h-8 text-xs pl-8 py-1"
-                />
-              </div>
-              <div>
-                <input
-                  type="text"
-                  placeholder="Alasan Diskon (Wajib jika > 0)"
-                  value={discountReason}
-                  onChange={(e) => onUpdateDiscountReason(e.target.value)}
-                  className={cn(
-                    'w-full h-8 px-2.5 py-1 text-xs rounded border bg-surface text-foreground placeholder:text-muted focus:outline-hidden focus:ring-1',
-                    isDiscountInvalid
-                      ? 'border-danger-border focus:ring-danger-border'
-                      : 'border-border focus:ring-primary'
-                  )}
-                />
-              </div>
-            </div>
-
-            {isDiscountInvalid && (
-              <p className="text-[10px] text-danger-text">
-                * Alasan diskon wajib diisi jika memberikan potongan harga
-              </p>
-            )}
-          </div>
-        )}
       </CardContent>
 
       {/* Cart Summary & Actions Footer */}
@@ -305,13 +196,6 @@ export function PosCart({
               <span>Subtotal</span>
               <span>{formatRupiah(centsToDecimal(subtotalCents))}</span>
             </div>
-
-            {discountCents > 0 && (
-              <div className="flex justify-between text-danger-text">
-                <span>Diskon</span>
-                <span>-{formatRupiah(centsToDecimal(discountCents))}</span>
-              </div>
-            )}
 
             <div className="flex justify-between font-bold text-sm text-foreground pt-1.5 border-t border-slate-200">
               <span>Total Tagihan</span>
@@ -326,7 +210,7 @@ export function PosCart({
               type="button"
               variant="secondary"
               size="sm"
-              disabled={isSavingDraft || hasInsufficientStock || isDiscountInvalid}
+              disabled={isSavingDraft}
               onClick={onSaveDraft}
               className="gap-1.5 text-xs"
             >
@@ -338,7 +222,6 @@ export function PosCart({
               type="button"
               variant="primary"
               size="sm"
-              disabled={hasInsufficientStock || isDiscountInvalid}
               onClick={onOpenPayment}
               className="gap-1.5 text-xs font-semibold"
             >

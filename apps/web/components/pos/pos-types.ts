@@ -1,32 +1,28 @@
 export interface PosCatalogItem {
   id: string;
   name: string;
-  type: 'SERVICE' | 'PRODUCT';
+  type: 'SERVICE';
   price: string;
-  stock: number | null;
-  unit: string | null;
+  stock: null;
+  unit: null;
   category: { id: string; name: string } | null;
 }
 
 export interface PosCartItem {
   id: string;
   itemId: string;
-  itemType: 'SERVICE' | 'PRODUCT';
+  itemType: 'SERVICE';
   name: string;
   price: string;
   quantity: number;
-  availableStock: number | null;
-  unit: string | null;
 }
 
 export interface PosTransactionItem {
   id: string;
-  itemType: 'SERVICE' | 'PRODUCT';
-  serviceId: string | null;
-  productId: string | null;
+  itemType: 'SERVICE';
+  serviceId: string;
   itemId: string;
   name: string;
-  unit: string | null;
   price: string;
   quantity: number;
   lineTotal: string;
@@ -47,8 +43,6 @@ export interface PosTransaction {
   patientName: string | null;
   patientPhone: string | null;
   subtotal: string;
-  discountAmount: string;
-  discountReason: string | null;
   total: string;
   createdAt: string;
   paidAt: string | null;

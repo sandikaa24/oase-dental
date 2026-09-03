@@ -8,7 +8,15 @@ import { StockItem, MovementDetailResponse } from './inventory-types';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/ui/placeholder';
-import { X, History, ArrowDownLeft, ArrowUpRight, ChevronLeft, ChevronRight, Filter } from 'lucide-react';
+import {
+  History,
+  X,
+  ArrowDownLeft,
+  ArrowUpRight,
+  Filter,
+  ChevronLeft,
+  ChevronRight,
+} from 'lucide-react';
 
 interface StockMovementDrawerProps {
   item: StockItem | null;
@@ -23,26 +31,30 @@ export function StockMovementDrawer({
   open,
   onOpenChange,
 }: StockMovementDrawerProps) {
-  const [page, setPage] = useState(1);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const [page, setPage] = useState(1);
 
-  const itemType = item?.itemType;
-  const itemId = item?.itemId;
-
+  // TanStack Query untuk fetch kartu stok
   const { data, isLoading, isError, error } = useQuery({
-    queryKey: ['stock-movements', branchId, itemType, itemId, page, dateFrom, dateTo],
+    queryKey: [
+      'stock-movements',
+      branchId,
+      item?.itemId,
+      dateFrom,
+      dateTo,
+      page,
+    ],
     queryFn: async () => {
-      if (!itemType || !itemId) return null;
-      let url = `/api/v1/inventory/stock/${itemType.toLowerCase()}/${itemId}/movements?page=${page}&limit=15`;
+      if (!item) return null;
+      let url = `/api/v1/inventory/stock/MATERIAL/${item.itemId}/movements?page=${page}&limit=20`;
       if (branchId) url += `&branchId=${branchId}`;
       if (dateFrom) url += `&dateFrom=${dateFrom}`;
       if (dateTo) url += `&dateTo=${dateTo}`;
 
-      const res = await fetchApi<MovementDetailResponse>(url);
-      return res;
+      return fetchApi<MovementDetailResponse>(url);
     },
-    enabled: open && !!itemType && !!itemId,
+    enabled: open && !!item && !!branchId,
   });
 
   if (!open || !item) return null;
@@ -60,7 +72,7 @@ export function StockMovementDrawer({
       case 'OPNAME':
         return 'Penyesuaian Opname';
       case 'MANUAL_ADJUSTMENT':
-        return 'Koreksi Manual';
+        return 'Pemakaian / Koreksi Manual';
       case 'DAMAGE':
         return 'Barang Rusak';
       case 'EXPIRED':
@@ -81,8 +93,8 @@ export function StockMovementDrawer({
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-xs px-2 py-0.5 rounded font-medium bg-slate-200 text-slate-700">
-                  {item.itemType === 'PRODUCT' ? 'PRODUK' : 'BAHAN'}
+                <span className="text-xs px-2 py-0.5 rounded font-medium bg-purple-50 text-purple-700 border border-purple-200">
+                  BAHAN KLINIS
                 </span>
                 <span className="text-xs text-muted font-mono">{item.sku}</span>
               </div>
@@ -151,21 +163,21 @@ export function StockMovementDrawer({
                 setDateTo('');
                 setPage(1);
               }}
-              className="text-[11px] text-primary hover:underline ml-1"
+              className="text-xs text-primary hover:underline ml-2"
             >
-              Reset
+              Reset Filter
             </button>
           )}
         </div>
 
-        {/* Movements Table / Content Area */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-3">
+        {/* Timeline Movement Content */}
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
           {isLoading ? (
             <div className="space-y-3">
-              <Skeleton className="h-12 w-full rounded-lg" />
-              <Skeleton className="h-12 w-full rounded-lg" />
-              <Skeleton className="h-12 w-full rounded-lg" />
-              <Skeleton className="h-12 w-full rounded-lg" />
+              <Skeleton className="h-14 w-full rounded-lg" />
+              <Skeleton className="h-14 w-full rounded-lg" />
+              <Skeleton className="h-14 w-full rounded-lg" />
+              <Skeleton className="h-14 w-full rounded-lg" />
             </div>
           ) : isError ? (
             <div className="p-4 rounded-lg bg-danger-bg text-danger-text text-xs border border-red-200">
@@ -175,7 +187,7 @@ export function StockMovementDrawer({
             <EmptyState
               icon={<History className="h-8 w-8 text-muted" />}
               title="Belum Ada Pergerakan Stok"
-              description="Belum ada riwayat transaksi, barang masuk, atau opname untuk item ini pada cabang aktif."
+              description="Belum ada riwayat penerimaan, pengeluaran, atau opname untuk bahan ini pada cabang aktif."
             />
           ) : (
             <div className="rounded-lg border border-border overflow-hidden">
@@ -240,20 +252,18 @@ export function StockMovementDrawer({
               <Button
                 variant="secondary"
                 size="sm"
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                onClick={() => setPage(Math.max(1, page - 1))}
                 disabled={page <= 1 || isLoading}
               >
-                <ChevronLeft className="h-4 w-4 mr-1" />
-                Sebelumnya
+                <ChevronLeft className="h-3.5 w-3.5" />
               </Button>
               <Button
                 variant="secondary"
                 size="sm"
-                onClick={() => setPage((p) => Math.min(meta.totalPages ?? 1, p + 1))}
-                disabled={page >= (meta.totalPages ?? 1) || isLoading}
+                onClick={() => setPage(page + 1)}
+                disabled={page >= meta.totalPages || isLoading}
               >
-                Berikutnya
-                <ChevronRight className="h-4 w-4 ml-1" />
+                <ChevronRight className="h-3.5 w-3.5" />
               </Button>
             </div>
           </div>

@@ -127,13 +127,6 @@ export function PosReceiptModal({
             <span>{formatRupiah(transaction.subtotal)}</span>
           </div>
 
-          {(parseFloat(transaction.discountAmount) || 0) > 0 && (
-            <div className="flex justify-between text-danger-text">
-              <span>Diskon {transaction.discountReason ? `(${transaction.discountReason})` : ''}</span>
-              <span>-{formatRupiah(transaction.discountAmount)}</span>
-            </div>
-          )}
-
           <div className="flex justify-between text-xs font-bold text-slate-900 pt-1">
             <span>TOTAL</span>
             <span>{formatRupiah(transaction.total)}</span>

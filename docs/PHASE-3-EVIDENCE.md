@@ -247,4 +247,61 @@ Semua komponen strictly memakai token semantik Tailwind dan dilarang memakai arb
 - **Linter & Build**: `pnpm lint` bersih (0 warning/error) & `pnpm build` sukses (34/34 routes aplikasi terkompilasi).
 - **Self-check Design System §25**: 0 pelanggaran token/hex hardcoded, 0 any di TypeScript.
 
+---
+
+## TUGAS 7: UI ABSENSI SELF-SERVICE & KOREKSI PRESENSI
+
+### 1. Keputusan Desain & Perilaku Bisnis
+- **Check-in / Check-out Mandiri**: Jam operasional cabang dievaluasi secara server-side (WIB). Badge status `PRESENT` (hijau) atau `LATE` (kuning) dihitung terhadap batas `lateAfter` cabang.
+- **Koreksi Presensi Eksklusif OWNER**: Modal koreksi jam masuk/keluar hanya dapat diakses oleh role `OWNER` dengan input alasan koreksi wajib minimal 10 karakter. Tercatat dalam audit log `ATTENDANCE_CORRECTED`.
+- **Riwayat Pribadi vs Rekap Tim**: Tab *Presensi Saya* untuk riwayat mandiri staf dan tab *Rekap Tim* untuk supervisi cabang oleh manager/owner.
+
+### 2. Hasil Verifikasi & Test Suite
+- **Phase 3 Task 7 Suite (`phase3-task7-test.mjs`)**: **19 PASSED / 0 FAILED (100%)**.
+- **Linter & Build**: Bersih tanpa error.
+
+---
+
+## TUGAS 8: MODUL CUTI / IZIN (LEAVE REQUESTS)
+
+### 1. Keputusan Desain & Aturan Bisnis Binding
+- **Kebijakan Pembatalan (CANCEL)**: *Hard delete* baris permohonan status `PENDING` oleh pengaju sendiri (Opsi 1 binding, nol perubahan enum/DDL). Slot tanggal kembali bebas untuk diajukan ulang.
+- **Self-Decision Guard**: Konsisten mengembalikan HTTP `403 FORBIDDEN` di layer service, route handler, dan test suite bila manajer mencoba memutuskan cuti diri sendiri.
+- **Pencegahan Tumpang-Tindih**: Deteksi bentrok jadwal mengembalikan `409 SCHEDULE_OVERLAP`.
+- **Toleransi Backdate**: Maksimal H-1 kalender WIB (kemarin). Pengajuan lebih lampau ditolak HTTP 400.
+- **Audit Logging**: Persetujuan/penolakan dicatat atomik dalam `$transaction` sebagai `LEAVE_APPROVED` atau `LEAVE_REJECTED`.
+
+### 2. Hasil Verifikasi & Test Suite
+- **Phase 3 Task 8 Suite (`phase3-task8-test.mjs`)**: **22 PASSED / 0 FAILED (100%)**.
+- **Linter & Build**: Bersih (`34/34 routes`).
+
+---
+
+## REKAPITULASI PENUTUPAN FASE 3 (8 TUGAS + 2 PERUBAHAN CLIENT)
+
+### Tabel Komitmen & Hash Commit Fase 3
+
+| No | Modul / Komponen Tugas | Lingkup Utama | Commit Hash |
+|:---:|:---|:---|:---:|
+| 1 | **Tugas 1: Fondasi Frontend** | Login, sesi JWT, shell role-aware, design token §18 | `4e74eda` / `43e0697` |
+| 2 | **Tugas 2: Halaman Kasir POS** | Katalog layanan POS, cart belanja, modal bayar | `23aa9b6` |
+| 3 | **Tugas 3: Halaman Tutup Kas** | Tutup kas harian, auto-hitung variance, reopen OWNER | `b4c0da4` |
+| 4 | **Tugas 4: Inventaris & Kartu Stok** | Mutasi stok, kartu stok 3 sumber, fix branch selector OWNER | `0d5559f` / `34fb1d1` |
+| 5 | **Tugas 5: Master Data Frontend** | Katalog Layanan, Bahan Medis, Kategori (Global/No branch) | `c7c1084` |
+| 6 | **Tugas 6: Manajemen Cabang & User** | CRUD Cabang, Karyawan, Akun User & relasi multi-cabang | `16c4bc6` |
+| 7 | **Client Change 1: Model Bisnis Layanan-Murni** | Migrasi destruktif, hapus produk & diskon, stock-out manual | `d1c422e` (A), `7adcd28` (B), `c8e7c03` (C) |
+| 8 | **Client Change 2: POS Price Override** | Kasir override harga satuan per item di keranjang POS | `9b77f2e` |
+| 9 | **Tugas 7: Absensi & Koreksi Presensi** | Self-service check-in/out, evaluasi lateAfter, koreksi OWNER | `80fdec5` |
+| 10 | **Tugas 8: Cuti & Izin (Leave Requests)** | Pengajuan cuti, cancel hard-delete, approval tim, guard 403 | `c12e883` |
+
+---
+
+### Status Akhir Kualitas Sistem (Rekonsiliasi 16 Suite Tunggal)
+
+- **Total Asersi Regresi 16 Suite**: **464 PASS / 0 FAIL (100% HIJAU)**
+- **Kompilasi TypeScript & Next.js (`pnpm build`)**: **34 / 34 Routes Sukses**
+- **Pemeriksaan Linter (`pnpm lint`)**: **0 Errors, 0 Warnings**
+- **Kepatuhan Desain Sistem (`docs/ui-design-system.md` §25)**: **0 Pelanggaran** (0 hardcoded hex, 0 komponen duplikat, format Rupiah & Asia/Jakarta konsisten)
+
+
 

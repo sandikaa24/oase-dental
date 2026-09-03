@@ -133,11 +133,7 @@ tidak boleh overlap dengan pengajuan PENDING/APPROVED milik sendiri
 | DELETE | /services/:id | OWNER — soft delete jika sudah dipakai transaksi (`mode: "soft"`), hard delete jika belum (`mode: "hard"`) |
 
 Create/Update body: `{ categoryId?, name, nameEn?, description?,
-descriptionEn?, price, durationMinutes?, active?, showOnPortal? }`
-
-### Products `[OWNER]`
-`GET/POST /products`, `GET/PATCH/DELETE /products/:id`
-Body: `{ name, sku, sellPrice, unit, minStock }`. Soft delete jika sudah dipakai transaksi/inventaris (`mode: "soft"`), hard delete jika belum (`mode: "hard"`).
+descriptionEn?, price, active?, showOnPortal? }`
 
 ### Materials `[OWNER]`
 `GET/POST /materials`, `GET/PATCH/DELETE /materials/:id`
@@ -149,16 +145,16 @@ Body: `{ name, sku, unit, minStock, isStockTracked }`. Soft delete jika sudah ad
 
 | Method | Path | Permission | Deskripsi |
 |---|---|---|---|
-| GET | /pos/catalog | POS_CREATE (OWNER, CASHIER), MANAGER | Katalog item jual (Layanan & Produk) beserta stok cabang aktif |
+| GET | /pos/catalog | POS_CREATE (OWNER, CASHIER), MANAGER | Katalog master layanan medis aktif |
 | GET | /transactions | OWNER, CASHIER | List branch aktif, filter `status`, `date`, `dateFrom/To`, `cashierId`, search `transactionNumber` |
-| POST | /transactions | OWNER, CASHIER | Create DRAFT |
+| POST | /transactions | OWNER, CASHIER | Create DRAFT (murni layanan) |
 | GET | /transactions/:id | OWNER, CASHIER | Detail + items + payments |
-| PATCH | /transactions/:id | OWNER, CASHIER | Edit DRAFT saja (items, patient info, discount) |
+| PATCH | /transactions/:id | OWNER, CASHIER | Edit DRAFT saja (items layanan, patient info) |
 | DELETE | /transactions/:id | OWNER, CASHIER | Buang DRAFT |
-| POST | /transactions/:id/pay | OWNER, CASHIER | Bayar → PAID (atomik) |
-| POST | /transactions/:id/cancel | OWNER | Cancel PAID `[OWNER]` |
+| POST | /transactions/:id/pay | OWNER, CASHIER | Bayar → PAID (atomik, tanpa mutasi stok) |
+| POST | /transactions/:id/cancel | OWNER | Cancel PAID `[OWNER]` (tanpa mutasi stok) |
 
-**GET /pos/catalog** (query: `?search=&type=SERVICE|PRODUCT&categoryId=`)
+**GET /pos/catalog** (query: `?search=&categoryId=`)
 Response 200:
 ```json
 {
@@ -172,44 +168,30 @@ Response 200:
       "stock": null,
       "unit": null,
       "category": { "id": "uuid", "name": "Perawatan Umum" }
-    },
-    {
-      "id": "uuid",
-      "name": "Sikat Gigi Khusus Ortho",
-      "type": "PRODUCT",
-      "price": "35000.00",
-      "stock": 18,
-      "unit": "pcs",
-      "category": null
     }
   ]
 }
 ```
-Field `stock` mencerminkan saldo `StockLevel` pada cabang aktif kasir. Produk/layanan yang nonaktif tidak dikembalikan. Dilarang mengekspos harga beli/cost atau field sensitif lainnya.
 
 **POST /transactions** (body; boleh langsung items tanpa DRAFT terpisah)
 ```json
 {
   "items": [
-    { "itemType": "SERVICE", "itemId": "uuid", "quantity": 1 },
-    { "itemType": "PRODUCT", "itemId": "uuid", "quantity": 2 }
+    { "itemId": "uuid", "quantity": 1 }
   ],
-  "patientName": null, "patientPhone": null,
-  "discountAmount": 0, "discountReason": null
+  "patientName": null,
+  "patientPhone": null
 }
 ```
-Server: snapshot name/price dari master, hitung subtotal/total.
-Stok TIDAK dikurangi saat DRAFT — hanya saat PAID.
+Server: snapshot name/price dari master layanan, hitung subtotal dan total (total = subtotal, tanpa diskon).
+Transaksi tidak menyentuh inventaris/stok.
 
 **POST /transactions/:id/pay**
 ```json
-{ "payments": [ { "method": "CASH", "amount": 150000 }, { "method": "QRIS_TRANSFER", "amount": 50000 } ] }
+{ "payments": [ { "method": "CASH", "amount": 150000 } ] }
 ```
 Rules (semua dalam SATU `$transaction`):
 - `sum(payments.amount) >= total`, else 400 `VALIDATION_ERROR`.
-- Cek stok semua PRODUCT → kurangi stok + buat movement `TRANSACTION`
-  (delta negatif, referenceId = transaction id). Kurang → 409
-  `INSUFFICIENT_STOCK`, rollback semua.
 - Update `NumberSequence` → `transactionNumber = TRX-YYYYMMDD-00001`.
 - Set status `PAID`, `paidAt`, `cashierId`.
 - Tolak jika periode sudah closing → 409 `CLOSING_PERIOD_LOCKED`.
@@ -219,8 +201,7 @@ Rules (semua dalam SATU `$transaction`):
 ```json
 { "reason": "string min 10 karakter" }
 ```
-Rules: hanya PAID. Atomik: status→CANCELLED, kembalikan stok (movement
-TRANSACTION delta positif), simpan cancelledBy/At/Reason, audit log.
+Rules: hanya PAID. Atomik: status→CANCELLED, simpan cancelledBy/At/Reason, audit log.
 409 `INVALID_TRANSACTION_STATE` jika bukan PAID.
 
 ---
@@ -229,9 +210,10 @@ TRANSACTION delta positif), simpan cancelledBy/At/Reason, audit log.
 
 | Method | Path | Permission | Deskripsi |
 |---|---|---|---|
-| GET | /inventory/stock | OWNER, MANAGER | Stok branch aktif (+ `?itemType`, `?lowStock=true`, OWNER: `?branchId`) |
+| GET | /inventory/stock | OWNER, MANAGER | Stok bahan branch aktif (+ `?lowStock=true`, OWNER: `?branchId`) |
 | GET | /inventory/stock/:itemType/:itemId/movements | OWNER, MANAGER | Kartu stok, filter tanggal, paginated (OWNER: `?branchId`) |
-| POST | /inventory/stock-in | OWNER, MANAGER | Barang masuk (multi item sekaligus) |
+| POST | /inventory/stock-in | OWNER, MANAGER | Bahan masuk (multi item sekaligus) |
+| POST | /inventory/stock-out | OWNER, MANAGER | Pengeluaran bahan manual (multi item, 409 jika stok kurang) |
 
 **POST /inventory/stock-in**
 ```json
@@ -242,7 +224,30 @@ TRANSACTION delta positif), simpan cancelledBy/At/Reason, audit log.
   "note": "Pembelian supplier X"
 }
 ```
-Atomik: movement `STOCK_IN` per item + update StockLevel.
+Atomik: movement `STOCK_IN` per item + update increment StockLevel.
+
+**POST /inventory/stock-out**
+```json
+{
+  "branchId": "uuid", // Opsional, hanya dipakai OWNER; non-OWNER diabaikan (branch dari JWT)
+  "items": [
+    {
+      "itemId": "uuid",
+      "quantity": 5,
+      "reasonType": "MANUAL_ADJUSTMENT" // MANUAL_ADJUSTMENT | DAMAGE | EXPIRED
+    }
+  ],
+  "note": "Pemakaian tindakan klinik"
+}
+```
+Rules (dalam SATU `$transaction`):
+- Role non-OWNER (`MANAGER`): input `branchId` diabaikan, wajib terkunci pada `activeBranchId` JWT.
+- Role `OWNER`: `branchId` opsional (fallback ke `activeBranchId`).
+- Validasi master bahan aktif.
+- Cek stok di `StockLevel`: jika `currentQty < quantity`, lempar 409 `INSUFFICIENT_STOCK`.
+- Update decrement `StockLevel.quantity`.
+- Catat `InventoryMovement`: `quantityDelta: -quantity`, `referenceType: reasonType`.
+- Response 201: `{ branchId, movements: [{ movementId, itemId, quantityDelta, currentStock, reasonType }] }`.
 
 ---
 

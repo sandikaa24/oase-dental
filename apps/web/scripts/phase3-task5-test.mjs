@@ -188,7 +188,6 @@ async function runSuite() {
       nameEn: `Scaling Tooth ${rnd}`,
       categoryId: catId,
       price: 250000,
-      durationMinutes: 45,
       description: 'Pembersihan karang gigi ultrasonik',
       showOnPortal: true,
       active: true,
@@ -205,7 +204,6 @@ async function runSuite() {
     headers: { 'Content-Type': 'application/json', Cookie: ownerAuth.cookies },
     body: JSON.stringify({
       price: updatedPrice,
-      durationMinutes: 60,
     }),
   });
   body = await res.json();
@@ -218,9 +216,9 @@ async function runSuite() {
   body = await res.json();
   const fetchedPrice = typeof body.data?.price === 'string' ? Math.round(Number(body.data.price)) : body.data?.price;
   assert(
-    res.status === 200 && fetchedPrice === updatedPrice && body.data?.durationMinutes === 60,
+    res.status === 200 && fetchedPrice === updatedPrice,
     'MD-2.3: Data hasil GET ulang persis cocok dengan field hasil PATCH',
-    `Price: ${fetchedPrice}, Duration: ${body.data?.durationMinutes}`
+    `Price: ${fetchedPrice}`
   );
 
   // PATCH tanpa perubahan -> 200 OK

@@ -19,13 +19,14 @@ async function main() {
   const ownerHash = await hashPassword(ownerPassword);
   const cashierHash = await hashPassword(ownerPassword);
 
-  await prisma.$transaction(async (tx) => {
-    // 1. OWNER pertama: tanpa employee, akses semua cabang
-    await tx.user.upsert({
-      where: { email: ownerEmail },
-      update: {},
-      create: { email: ownerEmail, passwordHash: ownerHash, role: 'OWNER' },
-    });
+  await prisma.$transaction(
+    async (tx) => {
+      // 1. OWNER pertama: tanpa employee, akses semua cabang
+      await tx.user.upsert({
+        where: { email: ownerEmail },
+        update: {},
+        create: { email: ownerEmail, passwordHash: ownerHash, role: 'OWNER' },
+      });
 
     // 2. Dua cabang
     const jkt = await tx.branch.upsert({
@@ -76,21 +77,18 @@ async function main() {
         name: 'Konsultasi Dokter Gigi',
         nameEn: 'Dental Consultation',
         price: '100000.00',
-        durationMinutes: 15,
         showOnPortal: true,
       },
       {
         name: 'Scaling Pembersihan Karang Gigi',
         nameEn: 'Teeth Scaling',
         price: '350000.00',
-        durationMinutes: 45,
         showOnPortal: true,
       },
       {
         name: 'Tambal Gigi',
         nameEn: 'Dental Filling',
         price: '250000.00',
-        durationMinutes: 30,
         showOnPortal: false,
       },
     ];
@@ -101,31 +99,6 @@ async function main() {
         await tx.service.create({ data: { ...svc, categoryId: kategori.id } });
       }
     }
-
-    // 4c. Dua produk jual
-    await tx.product.upsert({
-      where: { sku: 'PRD-PASTA-01' },
-      update: {},
-      create: {
-        name: 'Pasta Gigi Sensitif',
-        sku: 'PRD-PASTA-01',
-        sellPrice: '45000.00',
-        unit: 'tube',
-        minStock: 10,
-      },
-    });
-
-    await tx.product.upsert({
-      where: { sku: 'PRD-SIKAT-01' },
-      update: {},
-      create: {
-        name: 'Sikat Gigi Ortho',
-        sku: 'PRD-SIKAT-01',
-        sellPrice: '30000.00',
-        unit: 'pcs',
-        minStock: 15,
-      },
-    });
 
     // 4d. Dua bahan: tidak dijual, hanya dipakai dan distok
     await tx.material.upsert({
@@ -226,7 +199,7 @@ async function main() {
         sortOrder: 1,
       },
     });
-  });
+  }, { timeout: 30000, maxWait: 10000 });
 
   console.log('Seed selesai.');
   console.log('  OWNER   :', ownerEmail);

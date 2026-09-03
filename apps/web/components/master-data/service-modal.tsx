@@ -30,7 +30,6 @@ export function ServiceModal({
   const [nameEn, setNameEn] = useState('');
   const [categoryId, setCategoryId] = useState('');
   const [price, setPrice] = useState('');
-  const [durationMinutes, setDurationMinutes] = useState('');
   const [description, setDescription] = useState('');
   const [descriptionEn, setDescriptionEn] = useState('');
   const [showOnPortal, setShowOnPortal] = useState(false);
@@ -48,7 +47,6 @@ export function ServiceModal({
         setCategoryId(service.categoryId || '');
         const numPrice = typeof service.price === 'string' ? Math.round(Number(service.price)) : Math.round(service.price);
         setPrice(String(numPrice));
-        setDurationMinutes(service.durationMinutes ? String(service.durationMinutes) : '');
         setDescription(service.description || '');
         setDescriptionEn(service.descriptionEn || '');
         setShowOnPortal(service.showOnPortal);
@@ -58,7 +56,6 @@ export function ServiceModal({
         setNameEn('');
         setCategoryId(categories[0]?.id || '');
         setPrice('');
-        setDurationMinutes('30');
         setDescription('');
         setDescriptionEn('');
         setShowOnPortal(true);
@@ -72,11 +69,6 @@ export function ServiceModal({
   const handlePriceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const raw = sanitizeDigits(e.target.value);
     setPrice(raw);
-  };
-
-  const handleDurationChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const raw = sanitizeDigits(e.target.value);
-    setDurationMinutes(raw);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -102,7 +94,6 @@ export function ServiceModal({
         nameEn: nameEn.trim() || undefined,
         categoryId: categoryId || undefined,
         price: cleanPrice,
-        durationMinutes: durationMinutes.trim() ? parseInt(durationMinutes, 10) : undefined,
         description: description.trim() || undefined,
         descriptionEn: descriptionEn.trim() || undefined,
         showOnPortal,
@@ -187,33 +178,21 @@ export function ServiceModal({
           </div>
 
           {/* Kategori & Durasi */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-700">Kategori</label>
-              <select
-                value={categoryId}
-                onChange={(e) => setCategoryId(e.target.value)}
-                className="w-full h-9 px-3 rounded-md border border-border bg-white text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
-              >
-                <option value="">-- Tanpa Kategori --</option>
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name} {!c.active ? '(Nonaktif)' : ''}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-700">Durasi Estimasi (Menit)</label>
-              <Input
-                type="text"
-                inputMode="numeric"
-                placeholder="Contoh: 30"
-                value={durationMinutes}
-                onChange={handleDurationChange}
-                className="text-xs font-mono"
-              />
-            </div>
+          {/* Kategori */}
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-slate-700">Kategori</label>
+            <select
+              value={categoryId}
+              onChange={(e) => setCategoryId(e.target.value)}
+              className="w-full h-9 px-3 rounded-md border border-border bg-white text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+            >
+              <option value="">-- Tanpa Kategori --</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name} {!c.active ? '(Nonaktif)' : ''}
+                </option>
+              ))}
+            </select>
           </div>
 
           {/* Tarif Pasien (Rp) */}

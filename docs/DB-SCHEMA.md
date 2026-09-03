@@ -20,7 +20,7 @@ enum TransactionStatus { DRAFT PAID CANCELLED }
 
 enum PaymentMethod { CASH DEBIT QRIS_TRANSFER }
 
-enum ItemType { PRODUCT MATERIAL }
+enum ItemType { MATERIAL }
 
 enum MovementType { STOCK_IN TRANSACTION MANUAL_ADJUSTMENT DAMAGE EXPIRED OPNAME }
 
@@ -176,23 +176,10 @@ model Service {
   description String?
   descriptionEn String?
   price       Decimal   @db.Decimal(12, 2)
-  durationMinutes Int?
   active      Boolean @default(true)
   showOnPortal Boolean @default(false)
   deletedAt   DateTime?
   @@map("services")
-}
-
-model Product {
-  id        String  @id @default(uuid())
-  name      String
-  sku       String  @unique
-  sellPrice Decimal @db.Decimal(12, 2)
-  unit      String
-  minStock  Int     @default(0)
-  active    Boolean @default(true)
-  deletedAt DateTime?
-  @@map("products")
 }
 
 model Material {
@@ -217,34 +204,26 @@ model Transaction {
   patientPhone    String?
   status          TransactionStatus @default(DRAFT)
   subtotal        Decimal @db.Decimal(12, 2)
-  discountAmount  Decimal @default(0) @db.Decimal(12, 2)
-  discountReason  String?
   total           Decimal @db.Decimal(12, 2)
   transactionDate DateTime // server time (operasional)
   paidAt          DateTime?
   cancelledAt     DateTime?
   cancelledBy     String?
   cancellationReason String?
-  createdAtByFlow String? // reserved, jangan dipakai
   items           TransactionItem[]
   payments        TransactionPayment[]
   @@index([branchId, transactionDate])
   @@map("transactions")
 }
-// CATATAN: hapus field `createdAtBy` jika tidak dipakai —
-// hanya placeholder; tabel wajib punya createdAt/updatedAt standar.
 
 model TransactionItem {
   id            String  @id @default(uuid())
   transactionId String
   transaction   Transaction @relation(fields: [transactionId], references: [id])
-  itemType      ItemType
-  serviceId     String?
-  productId     String?
-  itemId        String  // uuid dari service atau product (snapshot reference)
+  serviceId     String
+  itemId        String  // uuid dari service (snapshot reference)
   name          String  // SNAPSHOT
   nameEn        String? // SNAPSHOT (service)
-  unit          String? // SNAPSHOT (product)
   price         Decimal @db.Decimal(12, 2) // SNAPSHOT
   quantity      Int
   lineTotal     Decimal @db.Decimal(12, 2)
@@ -267,7 +246,6 @@ model InventoryMovement {
   branchId      String
   branch        Branch @relation(fields: [branchId], references: [id])
   itemType      ItemType
-  productId     String?
   materialId    String?
   itemId        String
   quantityDelta Int    // positif = masuk, negatif = keluar

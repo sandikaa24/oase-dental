@@ -5,9 +5,11 @@ import {
   ValidationError,
   ForbiddenError,
   ConflictError,
+  InsufficientStockError,
 } from '@/lib/errors';
 import type {
   StockInInput,
+  StockOutInput,
   StockListQueryInput,
   MovementListQueryInput,
   CreateStockOpnameInput,
@@ -17,7 +19,7 @@ import type {
 
 /**
  * GET /api/v1/inventory/stock
- * Menampilkan daftar stok per cabang + master join + minStock comparison
+ * Menampilkan daftar stok bahan medis per cabang + master join + minStock comparison
  */
 export async function listStock(
   query: StockListQueryInput,
@@ -34,21 +36,6 @@ export async function listStock(
     targetBranchId = activeBranchId;
   }
 
-  // Ambil data produk master
-  const fetchProducts = !query.itemType || query.itemType === 'PRODUCT';
-  const fetchMaterials = !query.itemType || query.itemType === 'MATERIAL';
-
-  const productWhere: Prisma.ProductWhereInput = {
-    deletedAt: null,
-    active: true,
-  };
-  if (query.search) {
-    productWhere.OR = [
-      { name: { contains: query.search, mode: 'insensitive' } },
-      { sku: { contains: query.search, mode: 'insensitive' } },
-    ];
-  }
-
   const materialWhere: Prisma.MaterialWhereInput = {
     deletedAt: null,
     active: true,
@@ -60,18 +47,17 @@ export async function listStock(
     ];
   }
 
-  const [products, materials] = await Promise.all([
-    fetchProducts ? prisma.product.findMany({ where: productWhere }) : [],
-    fetchMaterials ? prisma.material.findMany({ where: materialWhere }) : [],
-  ]);
+  const materials = await prisma.material.findMany({
+    where: materialWhere,
+    orderBy: { name: 'asc' },
+  });
 
   // Ambil stok di StockLevel untuk cabang target (jika targetBranchId null untuk OWNER, ambil semua)
-  const stockLevelWhere: Prisma.StockLevelWhereInput = {};
+  const stockLevelWhere: Prisma.StockLevelWhereInput = {
+    itemType: 'MATERIAL',
+  };
   if (targetBranchId) {
     stockLevelWhere.branchId = targetBranchId;
-  }
-  if (query.itemType) {
-    stockLevelWhere.itemType = query.itemType;
   }
 
   const stockLevels = await prisma.stockLevel.findMany({
@@ -83,7 +69,7 @@ export async function listStock(
 
   const stockMap = new Map<string, { quantity: number; branchName?: string; branchCode?: string; branchId?: string }>();
   for (const sl of stockLevels) {
-    const key = `${sl.branchId}_${sl.itemType}_${sl.itemId}`;
+    const key = `${sl.branchId}_MATERIAL_${sl.itemId}`;
     stockMap.set(key, {
       quantity: sl.quantity,
       branchName: sl.branch.name,
@@ -92,13 +78,12 @@ export async function listStock(
     });
   }
 
-  // Gabungkan master + stock level
   type StockItemResult = {
     id: string;
     branchId: string | null;
     branchCode: string | null;
     branchName: string | null;
-    itemType: 'PRODUCT' | 'MATERIAL';
+    itemType: 'MATERIAL';
     itemId: string;
     name: string;
     sku: string;
@@ -118,130 +103,78 @@ export async function listStock(
       select: { id: true, code: true, name: true },
     });
 
-    if (fetchProducts) {
-      for (const p of products) {
-        const key = `${targetBranchId}_PRODUCT_${p.id}`;
-        const sl = stockMap.get(key);
-        const qty = sl ? sl.quantity : 0;
-        const isLow = qty < p.minStock;
+    for (const m of materials) {
+      const key = `${targetBranchId}_MATERIAL_${m.id}`;
+      const sl = stockMap.get(key);
+      const qty = sl ? sl.quantity : 0;
+      const isLow = qty < m.minStock;
 
-        if (query.lowStock && !isLow) continue;
+      if (query.lowStock && !isLow) continue;
 
-        results.push({
-          id: p.id,
-          branchId: targetBranchId,
-          branchCode: branch?.code ?? null,
-          branchName: branch?.name ?? null,
-          itemType: 'PRODUCT',
-          itemId: p.id,
-          name: p.name,
-          sku: p.sku,
-          unit: p.unit,
-          minStock: p.minStock,
-          quantity: qty,
-          isLowStock: isLow,
-        });
-      }
-    }
-
-    if (fetchMaterials) {
-      for (const m of materials) {
-        const key = `${targetBranchId}_MATERIAL_${m.id}`;
-        const sl = stockMap.get(key);
-        const qty = sl ? sl.quantity : 0;
-        const isLow = qty < m.minStock;
-
-        if (query.lowStock && !isLow) continue;
-
-        results.push({
-          id: m.id,
-          branchId: targetBranchId,
-          branchCode: branch?.code ?? null,
-          branchName: branch?.name ?? null,
-          itemType: 'MATERIAL',
-          itemId: m.id,
-          name: m.name,
-          sku: m.sku,
-          unit: m.unit,
-          minStock: m.minStock,
-          quantity: qty,
-          isLowStock: isLow,
-          isStockTracked: m.isStockTracked,
-        });
-      }
+      results.push({
+        id: m.id,
+        branchId: targetBranchId,
+        branchCode: branch?.code ?? null,
+        branchName: branch?.name ?? null,
+        itemType: 'MATERIAL',
+        itemId: m.id,
+        name: m.name,
+        sku: m.sku,
+        unit: m.unit,
+        minStock: m.minStock,
+        quantity: qty,
+        isLowStock: isLow,
+        isStockTracked: m.isStockTracked,
+      });
     }
   } else {
     // OWNER tanpa filter branch: kumpulkan per record StockLevel
     for (const sl of stockLevels) {
-      if (sl.itemType === 'PRODUCT') {
-        const p = products.find((prod) => prod.id === sl.itemId);
-        if (!p) continue;
-        const isLow = sl.quantity < p.minStock;
-        if (query.lowStock && !isLow) continue;
-        results.push({
-          id: `${sl.branchId}_${p.id}`,
-          branchId: sl.branchId,
-          branchCode: sl.branch.code,
-          branchName: sl.branch.name,
-          itemType: 'PRODUCT',
-          itemId: p.id,
-          name: p.name,
-          sku: p.sku,
-          unit: p.unit,
-          minStock: p.minStock,
-          quantity: sl.quantity,
-          isLowStock: isLow,
-        });
-      } else if (sl.itemType === 'MATERIAL') {
-        const m = materials.find((mat) => mat.id === sl.itemId);
-        if (!m) continue;
-        const isLow = sl.quantity < m.minStock;
-        if (query.lowStock && !isLow) continue;
-        results.push({
-          id: `${sl.branchId}_${m.id}`,
-          branchId: sl.branchId,
-          branchCode: sl.branch.code,
-          branchName: sl.branch.name,
-          itemType: 'MATERIAL',
-          itemId: m.id,
-          name: m.name,
-          sku: m.sku,
-          unit: m.unit,
-          minStock: m.minStock,
-          quantity: sl.quantity,
-          isLowStock: isLow,
-          isStockTracked: m.isStockTracked,
-        });
-      }
+      const m = materials.find((mat) => mat.id === sl.itemId);
+      if (!m) continue;
+      const isLow = sl.quantity < m.minStock;
+      if (query.lowStock && !isLow) continue;
+
+      results.push({
+        id: m.id,
+        branchId: sl.branch.id,
+        branchCode: sl.branch.code,
+        branchName: sl.branch.name,
+        itemType: 'MATERIAL',
+        itemId: m.id,
+        name: m.name,
+        sku: m.sku,
+        unit: m.unit,
+        minStock: m.minStock,
+        quantity: sl.quantity,
+        isLowStock: isLow,
+        isStockTracked: m.isStockTracked,
+      });
     }
   }
 
-  // Sort by name
-  results.sort((a, b) => a.name.localeCompare(b.name));
-
+  // Pagination in-memory
   const total = results.length;
-  const page = query.page;
-  const limit = query.limit;
-  const totalPages = Math.ceil(total / limit) || 1;
-  const paginatedData = results.slice((page - 1) * limit, page * limit);
+  const skip = (query.page - 1) * query.limit;
+  const paginated = results.slice(skip, skip + query.limit);
 
   return {
-    data: paginatedData,
+    data: paginated,
     meta: {
       total,
-      page,
-      limit,
-      totalPages,
+      page: query.page,
+      limit: query.limit,
+      totalPages: Math.ceil(total / query.limit),
     },
   };
 }
 
 /**
  * GET /api/v1/inventory/stock/:itemType/:itemId/movements
- * Kartu stok per item per cabang
+ * Kartu stok per item per cabang (Khusus Bahan Medis)
  */
 export async function getStockMovements(
-  itemType: 'PRODUCT' | 'MATERIAL',
+  _itemType: string,
   itemId: string,
   query: MovementListQueryInput,
   role: UserRole,
@@ -261,32 +194,18 @@ export async function getStockMovements(
     throw new ValidationError('Cabang harus ditentukan untuk melihat kartu stok');
   }
 
-  // Verifikasi item exist
-  let itemName = '';
-  let itemSku = '';
-  let itemUnit = '';
-
-  if (itemType === 'PRODUCT') {
-    const product = await prisma.product.findUnique({ where: { id: itemId } });
-    if (!product || product.deletedAt) {
-      throw new NotFoundError('Produk tidak ditemukan');
-    }
-    itemName = product.name;
-    itemSku = product.sku;
-    itemUnit = product.unit;
-  } else {
-    const material = await prisma.material.findUnique({ where: { id: itemId } });
-    if (!material || material.deletedAt) {
-      throw new NotFoundError('Bahan tidak ditemukan');
-    }
-    itemName = material.name;
-    itemSku = material.sku;
-    itemUnit = material.unit;
+  // Verifikasi bahan exist
+  const material = await prisma.material.findUnique({ where: { id: itemId } });
+  if (!material || material.deletedAt) {
+    throw new NotFoundError('Bahan tidak ditemukan');
   }
+  const itemName = material.name;
+  const itemSku = material.sku;
+  const itemUnit = material.unit;
 
   const where: Prisma.InventoryMovementWhereInput = {
     branchId: targetBranchId,
-    itemType,
+    itemType: 'MATERIAL',
     itemId,
   };
 
@@ -312,19 +231,17 @@ export async function getStockMovements(
       where: {
         branchId_itemType_itemId: {
           branchId: targetBranchId,
-          itemType,
+          itemType: 'MATERIAL',
           itemId,
         },
       },
     }),
   ]);
 
-  const totalPages = Math.ceil(total / query.limit) || 1;
-
   return {
     item: {
-      id: itemId,
-      itemType,
+      itemId,
+      itemType: 'MATERIAL',
       name: itemName,
       sku: itemSku,
       unit: itemUnit,
@@ -332,12 +249,9 @@ export async function getStockMovements(
     },
     data: movements.map((m) => ({
       id: m.id,
-      branchId: m.branchId,
-      itemType: m.itemType,
-      itemId: m.itemId,
-      quantityDelta: m.quantityDelta,
       referenceType: m.referenceType,
       referenceId: m.referenceId,
+      quantityDelta: m.quantityDelta,
       notes: m.notes,
       createdBy: m.createdBy,
       createdAt: m.createdAt.toISOString(),
@@ -346,14 +260,16 @@ export async function getStockMovements(
       total,
       page: query.page,
       limit: query.limit,
-      totalPages,
+      totalPages: Math.ceil(total / query.limit),
     },
   };
 }
 
 /**
  * POST /api/v1/inventory/stock-in
- * Barang masuk multi-item sekaligus (atomik)
+ * Catat penerimaan barang masuk (Stock In)
+ * Pola Tugas 4: role non-OWNER -> abaikan input.branchId, selalu gunakan activeBranchId.
+ * OWNER -> gunakan input.branchId, fallback ke activeBranchId.
  */
 export async function stockIn(
   input: StockInInput,
@@ -379,20 +295,11 @@ export async function stockIn(
     throw new ValidationError('Cabang tidak ditemukan atau sudah tidak aktif');
   }
 
-  // Verifikasi semua itemId di master
-  if (input.itemType === 'PRODUCT') {
-    for (const it of input.items) {
-      const prod = await prisma.product.findUnique({ where: { id: it.itemId } });
-      if (!prod || prod.deletedAt || !prod.active) {
-        throw new NotFoundError(`Produk dengan ID "${it.itemId}" tidak ditemukan atau nonaktif`);
-      }
-    }
-  } else {
-    for (const it of input.items) {
-      const mat = await prisma.material.findUnique({ where: { id: it.itemId } });
-      if (!mat || mat.deletedAt || !mat.active) {
-        throw new NotFoundError(`Bahan dengan ID "${it.itemId}" tidak ditemukan atau nonaktif`);
-      }
+  // Verifikasi semua itemId di master material
+  for (const it of input.items) {
+    const mat = await prisma.material.findUnique({ where: { id: it.itemId } });
+    if (!mat || mat.deletedAt || !mat.active) {
+      throw new NotFoundError(`Bahan dengan ID "${it.itemId}" tidak ditemukan atau nonaktif`);
     }
   }
 
@@ -405,14 +312,14 @@ export async function stockIn(
       const stockLevel = await tx.stockLevel.upsert({
         where: {
           branchId_itemType_itemId: {
-            branchId: targetBranchId,
-            itemType: input.itemType,
+            branchId: targetBranchId!,
+            itemType: 'MATERIAL',
             itemId: it.itemId,
           },
         },
         create: {
-          branchId: targetBranchId,
-          itemType: input.itemType,
+          branchId: targetBranchId!,
+          itemType: 'MATERIAL',
           itemId: it.itemId,
           quantity: it.quantity,
         },
@@ -431,10 +338,9 @@ export async function stockIn(
       // 2. Catat InventoryMovement
       const movement = await tx.inventoryMovement.create({
         data: {
-          branchId: targetBranchId,
-          itemType: input.itemType,
-          productId: input.itemType === 'PRODUCT' ? it.itemId : null,
-          materialId: input.itemType === 'MATERIAL' ? it.itemId : null,
+          branchId: targetBranchId!,
+          itemType: 'MATERIAL',
+          materialId: it.itemId,
           itemId: it.itemId,
           quantityDelta: it.quantity,
           referenceType: 'STOCK_IN',
@@ -457,26 +363,153 @@ export async function stockIn(
         actorId: userId,
         action: 'CREATE',
         entity: 'StockIn',
-        entityId: createdMovements[0]?.movementId ?? targetBranchId,
+        entityId: createdMovements[0]?.movementId ?? targetBranchId!,
         after: {
           branchId: targetBranchId,
-          itemType: input.itemType,
+          itemType: 'MATERIAL',
           itemCount: input.items.length,
           note: input.note,
         },
         ip,
-        note: `Stock-in ${input.items.length} item ${input.itemType}`,
+        note: `Stock-in ${input.items.length} item material`,
       },
     });
 
-    return createdMovements;
+    return {
+      branchId: targetBranchId,
+      movements: createdMovements,
+    };
   });
 
-  return {
-    branchId: targetBranchId,
-    itemType: input.itemType,
-    items: result,
-  };
+  return result;
+}
+
+/**
+ * POST /api/v1/inventory/stock-out
+ * Catat pengeluaran stok bahan manual (MANUAL_ADJUSTMENT, DAMAGE, EXPIRED).
+ * Pola Tugas 4: role non-OWNER -> abaikan input.branchId, selalu gunakan activeBranchId.
+ * OWNER -> gunakan input.branchId, fallback ke activeBranchId.
+ * Kurang stok -> 409 INSUFFICIENT_STOCK.
+ */
+export async function stockOut(
+  input: StockOutInput,
+  userId: string,
+  role: UserRole,
+  activeBranchId: string | null,
+  ip: string | null
+) {
+  let targetBranchId: string | null = null;
+  if (role === 'OWNER') {
+    targetBranchId = input.branchId ?? activeBranchId ?? null;
+  } else {
+    targetBranchId = activeBranchId; // non-OWNER: input client diabaikan
+  }
+
+  if (!targetBranchId) {
+    throw new ValidationError('Branch aktif atau branchId diperlukan untuk pengeluaran barang');
+  }
+
+  // Verifikasi cabang
+  const branch = await prisma.branch.findUnique({ where: { id: targetBranchId } });
+  if (!branch || !branch.active) {
+    throw new ValidationError('Cabang tidak ditemukan atau sudah tidak aktif');
+  }
+
+  // Verifikasi semua itemId di master material
+  for (const it of input.items) {
+    const mat = await prisma.material.findUnique({ where: { id: it.itemId } });
+    if (!mat || mat.deletedAt || !mat.active) {
+      throw new NotFoundError(`Bahan dengan ID "${it.itemId}" tidak ditemukan atau nonaktif`);
+    }
+  }
+
+  // Eksekusi atomik
+  const result = await prisma.$transaction(async (tx) => {
+    const createdMovements = [];
+
+    for (const it of input.items) {
+      // Cek ketersediaan stok di StockLevel
+      const stock = await tx.stockLevel.findUnique({
+        where: {
+          branchId_itemType_itemId: {
+            branchId: targetBranchId!,
+            itemType: 'MATERIAL',
+            itemId: it.itemId,
+          },
+        },
+      });
+
+      const currentQty = stock?.quantity ?? 0;
+      if (currentQty < it.quantity) {
+        const mat = await tx.material.findUnique({ where: { id: it.itemId } });
+        throw new InsufficientStockError(
+          `Stok untuk bahan "${mat?.name || it.itemId}" tidak mencukupi (tersedia: ${currentQty}, diminta: ${it.quantity})`
+        );
+      }
+
+      // 1. Kurangi stok di StockLevel
+      const updatedStock = await tx.stockLevel.update({
+        where: {
+          branchId_itemType_itemId: {
+            branchId: targetBranchId!,
+            itemType: 'MATERIAL',
+            itemId: it.itemId,
+          },
+        },
+        data: {
+          quantity: { decrement: it.quantity },
+        },
+      });
+
+      // 2. Catat InventoryMovement dengan quantityDelta negatif
+      const movement = await tx.inventoryMovement.create({
+        data: {
+          branchId: targetBranchId!,
+          itemType: 'MATERIAL',
+          materialId: it.itemId,
+          itemId: it.itemId,
+          quantityDelta: -it.quantity,
+          referenceType: it.reasonType,
+          notes: input.note || null,
+          createdBy: userId,
+        },
+      });
+
+      createdMovements.push({
+        movementId: movement.id,
+        itemId: it.itemId,
+        quantityDelta: -it.quantity,
+        currentStock: updatedStock.quantity,
+        reasonType: it.reasonType,
+      });
+    }
+
+    // Audit log
+    await tx.auditLog.create({
+      data: {
+        actorId: userId,
+        action: 'CREATE',
+        entity: 'StockOut',
+        entityId: createdMovements[0]?.movementId ?? targetBranchId!,
+        after: {
+          branchId: targetBranchId,
+          itemType: 'MATERIAL',
+          itemCount: input.items.length,
+          note: input.note,
+          movements: createdMovements,
+        },
+        ip,
+        note: `Stock-out ${input.items.length} item material`,
+      },
+    });
+
+    return {
+      branchId: targetBranchId,
+      movements: createdMovements,
+    };
+  });
+
+  return result;
 }
 
 /**
@@ -493,7 +526,7 @@ export async function listStockOpnames(
     targetBranchId = query.branchId ?? activeBranchId ?? null;
   } else {
     if (!activeBranchId) {
-      throw new ValidationError('Branch aktif diperlukan untuk melihat data stock opname');
+      throw new ValidationError('Branch aktif diperlukan untuk melihat stock opname');
     }
     targetBranchId = activeBranchId;
   }
@@ -502,20 +535,22 @@ export async function listStockOpnames(
   if (targetBranchId) {
     where.branchId = targetBranchId;
   }
+
   if (query.status) {
     where.status = query.status;
   }
+
   if (query.dateFrom || query.dateTo) {
     where.opnameDate = {};
     if (query.dateFrom) {
       where.opnameDate.gte = new Date(`${query.dateFrom}T00:00:00.000Z`);
     }
     if (query.dateTo) {
-      where.opnameDate.lte = new Date(`${query.dateTo}T23:59:59.999Z`);
+      where.opnameDate.lte = new Date(`${query.dateTo}T00:00:00.000Z`);
     }
   }
 
-  const [total, opnames] = await Promise.all([
+  const [total, data] = await Promise.all([
     prisma.stockOpname.count({ where }),
     prisma.stockOpname.findMany({
       where,
@@ -529,20 +564,20 @@ export async function listStockOpnames(
     }),
   ]);
 
-  const totalPages = Math.ceil(total / query.limit) || 1;
+  const totalPages = Math.ceil(total / query.limit);
 
   return {
-    data: opnames.map((o) => ({
-      id: o.id,
-      branchId: o.branchId,
-      branchCode: o.branch.code,
-      branchName: o.branch.name,
-      opnameDate: o.opnameDate.toISOString().split('T')[0],
-      status: o.status,
-      itemCount: o.items.length,
-      submittedAt: o.submittedAt ? o.submittedAt.toISOString() : null,
-      submittedBy: o.submittedBy,
-      createdAt: o.createdAt.toISOString(),
+    data: data.map((op) => ({
+      id: op.id,
+      branchId: op.branchId,
+      branchCode: op.branch.code,
+      branchName: op.branch.name,
+      opnameDate: op.opnameDate.toISOString().split('T')[0],
+      status: op.status,
+      totalItems: op.items.length,
+      submittedAt: op.submittedAt ? op.submittedAt.toISOString() : null,
+      submittedBy: op.submittedBy,
+      createdAt: op.createdAt.toISOString(),
     })),
     meta: {
       total,
@@ -555,7 +590,7 @@ export async function listStockOpnames(
 
 /**
  * POST /api/v1/stock-opnames
- * Create DRAFT Stock Opname + snapshot systemQty semua item aktif branch
+ * Create DRAFT Stock Opname + snapshot systemQty semua bahan aktif branch
  */
 export async function createStockOpname(
   input: CreateStockOpnameInput,
@@ -593,16 +628,13 @@ export async function createStockOpname(
     );
   }
 
-  // Snapshot master items & current StockLevel
-  const items =
-    input.itemType === 'PRODUCT'
-      ? await prisma.product.findMany({ where: { deletedAt: null, active: true } })
-      : await prisma.material.findMany({ where: { deletedAt: null, active: true } });
+  // Snapshot master materials & current StockLevel
+  const materials = await prisma.material.findMany({ where: { deletedAt: null, active: true } });
 
   const stockLevels = await prisma.stockLevel.findMany({
     where: {
       branchId: targetBranchId,
-      itemType: input.itemType,
+      itemType: 'MATERIAL',
     },
   });
 
@@ -611,10 +643,10 @@ export async function createStockOpname(
     stockMap.set(sl.itemId, sl.quantity);
   }
 
-  const opnameItemsData = items.map((item) => {
+  const opnameItemsData = materials.map((item) => {
     const sysQty = stockMap.get(item.id) ?? 0;
     return {
-      itemType: input.itemType,
+      itemType: 'MATERIAL' as const,
       itemId: item.id,
       systemQty: sysQty,
       physicalQty: sysQty, // Default awal sama dengan systemQty
@@ -644,13 +676,13 @@ export async function createStockOpname(
     branchName: created.branch.name,
     opnameDate: created.opnameDate.toISOString().split('T')[0],
     status: created.status,
-    itemType: input.itemType,
+    itemType: 'MATERIAL',
     items: created.items.map((it) => ({
       id: it.id,
       itemId: it.itemId,
-      itemType: it.itemType,
       systemQty: it.systemQty,
       physicalQty: it.physicalQty,
+      difference: 0,
       note: it.note,
     })),
     createdAt: created.createdAt.toISOString(),
@@ -682,15 +714,11 @@ export async function getStockOpnameById(
     throw new ForbiddenError('Akses ditolak untuk stock opname cabang lain');
   }
 
-  // Join nama item dari master
+  // Join nama item dari master material
   const itemIds = opname.items.map((i) => i.itemId);
-  const [products, materials] = await Promise.all([
-    prisma.product.findMany({ where: { id: { in: itemIds } } }),
-    prisma.material.findMany({ where: { id: { in: itemIds } } }),
-  ]);
+  const materials = await prisma.material.findMany({ where: { id: { in: itemIds } } });
 
   const nameMap = new Map<string, { name: string; sku: string; unit: string }>();
-  for (const p of products) nameMap.set(p.id, { name: p.name, sku: p.sku, unit: p.unit });
   for (const m of materials) nameMap.set(m.id, { name: m.name, sku: m.sku, unit: m.unit });
 
   return {
@@ -747,23 +775,23 @@ export async function updateStockOpname(
   if (existing.status !== 'DRAFT') {
     throw new ConflictError(
       'Hanya stock opname berstatus DRAFT yang dapat diedit',
-      'INVALID_TRANSACTION_STATE'
+      'OPNAME_ALREADY_SUBMITTED'
     );
   }
 
-  // Update physicalQty & note per item
+  // Update physicalQty and note per item
   await prisma.$transaction(async (tx) => {
-    for (const updateIt of input.items) {
-      const itemRow = existing.items.find((i) => i.itemId === updateIt.itemId);
-      if (itemRow) {
-        await tx.stockOpnameItem.update({
-          where: { id: itemRow.id },
-          data: {
-            physicalQty: updateIt.physicalQty,
-            note: updateIt.note !== undefined ? updateIt.note : itemRow.note,
-          },
-        });
-      }
+    for (const updateItem of input.items) {
+      await tx.stockOpnameItem.updateMany({
+        where: {
+          opnameId: id,
+          itemId: updateItem.itemId,
+        },
+        data: {
+          physicalQty: updateItem.physicalQty,
+          note: updateItem.note || null,
+        },
+      });
     }
   });
 
@@ -772,7 +800,7 @@ export async function updateStockOpname(
 
 /**
  * POST /api/v1/stock-opnames/:id/submit
- * Finalisasi DRAFT -> SUBMITTED (Atomik update StockLevel & create InventoryMovement OPNAME)
+ * Submit stock opname: kunci status, terapkan delta ke StockLevel, buat InventoryMovement
  */
 export async function submitStockOpname(
   id: string,
@@ -794,37 +822,20 @@ export async function submitStockOpname(
     throw new ForbiddenError('Akses ditolak untuk stock opname cabang lain');
   }
 
-  if (existing.status !== 'DRAFT') {
+  if (existing.status === 'SUBMITTED') {
     throw new ConflictError(
-      'Stock opname sudah di-submit sebelumnya',
-      'INVALID_TRANSACTION_STATE'
+      'Stock opname sudah di-submit dan tidak dapat diubah lagi',
+      'OPNAME_ALREADY_SUBMITTED'
     );
   }
 
-  // Eksekusi atomik
+  // Eksekusi atomik dalam $transaction
   await prisma.$transaction(async (tx) => {
-    // 1. Verifikasi apakah ada item yang penyesuaiannya membuat stok menjadi negatif
+    // 1. Validasi stok akhir tidak boleh negatif
     for (const it of existing.items) {
-      const delta = it.physicalQty - it.systemQty;
-      if (delta === 0) continue;
-
-      const currentStock = await tx.stockLevel.findUnique({
-        where: {
-          branchId_itemType_itemId: {
-            branchId: existing.branchId,
-            itemType: it.itemType,
-            itemId: it.itemId,
-          },
-        },
-      });
-
-      const currentQty = currentStock ? currentStock.quantity : 0;
-      const targetQty = currentQty + delta;
-
-      if (targetQty < 0) {
-        throw new ConflictError(
-          `Penyesuaian stok opname menyebabkan stok negatif untuk item ID "${it.itemId}" (stok saat ini: ${currentQty}, delta: ${delta})`,
-          'INSUFFICIENT_STOCK'
+      if (it.physicalQty < 0) {
+        throw new ValidationError(
+          `Stok fisik untuk item ${it.itemId} tidak boleh bernilai negatif`
         );
       }
     }
@@ -857,8 +868,7 @@ export async function submitStockOpname(
         data: {
           branchId: existing.branchId,
           itemType: it.itemType,
-          productId: it.itemType === 'PRODUCT' ? it.itemId : null,
-          materialId: it.itemType === 'MATERIAL' ? it.itemId : null,
+          materialId: it.itemId,
           itemId: it.itemId,
           quantityDelta: delta,
           referenceType: 'OPNAME',

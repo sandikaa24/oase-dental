@@ -7,7 +7,7 @@ import { z } from 'zod';
 export const stockInSchema = z
   .object({
     branchId: z.string().uuid({ message: 'branchId harus UUID yang valid' }).optional(),
-    itemType: z.enum(['PRODUCT', 'MATERIAL']),
+    itemType: z.enum(['MATERIAL']).default('MATERIAL'),
     items: z
       .array(
         z.object({
@@ -24,13 +24,35 @@ export const stockInSchema = z
 export type StockInInput = z.infer<typeof stockInSchema>;
 
 /**
+ * Validasi untuk Stock-out (API-CONTRACT §9)
+ * POST /api/v1/inventory/stock-out
+ */
+export const stockOutSchema = z
+  .object({
+    branchId: z.string().uuid({ message: 'branchId harus UUID yang valid' }).optional(),
+    items: z
+      .array(
+        z.object({
+          itemId: z.string().uuid({ message: 'itemId harus UUID yang valid' }),
+          quantity: z.number().int().positive({ message: 'quantity harus bilangan bulat positif' }),
+          reasonType: z.enum(['MANUAL_ADJUSTMENT', 'DAMAGE', 'EXPIRED']),
+        })
+      )
+      .min(1, { message: 'items tidak boleh kosong' }),
+    note: z.string().optional().nullable(),
+  })
+  .strict();
+
+export type StockOutInput = z.infer<typeof stockOutSchema>;
+
+/**
  * Validasi Query List Stok (API-CONTRACT §9)
  * GET /api/v1/inventory/stock
  */
 export const stockListQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(20),
-  itemType: z.enum(['PRODUCT', 'MATERIAL']).optional(),
+  itemType: z.enum(['MATERIAL']).optional(),
   lowStock: z.preprocess((val) => {
     if (val === 'true') return true;
     if (val === 'false') return false;
@@ -64,7 +86,7 @@ export const createStockOpnameSchema = z
   .object({
     branchId: z.string().uuid({ message: 'branchId harus UUID yang valid' }).optional(),
     opnameDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'opnameDate harus format YYYY-MM-DD'),
-    itemType: z.enum(['PRODUCT', 'MATERIAL']),
+    itemType: z.enum(['MATERIAL']).default('MATERIAL'),
     note: z.string().optional().nullable(),
   })
   .strict();

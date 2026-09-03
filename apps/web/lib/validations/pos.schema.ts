@@ -1,11 +1,11 @@
 import { z } from 'zod';
 
-const itemTypeEnum = z.enum(['SERVICE', 'PRODUCT']);
+const itemTypeEnum = z.enum(['SERVICE']);
 const paymentMethodEnum = z.enum(['CASH', 'DEBIT', 'QRIS_TRANSFER']);
 const transactionStatusEnum = z.enum(['DRAFT', 'PAID', 'CANCELLED']);
 
 export const transactionItemInputSchema = z.object({
-  itemType: itemTypeEnum,
+  itemType: itemTypeEnum.optional().default('SERVICE'),
   itemId: z.string().uuid('itemId harus berupa UUID valid'),
   quantity: z.number().int().min(1, 'Quantity minimal 1'),
 });
@@ -17,53 +17,16 @@ export const createTransactionSchema = z
       .min(1, 'Transaksi minimal memiliki 1 item'),
     patientName: z.string().optional().nullable(),
     patientPhone: z.string().optional().nullable(),
-    discountAmount: z
-      .union([z.number(), z.string()])
-      .optional()
-      .default(0)
-      .transform((val) => String(val)),
-    discountReason: z.string().optional().nullable(),
   })
-  .refine(
-    (data) => {
-      const discount = parseFloat(data.discountAmount || '0');
-      if (discount > 0) {
-        return !!data.discountReason && data.discountReason.trim().length > 0;
-      }
-      return true;
-    },
-    {
-      message: 'Alasan diskon wajib diisi jika ada potongan harga',
-      path: ['discountReason'],
-    }
-  );
+  .strict();
 
 export const updateTransactionSchema = z
   .object({
     items: z.array(transactionItemInputSchema).min(1).optional(),
     patientName: z.string().optional().nullable(),
     patientPhone: z.string().optional().nullable(),
-    discountAmount: z
-      .union([z.number(), z.string()])
-      .optional()
-      .transform((val) => (val !== undefined ? String(val) : undefined)),
-    discountReason: z.string().optional().nullable(),
   })
-  .refine(
-    (data) => {
-      if (data.discountAmount !== undefined) {
-        const discount = parseFloat(data.discountAmount || '0');
-        if (discount > 0) {
-          return !!data.discountReason && data.discountReason.trim().length > 0;
-        }
-      }
-      return true;
-    },
-    {
-      message: 'Alasan diskon wajib diisi jika ada potongan harga',
-      path: ['discountReason'],
-    }
-  );
+  .strict();
 
 export const paymentInputSchema = z.object({
   method: paymentMethodEnum,

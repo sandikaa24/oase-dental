@@ -15,7 +15,6 @@ export interface Service {
   description?: string | null;
   descriptionEn?: string | null;
   price: string | number;
-  durationMinutes?: number | null;
   active: boolean;
   showOnPortal: boolean;
   deletedAt?: string | null;

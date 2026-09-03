@@ -15,7 +15,6 @@ export const createServiceSchema = z
     description: z.string().optional(),
     descriptionEn: z.string().optional(),
     price: z.number().nonnegative(),
-    durationMinutes: z.number().int().positive().optional(),
     active: z.boolean().optional(),
     showOnPortal: z.boolean().optional(),
   })

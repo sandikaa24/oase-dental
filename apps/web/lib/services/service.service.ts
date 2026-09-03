@@ -53,7 +53,6 @@ export async function createService(input: {
   description?: string;
   descriptionEn?: string;
   price: number;
-  durationMinutes?: number;
   active?: boolean;
   showOnPortal?: boolean;
 }) {
@@ -69,7 +68,6 @@ export async function updateService(
     description?: string;
     descriptionEn?: string;
     price?: number;
-    durationMinutes?: number;
     active?: boolean;
     showOnPortal?: boolean;
   },

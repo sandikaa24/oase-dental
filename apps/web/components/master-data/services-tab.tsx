@@ -20,7 +20,6 @@ import {
   Edit2,
   Trash2,
   Globe,
-  Clock,
   ChevronLeft,
   ChevronRight,
   Power,
@@ -244,7 +243,6 @@ export function ServicesTab({ categories }: ServicesTabProps) {
                 <tr>
                   <th className="py-3 px-4">Nama Layanan</th>
                   <th className="py-3 px-4">Kategori</th>
-                  <th className="py-3 px-4">Durasi</th>
                   <th className="py-3 px-4 text-right">Tarif Pasien</th>
                   <th className="py-3 px-4 text-center">Portal Publik</th>
                   <th className="py-3 px-4 text-center">Status</th>
@@ -257,7 +255,6 @@ export function ServicesTab({ categories }: ServicesTabProps) {
                     <tr key={i}>
                       <td className="py-3 px-4"><Skeleton className="h-4 w-36" /></td>
                       <td className="py-3 px-4"><Skeleton className="h-4 w-24" /></td>
-                      <td className="py-3 px-4"><Skeleton className="h-4 w-16" /></td>
                       <td className="py-3 px-4"><Skeleton className="h-4 w-20 ml-auto" /></td>
                       <td className="py-3 px-4"><Skeleton className="h-4 w-12 mx-auto" /></td>
                       <td className="py-3 px-4"><Skeleton className="h-4 w-14 mx-auto" /></td>
@@ -266,7 +263,7 @@ export function ServicesTab({ categories }: ServicesTabProps) {
                   ))
                 ) : filteredServices.length === 0 ? (
                   <tr>
-                    <td colSpan={isOwner ? 7 : 6} className="p-8 text-center">
+                    <td colSpan={isOwner ? 6 : 5} className="p-8 text-center">
                       <EmptyState
                         icon={<Stethoscope className="h-6 w-6 text-muted" />}
                         title="Tidak Ada Layanan Medis"
@@ -290,16 +287,6 @@ export function ServicesTab({ categories }: ServicesTabProps) {
                         </td>
                         <td className="py-3 px-4 text-slate-700 font-medium">
                           {svc.category?.name || <span className="text-muted italic">-</span>}
-                        </td>
-                        <td className="py-3 px-4 text-slate-600">
-                          {svc.durationMinutes ? (
-                            <span className="flex items-center gap-1 font-mono text-[11px]">
-                              <Clock className="h-3 w-3 text-muted" />
-                              <span>{svc.durationMinutes} mnt</span>
-                            </span>
-                          ) : (
-                            <span className="text-muted">-</span>
-                          )}
                         </td>
                         <td className="py-3 px-4 text-right font-mono font-semibold text-foreground">
                           Rp {formatThousand(priceNum)}

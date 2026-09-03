@@ -21,7 +21,6 @@ export const PaymentMethod = {
 export type PaymentMethod = (typeof PaymentMethod)[keyof typeof PaymentMethod];
 
 export const ItemType = {
-  PRODUCT: 'PRODUCT',
   MATERIAL: 'MATERIAL'
 } as const;
 export type ItemType = (typeof ItemType)[keyof typeof ItemType];

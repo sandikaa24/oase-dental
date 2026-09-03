@@ -4,7 +4,6 @@ import {
   ClosingPeriodLockedError,
   ConflictError,
   ForbiddenError,
-  InsufficientStockError,
   NotFoundError,
   ValidationError,
 } from '../errors';
@@ -12,22 +11,18 @@ import { getJakartaDateTime } from './attendance.service';
 
 /**
  * Format output transaksi yang aman untuk JSON (semua Decimal diserialisasi ke string,
- * dan itemType dikembalikan sesuai jenis aslinya SERVICE atau PRODUCT).
+ * dan itemType dikembalikan sebagai SERVICE).
  */
 export function serializeTransaction<
   T extends {
     subtotal: Prisma.Decimal;
-    discountAmount: Prisma.Decimal;
     total: Prisma.Decimal;
     items?: Array<{
       id: string;
-      itemType: string;
-      serviceId: string | null;
-      productId: string | null;
+      serviceId: string;
       itemId: string;
       name: string;
       nameEn: string | null;
-      unit: string | null;
       price: Prisma.Decimal;
       quantity: number;
       lineTotal: Prisma.Decimal;
@@ -42,11 +37,10 @@ export function serializeTransaction<
   return {
     ...trx,
     subtotal: trx.subtotal.toString(),
-    discountAmount: trx.discountAmount.toString(),
     total: trx.total.toString(),
     items: trx.items?.map((item) => ({
       ...item,
-      itemType: item.serviceId ? 'SERVICE' : 'PRODUCT',
+      itemType: 'SERVICE',
       price: item.price.toString(),
       lineTotal: item.lineTotal.toString(),
     })),
@@ -71,22 +65,19 @@ const transactionInclude = {
 
 /**
  * POST /transactions
- * Create DRAFT Transaksi
+ * Create DRAFT Transaksi (Murni Layanan Medis, Tanpa Diskon, Tanpa Sentuh Stok)
  * - Snapshot harga dan nama dari master database
- * - Hitung subtotal = sum(price * qty) dan total = subtotal - discount
- * - Tidak memotong stok saat DRAFT
+ * - Hitung subtotal = sum(price * qty) dan total = subtotal
  */
 export async function createTransaction(
   input: {
     items: Array<{
-      itemType: 'SERVICE' | 'PRODUCT';
       itemId: string;
       quantity: number;
+      itemType?: 'SERVICE';
     }>;
     patientName?: string | null;
     patientPhone?: string | null;
-    discountAmount?: string;
-    discountReason?: string | null;
   },
   branchId: string | null,
   cashierId: string
@@ -105,79 +96,42 @@ export async function createTransaction(
 
   const { dateStr } = getJakartaDateTime();
 
-  // Siapkan dan snapshot setiap item dari database
+  // Siapkan dan snapshot setiap layanan dari database
   let subtotal = new Prisma.Decimal(0);
   const resolvedItems: Array<{
-    itemType: 'PRODUCT';
-    serviceId: string | null;
-    productId: string | null;
+    serviceId: string;
     itemId: string;
     name: string;
     nameEn: string | null;
-    unit: string | null;
     price: Prisma.Decimal;
     quantity: number;
     lineTotal: Prisma.Decimal;
   }> = [];
 
   for (const item of input.items) {
-    if (item.itemType === 'SERVICE') {
-      const service = await prisma.service.findUnique({
-        where: { id: item.itemId },
-      });
-      if (!service || !service.active || service.deletedAt !== null) {
-        throw new ValidationError(
-          `Layanan dengan ID ${item.itemId} tidak ditemukan atau sudah tidak aktif`
-        );
-      }
-      const lineTotal = service.price.mul(item.quantity);
-      subtotal = subtotal.add(lineTotal);
-      resolvedItems.push({
-        itemType: 'PRODUCT', // diisi enum schema
-        serviceId: service.id,
-        productId: null,
-        itemId: service.id,
-        name: service.name,
-        nameEn: service.nameEn,
-        unit: null,
-        price: service.price,
-        quantity: item.quantity,
-        lineTotal,
-      });
-    } else {
-      const product = await prisma.product.findUnique({
-        where: { id: item.itemId },
-      });
-      if (!product || !product.active || product.deletedAt !== null) {
-        throw new ValidationError(
-          `Produk dengan ID ${item.itemId} tidak ditemukan atau sudah tidak aktif`
-        );
-      }
-      const lineTotal = product.sellPrice.mul(item.quantity);
-      subtotal = subtotal.add(lineTotal);
-      resolvedItems.push({
-        itemType: 'PRODUCT',
-        serviceId: null,
-        productId: product.id,
-        itemId: product.id,
-        name: product.name,
-        nameEn: null,
-        unit: product.unit,
-        price: product.sellPrice,
-        quantity: item.quantity,
-        lineTotal,
-      });
+    const service = await prisma.service.findUnique({
+      where: { id: item.itemId },
+    });
+    if (!service || !service.active || service.deletedAt !== null) {
+      throw new ValidationError(
+        `Layanan dengan ID ${item.itemId} tidak ditemukan atau sudah tidak aktif`
+      );
     }
+    const lineTotal = service.price.mul(item.quantity);
+    subtotal = subtotal.add(lineTotal);
+    resolvedItems.push({
+      serviceId: service.id,
+      itemId: service.id,
+      name: service.name,
+      nameEn: service.nameEn,
+      price: service.price,
+      quantity: item.quantity,
+      lineTotal,
+    });
   }
 
-  const discount = new Prisma.Decimal(input.discountAmount || '0');
-  if (discount.lessThan(0)) {
-    throw new ValidationError('Potongan diskon tidak boleh bernilai negatif');
-  }
-  let total = subtotal.sub(discount);
-  if (total.lessThan(0)) {
-    total = new Prisma.Decimal(0);
-  }
+  // Transaksi tanpa diskon: total = subtotal
+  const total = subtotal;
 
   // Placeholder transaction number untuk DRAFT
   const dateCompact = dateStr.replace(/-/g, '');
@@ -193,8 +147,6 @@ export async function createTransaction(
         patientPhone: input.patientPhone ?? null,
         status: 'DRAFT',
         subtotal,
-        discountAmount: discount,
-        discountReason: discount.greaterThan(0) ? input.discountReason : null,
         total,
         transactionDate: new Date(),
         items: {
@@ -326,20 +278,18 @@ export async function getTransactionById(
 
 /**
  * PATCH /transactions/:id
- * Edit DRAFT transaksi saja
+ * Edit DRAFT transaksi saja (Murni Layanan Medis, Tanpa Diskon)
  */
 export async function updateTransaction(
   id: string,
   input: {
     items?: Array<{
-      itemType: 'SERVICE' | 'PRODUCT';
       itemId: string;
       quantity: number;
+      itemType?: 'SERVICE';
     }>;
     patientName?: string | null;
     patientPhone?: string | null;
-    discountAmount?: string;
-    discountReason?: string | null;
   },
   role: UserRole,
   activeBranchId: string | null
@@ -366,13 +316,10 @@ export async function updateTransaction(
 
   let subtotal = existing.subtotal;
   let resolvedItems: Array<{
-    itemType: 'PRODUCT';
-    serviceId: string | null;
-    productId: string | null;
+    serviceId: string;
     itemId: string;
     name: string;
     nameEn: string | null;
-    unit: string | null;
     price: Prisma.Decimal;
     quantity: number;
     lineTotal: Prisma.Decimal;
@@ -383,69 +330,29 @@ export async function updateTransaction(
     resolvedItems = [];
 
     for (const item of input.items) {
-      if (item.itemType === 'SERVICE') {
-        const service = await prisma.service.findUnique({
-          where: { id: item.itemId },
-        });
-        if (!service || !service.active || service.deletedAt !== null) {
-          throw new ValidationError(
-            `Layanan dengan ID ${item.itemId} tidak ditemukan atau sudah tidak aktif`
-          );
-        }
-        const lineTotal = service.price.mul(item.quantity);
-        subtotal = subtotal.add(lineTotal);
-        resolvedItems.push({
-          itemType: 'PRODUCT',
-          serviceId: service.id,
-          productId: null,
-          itemId: service.id,
-          name: service.name,
-          nameEn: service.nameEn,
-          unit: null,
-          price: service.price,
-          quantity: item.quantity,
-          lineTotal,
-        });
-      } else {
-        const product = await prisma.product.findUnique({
-          where: { id: item.itemId },
-        });
-        if (!product || !product.active || product.deletedAt !== null) {
-          throw new ValidationError(
-            `Produk dengan ID ${item.itemId} tidak ditemukan atau sudah tidak aktif`
-          );
-        }
-        const lineTotal = product.sellPrice.mul(item.quantity);
-        subtotal = subtotal.add(lineTotal);
-        resolvedItems.push({
-          itemType: 'PRODUCT',
-          serviceId: null,
-          productId: product.id,
-          itemId: product.id,
-          name: product.name,
-          nameEn: null,
-          unit: product.unit,
-          price: product.sellPrice,
-          quantity: item.quantity,
-          lineTotal,
-        });
+      const service = await prisma.service.findUnique({
+        where: { id: item.itemId },
+      });
+      if (!service || !service.active || service.deletedAt !== null) {
+        throw new ValidationError(
+          `Layanan dengan ID ${item.itemId} tidak ditemukan atau sudah tidak aktif`
+        );
       }
+      const lineTotal = service.price.mul(item.quantity);
+      subtotal = subtotal.add(lineTotal);
+      resolvedItems.push({
+        serviceId: service.id,
+        itemId: service.id,
+        name: service.name,
+        nameEn: service.nameEn,
+        price: service.price,
+        quantity: item.quantity,
+        lineTotal,
+      });
     }
   }
 
-  const discount =
-    input.discountAmount !== undefined
-      ? new Prisma.Decimal(input.discountAmount || '0')
-      : existing.discountAmount;
-
-  if (discount.lessThan(0)) {
-    throw new ValidationError('Potongan diskon tidak boleh bernilai negatif');
-  }
-
-  let total = subtotal.sub(discount);
-  if (total.lessThan(0)) {
-    total = new Prisma.Decimal(0);
-  }
+  const total = subtotal;
 
   const updated = await prisma.$transaction(async (tx) => {
     if (resolvedItems) {
@@ -467,13 +374,6 @@ export async function updateTransaction(
         patientName: input.patientName !== undefined ? input.patientName : existing.patientName,
         patientPhone: input.patientPhone !== undefined ? input.patientPhone : existing.patientPhone,
         subtotal,
-        discountAmount: discount,
-        discountReason:
-          discount.greaterThan(0)
-            ? input.discountReason !== undefined
-              ? input.discountReason
-              : existing.discountReason
-            : null,
         total,
       },
       include: transactionInclude,
@@ -494,44 +394,51 @@ export async function deleteTransaction(
   role: UserRole,
   activeBranchId: string | null
 ) {
-  const existing = await prisma.transaction.findUnique({
-    where: { id },
-  });
-
+  const existing = await prisma.transaction.findUnique({ where: { id } });
   if (!existing) {
     throw new NotFoundError('Transaksi tidak ditemukan');
   }
-
   if (role !== 'OWNER' && existing.branchId !== activeBranchId) {
     throw new ForbiddenError('Akses ditolak untuk transaksi cabang lain');
   }
-
   if (existing.status !== 'DRAFT') {
     throw new ConflictError(
       'Hanya transaksi berstatus DRAFT yang dapat dihapus',
       'INVALID_TRANSACTION_STATE'
     );
   }
+  await prisma.transaction.delete({ where: { id } });
+  return { id };
+}
 
-  await prisma.$transaction(async (tx) => {
-    await tx.transactionItem.deleteMany({ where: { transactionId: id } });
-    await tx.transactionPayment.deleteMany({ where: { transactionId: id } });
-    await tx.transaction.delete({ where: { id } });
+/**
+ * Helper: Cek apakah tanggal transaksi berada dalam periode tutup kas yang berstatus CLOSED.
+ */
+async function assertClosingNotLocked(branchId: string, transactionDate: Date) {
+  const lockedClosing = await prisma.cashClosing.findFirst({
+    where: {
+      branchId,
+      status: 'CLOSED',
+      closingDate: { gte: transactionDate },
+    },
   });
 
-  return { id, deleted: true };
+  if (lockedClosing) {
+    throw new ClosingPeriodLockedError(
+      'Transaksi tidak dapat diproses: periode tutup kas untuk tanggal ini sudah ditutup (CLOSED)'
+    );
+  }
 }
 
 /**
  * POST /transactions/:id/pay
- * Bayar transaksi DRAFT -> PAID
- * - Cek closing period locked
- * - Validasi sum(payments) >= total (D-3)
- * - Cek stok produk (productId != null) di StockLevel
- * - Kurangi StockLevel & buat InventoryMovement (TRANSACTION)
- * - Update NumberSequence -> generate TRX-YYYYMMDD-XXXXX
- * - Set status PAID, paidAt, cashierId
- * - Audit log & return data lengkap + change
+ * Bayar transaksi DRAFT → PAID
+ * - Hanya transaksi berstatus DRAFT yang bisa dibayar
+ * - Validasi closing kas CLOSED
+ * - Validasi total pembayaran >= total tagihan
+ * - Generate nomor transaksi resmi TRX-YYYYMMDD-XXXXX
+ * - Simpan payments
+ * - TIDAK MENYENTUH STOK (Transaksi murni layanan)
  */
 export async function payTransaction(
   id: string,
@@ -548,45 +455,46 @@ export async function payTransaction(
 ) {
   const existing = await prisma.transaction.findUnique({
     where: { id },
-    include: { items: true },
+    include: {
+      items: true,
+      branch: true,
+    },
   });
 
   if (!existing) {
     throw new NotFoundError('Transaksi tidak ditemukan');
   }
 
+  // IDOR Guard
   if (role !== 'OWNER' && existing.branchId !== activeBranchId) {
     throw new ForbiddenError('Akses ditolak untuk transaksi cabang lain');
   }
 
   if (existing.status !== 'DRAFT') {
     throw new ConflictError(
-      'Transaksi ini sudah tidak berstatus DRAFT',
+      'Hanya transaksi berstatus DRAFT yang dapat dibayar',
       'INVALID_TRANSACTION_STATE'
     );
   }
 
-  const { workDate, dateStr } = getJakartaDateTime();
-
-  // D-4: Cek apakah hari operasional sudah ditutup oleh cash closing
-  const closedPeriod = await prisma.cashClosing.findFirst({
-    where: {
-      branchId: existing.branchId,
-      status: 'CLOSED',
-      closingDate: { gte: workDate },
-    },
-  });
-
-  if (closedPeriod) {
-    throw new ClosingPeriodLockedError(
-      'Periode kas hari ini sudah ditutup, tidak dapat menerima pembayaran'
-    );
+  if (existing.items.length === 0) {
+    throw new ValidationError('Transaksi tidak memiliki item');
   }
 
-  // D-3: Validasi jumlah pembayaran
+  // D-2: Server Date Asia/Jakarta
+  const { dateStr } = getJakartaDateTime();
+  const workDate = new Date(`${dateStr}T00:00:00.000Z`);
+
+  // Cek closing period lock
+  await assertClosingNotLocked(existing.branchId, existing.transactionDate);
+
+  // Validasi total pembayaran >= existing.total
   let paidTotal = new Prisma.Decimal(0);
   for (const p of input.payments) {
     const amt = new Prisma.Decimal(p.amount);
+    if (amt.lessThanOrEqualTo(0)) {
+      throw new ValidationError('Jumlah pembayaran setiap metode harus lebih besar dari 0');
+    }
     paidTotal = paidTotal.add(amt);
   }
 
@@ -600,58 +508,7 @@ export async function payTransaction(
 
   // Eksekusi atomik dalam $transaction
   const paidTransaction = await prisma.$transaction(async (tx) => {
-    // 1. Cek & kurangi stok produk (HANYA item dengan productId != null)
-    const productItems = existing.items.filter((item) => item.productId !== null);
-
-    for (const item of productItems) {
-      const stock = await tx.stockLevel.findUnique({
-        where: {
-          branchId_itemType_itemId: {
-            branchId: existing.branchId,
-            itemType: 'PRODUCT',
-            itemId: item.productId!,
-          },
-        },
-      });
-
-      const currentQty = stock?.quantity ?? 0;
-      if (currentQty < item.quantity) {
-        throw new InsufficientStockError(
-          `Stok untuk produk "${item.name}" tidak mencukupi (tersedia: ${currentQty}, diminta: ${item.quantity})`
-        );
-      }
-
-      // Kurangi stok di StockLevel
-      await tx.stockLevel.update({
-        where: {
-          branchId_itemType_itemId: {
-            branchId: existing.branchId,
-            itemType: 'PRODUCT',
-            itemId: item.productId!,
-          },
-        },
-        data: {
-          quantity: { decrement: item.quantity },
-        },
-      });
-
-      // Catat InventoryMovement
-      await tx.inventoryMovement.create({
-        data: {
-          branchId: existing.branchId,
-          itemType: 'PRODUCT',
-          productId: item.productId,
-          itemId: item.productId!,
-          quantityDelta: -item.quantity,
-          referenceType: 'TRANSACTION',
-          referenceId: existing.id,
-          notes: `Penjualan POS item ${item.name}`,
-          createdBy: cashierId,
-        },
-      });
-    }
-
-    // 2. Generate Nomor Transaksi Resmi (TRX-YYYYMMDD-XXXXX)
+    // 1. Generate Nomor Transaksi Resmi (TRX-YYYYMMDD-XXXXX)
     const seq = await tx.numberSequence.upsert({
       where: {
         branchId_scope_seqDate: {
@@ -672,10 +529,10 @@ export async function payTransaction(
     });
 
     const dateCompact = dateStr.replace(/-/g, '');
-    const seqPadded = String(seq.lastSeq).padStart(5, '0');
-    const finalTrxNumber = `TRX-${dateCompact}-${seqPadded}`;
+    const seqPadded = seq.lastSeq.toString().padStart(5, '0');
+    const officialTrxNumber = `TRX-${dateCompact}-${seqPadded}`;
 
-    // 3. Catat Pembayaran
+    // 2. Simpan Catatan Pembayaran
     await tx.transactionPayment.createMany({
       data: input.payments.map((p) => ({
         transactionId: existing.id,
@@ -684,35 +541,33 @@ export async function payTransaction(
       })),
     });
 
-    // 4. Update Transaksi ke status PAID
+    // 3. Update Status Transaksi menjadi PAID
     const updated = await tx.transaction.update({
       where: { id: existing.id },
       data: {
-        transactionNumber: finalTrxNumber,
+        transactionNumber: officialTrxNumber,
         status: 'PAID',
-        cashierId,
         paidAt: new Date(),
+        cashierId,
       },
       include: transactionInclude,
     });
 
-    // 5. Audit Log
+    // 4. Audit Log
     await tx.auditLog.create({
       data: {
         actorId: cashierId,
         action: 'TRANSACTION_PAID',
         entity: 'Transaction',
         entityId: existing.id,
-        before: { status: 'DRAFT', transactionNumber: existing.transactionNumber },
-        after: {
-          status: 'PAID',
-          transactionNumber: finalTrxNumber,
-          total: updated.total,
-          paidTotal,
-          change,
-        },
-        note: `Pembayaran transaksi ${finalTrxNumber} berhasil`,
         ip,
+        after: {
+          transactionNumber: officialTrxNumber,
+          total: existing.total.toString(),
+          paidTotal: paidTotal.toString(),
+          change: change.toString(),
+          payments: input.payments,
+        },
       },
     });
 
@@ -727,12 +582,11 @@ export async function payTransaction(
 }
 
 /**
- * POST /transactions/:id/cancel [OWNER]
- * Cancel Transaksi PAID
- * - Hanya boleh untuk status PAID
- * - Kembalikan stok (productId != null) di StockLevel & InventoryMovement (+qty)
- * - Update status CANCELLED, cancelledAt, cancelledBy, cancellationReason
- * - Audit log TRANSACTION_CANCELLED
+ * POST /transactions/:id/cancel
+ * Membatalkan transaksi PAID → CANCELLED
+ * - Hanya transaksi berstatus PAID yang bisa dibatalkan
+ * - Validasi closing kas CLOSED
+ * - TIDAK MENYENTUH STOK (Transaksi murni layanan)
  */
 export async function cancelTransaction(
   id: string,
@@ -742,12 +596,19 @@ export async function cancelTransaction(
 ) {
   const existing = await prisma.transaction.findUnique({
     where: { id },
-    include: { items: true },
+    include: {
+      items: true,
+      branch: true,
+      payments: true,
+    },
   });
 
   if (!existing) {
     throw new NotFoundError('Transaksi tidak ditemukan');
   }
+
+  // Cek closing period lock
+  await assertClosingNotLocked(existing.branchId, existing.transactionDate);
 
   if (existing.status !== 'PAID') {
     throw new ConflictError(
@@ -757,45 +618,7 @@ export async function cancelTransaction(
   }
 
   const cancelled = await prisma.$transaction(async (tx) => {
-    // 1. Kembalikan stok produk (HANYA item dengan productId != null)
-    const productItems = existing.items.filter((item) => item.productId !== null);
-
-    for (const item of productItems) {
-      await tx.stockLevel.upsert({
-        where: {
-          branchId_itemType_itemId: {
-            branchId: existing.branchId,
-            itemType: 'PRODUCT',
-            itemId: item.productId!,
-          },
-        },
-        create: {
-          branchId: existing.branchId,
-          itemType: 'PRODUCT',
-          itemId: item.productId!,
-          quantity: item.quantity,
-        },
-        update: {
-          quantity: { increment: item.quantity },
-        },
-      });
-
-      await tx.inventoryMovement.create({
-        data: {
-          branchId: existing.branchId,
-          itemType: 'PRODUCT',
-          productId: item.productId,
-          itemId: item.productId!,
-          quantityDelta: item.quantity,
-          referenceType: 'TRANSACTION',
-          referenceId: existing.id,
-          notes: `Pembatalan transaksi: ${reason}`,
-          createdBy: actorId,
-        },
-      });
-    }
-
-    // 2. Update status transaksi
+    // 1. Update status transaksi
     const res = await tx.transaction.update({
       where: { id },
       data: {
@@ -807,21 +630,24 @@ export async function cancelTransaction(
       include: transactionInclude,
     });
 
-    // 3. Audit Log
+    // 2. Audit Log
     await tx.auditLog.create({
       data: {
         actorId,
         action: 'TRANSACTION_CANCELLED',
         entity: 'Transaction',
         entityId: id,
-        before: { status: 'PAID' },
+        ip,
+        before: {
+          status: existing.status,
+          transactionNumber: existing.transactionNumber,
+          total: existing.total.toString(),
+        },
         after: {
           status: 'CANCELLED',
-          cancelledBy: actorId,
           cancellationReason: reason,
+          cancelledBy: actorId,
         },
-        note: `Pembatalan transaksi ${existing.transactionNumber}: ${reason}`,
-        ip,
       },
     });
 
@@ -833,118 +659,62 @@ export async function cancelTransaction(
 
 /**
  * GET /pos/catalog
- * Mengambil katalog item yang dapat dijual di POS (layanan & produk aktif).
- * Untuk produk, menyertakan stok cabang aktif dari tabel StockLevel.
- * Dilarang mengekspos field sensitif seperti harga modal/cost.
+ * Katalog item yang bisa dijual/ditransaksikan di POS:
+ * Murni master layanan medis aktif (tidak menyentuh produk & stok)
  */
 export async function getPosCatalog(
-  branchId: string | null,
-  query: {
-    search?: string;
-    type?: 'SERVICE' | 'PRODUCT';
+  _branchId: string | null,
+  query?: {
+    type?: string;
     categoryId?: string;
+    search?: string;
   }
 ) {
+  const search = query?.search?.trim();
   const results: Array<{
     id: string;
     name: string;
-    type: 'SERVICE' | 'PRODUCT';
+    type: 'SERVICE';
     price: string;
-    stock: number | null;
-    unit: string | null;
+    stock: null;
+    unit: null;
     category: { id: string; name: string } | null;
   }> = [];
 
-  const search = query.search?.trim();
+  // Ambil Layanan Aktif
+  const serviceWhere: Prisma.ServiceWhereInput = {
+    active: true,
+    deletedAt: null,
+  };
 
-  // 1. Ambil Layanan (jika type tidak dibatasi ke PRODUCT)
-  if (!query.type || query.type === 'SERVICE') {
-    const serviceWhere: Prisma.ServiceWhereInput = {
-      active: true,
-      deletedAt: null,
-    };
-
-    if (search) {
-      serviceWhere.name = { contains: search, mode: 'insensitive' };
-    }
-
-    if (query.categoryId) {
-      serviceWhere.categoryId = query.categoryId;
-    }
-
-    const services = await prisma.service.findMany({
-      where: serviceWhere,
-      include: {
-        category: {
-          select: { id: true, name: true },
-        },
-      },
-      orderBy: { name: 'asc' },
-    });
-
-    for (const s of services) {
-      results.push({
-        id: s.id,
-        name: s.name,
-        type: 'SERVICE',
-        price: s.price.toString(),
-        stock: null,
-        unit: null,
-        category: s.category ? { id: s.category.id, name: s.category.name } : null,
-      });
-    }
+  if (query?.categoryId) {
+    serviceWhere.categoryId = query.categoryId;
   }
 
-  // 2. Ambil Produk (jika type tidak dibatasi ke SERVICE dan tidak filter categoryId)
-  if ((!query.type || query.type === 'PRODUCT') && !query.categoryId) {
-    const productWhere: Prisma.ProductWhereInput = {
-      active: true,
-      deletedAt: null,
-    };
+  if (search) {
+    serviceWhere.OR = [
+      { name: { contains: search, mode: 'insensitive' } },
+      { nameEn: { contains: search, mode: 'insensitive' } },
+    ];
+  }
 
-    if (search) {
-      productWhere.OR = [
-        { name: { contains: search, mode: 'insensitive' } },
-        { sku: { contains: search, mode: 'insensitive' } },
-      ];
-    }
+  const services = await prisma.service.findMany({
+    where: serviceWhere,
+    include: { category: true },
+    orderBy: { name: 'asc' },
+  });
 
-    const products = await prisma.product.findMany({
-      where: productWhere,
-      orderBy: { name: 'asc' },
+  for (const s of services) {
+    results.push({
+      id: s.id,
+      name: s.name,
+      type: 'SERVICE',
+      price: s.price.toString(),
+      stock: null,
+      unit: null,
+      category: s.category ? { id: s.category.id, name: s.category.name } : null,
     });
-
-    // Ambil stok produk untuk branchId aktif jika ada
-    const productIds = products.map((p) => p.id);
-    const stockMap: Record<string, number> = {};
-
-    if (branchId && productIds.length > 0) {
-      const stockLevels = await prisma.stockLevel.findMany({
-        where: {
-          branchId,
-          itemType: 'PRODUCT',
-          itemId: { in: productIds },
-        },
-      });
-
-      for (const sl of stockLevels) {
-        stockMap[sl.itemId] = sl.quantity;
-      }
-    }
-
-    for (const p of products) {
-      results.push({
-        id: p.id,
-        name: p.name,
-        type: 'PRODUCT',
-        price: p.sellPrice.toString(),
-        stock: stockMap[p.id] ?? 0,
-        unit: p.unit,
-        category: null,
-      });
-    }
   }
 
   return results;
 }
-

@@ -201,6 +201,50 @@ Semua komponen strictly memakai token semantik Tailwind dan dilarang memakai arb
   - **Total Suite Regresi Keseluruhan**: **147 PASSED / 0 FAILED (100%)** (16 Phase 0 + 18 Task 1 + 12 Task 2 + 30 Task 3 + 35 Task 4 + 36 Task 5).
   - `pnpm lint`: Bersih 0 warning/error.
   - `pnpm build`: Berhasil mengompilasi 34/34 routes aplikasi.
-  - **Self-check Design System §25**: 0 pelanggaran.
+
+
+---
+
+## TUGAS 6: MANAJEMEN CABANG + USER & KARYAWAN
+
+### 1. Temuan Desain Sesi-vs-Status & Konsekuensi Keamanan (Aturan 8a)
+- **Temuan Desain Backend**: Fungsi `setUserStatus` (`user.service.ts`) mengubah kolom `User.active` di database tanpa melakukan revokasi langsung pada tabel sesi `RefreshToken`.
+- **Mekanisme Penolakan**:
+  - Penolakan akses terjadi saat token di-refresh (`POST /api/v1/auth/refresh`) atau login baru (`POST /api/v1/auth/login`) melalui verifikasi integritas `user.active === true`.
+  - Akses token (`access_token`) JWT yang sudah terbit tetap valid hingga masa kedaluwarsanya berakhir (jendela risiko ≤ 15 menit).
+- **Pendekatan UI & Transparansi UX**: Antarmuka modal konfirmasi deaktivasi user secara jujur menyampaikan bahwa penonaktifan user akan mencabut akses penuh segera setelah masa berlaku token aktif berakhir (maks. 15 menit) atau saat refresh token berikutnya.
+- **Rekomendasi Hardening**: Penghapusan/revokasi baris `RefreshToken` secara serentak di `setUserStatus` dicatat sebagai kandidat hardening backend pada fase berikutnya.
+
+---
+
+### 2. E2E Integrasi Lintas Modul Pertama (E2E-1.1 s/d E2E-1.6)
+- **Rantai Alur Bisnis Penuh**:
+  1. **Buat Cabang Baru**: `POST /api/v1/branches` (Cabang Dago Baru, kode `DGO01`, jam operasional 08:00–20:00).
+  2. **Buat Karyawan Baru**: `POST /api/v1/employees` (drg. Budi Baru, SIP/STR valid, branch assignment ke `DGO01`).
+  3. **Buat Akun User Baru**: `POST /api/v1/users` (role `MANAGER`, dihubungkan ke karyawan drg. Budi, multi-branch assignment ke `DGO01`).
+  4. **Login User Baru**: `POST /api/v1/auth/login` berhasil mengautentikasi dan mengembalikan JWT claim `activeBranchId = DGO01`.
+  5. **Verifikasi Auth Me**: `GET /api/v1/auth/me` mengonfirmasi identitas, role `MANAGER`, dan relasi cabang `DGO01`.
+  6. **Mutasi Inventaris di Cabang Baru**: `POST /api/v1/inventory/stock-in` berhasil melakukan penerimaan barang di Cabang Dago Baru (`DGO01`) menggunakan sesi Manager baru tersebut.
+- **Signifikansi**: Membuktikan keterhubungan reaktif antara `BranchSelector`, auth session context, manajemen user/karyawan, dan modul inventaris.
+
+---
+
+### 3. Guard Bisnis & Validasi Teruji
+- **Self-Deactivation Guard**: Upaya user menonaktifkan akunnya sendiri ditolak server dengan HTTP 400 `CANNOT_DEACTIVATE_SELF`.
+- **Role Escalation Guard**: Upaya menetapkan atau mengubah role menjadi `OWNER` melalui endpoint user ditolak server dengan HTTP 400 `CANNOT_ASSIGN_OWNER_ROLE`.
+- **Unique Constraint Enforcement**:
+  - Duplikasi kode cabang → HTTP 409 `BRANCH_CODE_ALREADY_EXISTS`.
+  - Duplikasi email user → HTTP 409 `EMAIL_ALREADY_EXISTS`.
+  - Duplikasi nomor induk karyawan (`employeeId`) → HTTP 409 `EMPLOYEE_ID_ALREADY_EXISTS`.
+  - Duplikasi relasi karyawan ke user (1 karyawan = 1 akun) → HTTP 409 `EMPLOYEE_ALREADY_LINKED`.
+- **Operational Hours Logic**: Validasi frontend dan backend menolak jam tutup yang lebih awal atau sama dengan jam buka (`closingTime <= openingTime`).
+
+---
+
+### 4. Hasil Verifikasi & Test Suite
+- **Phase 3 Task 6 Suite (`phase3-task6-test.mjs`)**: **34 PASSED / 0 FAILED (100%)**
+- **Total Suite Regresi Keseluruhan**: **181 PASSED / 0 FAILED (100%)** (16 Phase 0 + 18 Task 1 + 12 Task 2 + 30 Task 3 + 35 Task 4 + 36 Task 5 + 34 Task 6).
+- **Linter & Build**: `pnpm lint` bersih (0 warning/error) & `pnpm build` sukses (34/34 routes aplikasi terkompilasi).
+- **Self-check Design System §25**: 0 pelanggaran token/hex hardcoded, 0 any di TypeScript.
 
 

@@ -86,7 +86,7 @@ async function run() {
   const ownerCookie = ownerLogin.cookie;
   assert('Login OWNER berhasil', ownerLogin.status === 200 && !!ownerCookie);
 
-  const branchesRes = await req('/branches', 'GET', null, ownerCookie);
+  const branchesRes = await req('/branches?limit=100', 'GET', null, ownerCookie);
   const branches = branchesRes.data?.data ?? [];
   const jkt = branches.find((b) => b.code === 'JKT');
   const bdg = branches.find((b) => b.code === 'BDG');

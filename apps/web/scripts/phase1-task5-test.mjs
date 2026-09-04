@@ -69,7 +69,7 @@ async function run() {
   }
 
   // Ambil branch JKT dan BDG
-  const branchesRes = await req('/branches', 'GET', null, owner);
+  const branchesRes = await req('/branches?limit=100', 'GET', null, owner);
   const branches = branchesRes.data?.data ?? [];
   const jkt = branches.find((b) => b.code === 'JKT');
   const bdg = branches.find((b) => b.code === 'BDG');

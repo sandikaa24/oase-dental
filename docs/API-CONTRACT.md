@@ -293,6 +293,78 @@ SUBMITTED immutable. Unique: 1 opname per branch per tanggal.
 Tidak ada edit/delete. Koreksi = expense negatif terpisah (note wajib
 menyebut expense referensi).
 
+**GET /expenses** (query: `?page&limit&category&dateFrom&dateTo&branchId(OWNER saja)`)
+Response 200:
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "uuid",
+      "branchId": "uuid",
+      "branch": { "id": "uuid", "code": "JKT", "name": "OASE Klinik Gigi — Pusat" },
+      "category": "OPERASIONAL",
+      "amount": "150000.00",
+      "expenseDate": "2026-09-01",
+      "note": "Beli alat kebersihan",
+      "proofUrl": "https://...",
+      "createdBy": "user-uuid",
+      "createdByUser": {
+        "id": "user-uuid",
+        "email": "manager@oase.id",
+        "employee": { "name": "Budi Manager" }
+      },
+      "createdAt": "2026-09-01T04:30:00.000Z",
+      "updatedAt": "2026-09-01T04:30:00.000Z"
+    }
+  ],
+  "meta": { "page": 1, "limit": 20, "total": 15, "totalPages": 1 }
+}
+```
+
+**POST /expenses**
+Request Body:
+```json
+{
+  "branchId": "uuid", // Opsional hanya untuk OWNER, non-OWNER dari JWT
+  "category": "OPERASIONAL", // OPERASIONAL | GAJI | SEWA | UTILITAS | SUPPLIER | LAINNYA
+  "amount": 150000, // > 0
+  "expenseDate": "2026-09-01", // <= hari ini WIB
+  "note": "Beli alat kebersihan",
+  "proofUrl": "https://..." // opsional
+}
+```
+Response 201:
+```json
+{
+  "success": true,
+  "data": {
+    "id": "uuid",
+    "branchId": "uuid",
+    "branch": { "id": "uuid", "code": "JKT", "name": "OASE Klinik Gigi — Pusat" },
+    "category": "OPERASIONAL",
+    "amount": "150000.00",
+    "expenseDate": "2026-09-01",
+    "note": "Beli alat kebersihan",
+    "proofUrl": null,
+    "createdBy": "user-uuid",
+    "createdAt": "2026-09-01T04:30:00.000Z",
+    "updatedAt": "2026-09-01T04:30:00.000Z"
+  }
+}
+```
+
+**POST /uploads/expense-proof** (multipart/form-data, field `file`, image <= 2MB)
+Response 201:
+```json
+{
+  "success": true,
+  "data": {
+    "url": "https://xxx.supabase.co/storage/v1/object/public/expense-proofs/expense-1725450000000-abcd1234.jpg"
+  }
+}
+```
+
 ---
 
 ## 12. Cash Closing `[OWNER, CASHIER]` (create); reopen `[OWNER]`
@@ -403,8 +475,7 @@ Variance negatif = defisit (kurang); positif = surplus (lebih); nol = tepat.
 | GET | /reports/attendance | OWNER, MANAGER | Rekap per karyawan per bulan |
 | GET | /reports/:any/export | sama dengan report asal | `?format=csv` → Content-Type text/csv |
 
-\* CASHIER hanya boleh `?branchId` = branch aktifnya sendiri; data
-agregat hari ini untuk dashboard.
+\* Catatan Keputusan Q5: CASHIER tidak memiliki akses ke endpoint `/reports/sales`. Seluruh data ringkasan omset & transaksi hari ini untuk kasir disediakan melalui endpoint `/dashboard/cashier`. Modul laporan ditujukan eksklusif untuk OWNER (dan MANAGER untuk laporan operasional pada cabang aktifnya).
 
 ---
 

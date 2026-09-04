@@ -80,7 +80,7 @@ async function run() {
   assert('Login OWNER berhasil', ownerLogin.status === 200 && !!ownerCookie);
 
   // Ambil list cabang untuk switch-branch
-  const branchesRes = await req('/branches', 'GET', null, ownerCookie);
+  const branchesRes = await req('/branches?limit=100', 'GET', null, ownerCookie);
   const branches = branchesRes.data?.data ?? [];
   const jkt = branches.find((b) => b.code === 'JKT');
   const bdg = branches.find((b) => b.code === 'BDG');

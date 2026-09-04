@@ -86,7 +86,7 @@ async function run() {
   const ownerCookie = ownerLogin.cookie;
   assert('Login OWNER berhasil', ownerLogin.status === 200 && !!ownerCookie);
 
-  const branchesRes = await req('/branches', 'GET', null, ownerCookie);
+  const branchesRes = await req('/branches?limit=100', 'GET', null, ownerCookie);
   const branches = branchesRes.data?.data ?? [];
   const jkt = branches.find((b) => b.code === 'JKT');
   const bdg = branches.find((b) => b.code === 'BDG');
@@ -221,8 +221,9 @@ async function run() {
 
   // ─── INV-3: Stock Opname (Hitung Fisik 45 → DB Stok 45, Delta -5) ───
   console.log('\n─── INV-3. Stock Opname (Snapshot 50, Fisik 45, Delta -5) ───');
+  const rndYear = 2030 + Math.floor(Math.random() * 60);
   const rndDay = Math.floor(Math.random() * 25) + 1;
-  const opnameDateStr = `2026-03-${String(rndDay).padStart(2, '0')}`;
+  const opnameDateStr = `${rndYear}-03-${String(rndDay).padStart(2, '0')}`;
 
   // 1. Create DRAFT Stock Opname
   const inv3_create = await req(
@@ -379,7 +380,7 @@ async function run() {
 
   // ─── INV-7: Penyesuaian Menghasilkan Stok Negatif Ditolak ───
   console.log('\n─── INV-7. Adjustment Stok Negatif Ditolak 409 INSUFFICIENT_STOCK ───');
-  const opnameDate2Str = `2026-04-${String(rndDay).padStart(2, '0')}`;
+  const opnameDate2Str = `${rndYear}-04-${String(rndDay).padStart(2, '0')}`;
 
   const opname2 = await req(
     '/stock-opnames',
@@ -469,7 +470,7 @@ async function run() {
 
   // ─── INV-9: IDOR & Branch Scope ───
   console.log('\n─── INV-9. IDOR & Branch Scope ───');
-  const bdgDateStr = `2026-05-${String(rndDay).padStart(2, '0')}`;
+  const bdgDateStr = `${rndYear}-05-${String(rndDay).padStart(2, '0')}`;
   const bdgOpname = await prisma.stockOpname.upsert({
     where: {
       branchId_opnameDate: {

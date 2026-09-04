@@ -69,7 +69,7 @@ async function main() {
   const owner = await login('owner@oase.id');
   assert('Autentikasi OWNER berhasil', owner.status === 200);
 
-  const branchesRes = await req('/branches', 'GET', null, owner.cookie);
+  const branchesRes = await req('/branches?limit=100', 'GET', null, owner.cookie);
   const jkt = branchesRes.data?.data?.find((b) => b.code === 'JKT');
   assert('Cabang JKT aktif dan tersedia', !!jkt);
 

@@ -94,7 +94,7 @@ async function main() {
   if (owner.status !== 200) throw new Error('Login OWNER gagal');
   pass('Login OWNER berhasil');
 
-  const branchesRes = await req('/branches', 'GET', null, owner.cookie);
+  const branchesRes = await req('/branches?limit=100', 'GET', null, owner.cookie);
   const jkt = branchesRes.data?.data?.find((b) => b.code === 'JKT');
   const bdg = branchesRes.data?.data?.find((b) => b.code === 'BDG');
   if (!jkt || !bdg) throw new Error('Cabang JKT atau BDG tidak ditemukan');

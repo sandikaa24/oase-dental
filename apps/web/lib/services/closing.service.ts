@@ -156,7 +156,18 @@ export async function getClosingPreview(branchId: string | null) {
     _sum: { amount: true },
   });
 
-  const expectedCash = cashPayments._sum.amount ?? new Prisma.Decimal(0);
+  // Pengeluaran sejak closing terakhir dalam periode ini (Keputusan Q3)
+  const expenseSum = await prisma.expense.aggregate({
+    where: {
+      branchId,
+      createdAt: paidAtFilter,
+    },
+    _sum: { amount: true },
+  });
+
+  const totalCashIn = cashPayments._sum.amount ?? new Prisma.Decimal(0);
+  const totalExpenses = expenseSum._sum.amount ?? new Prisma.Decimal(0);
+  const expectedCash = totalCashIn.sub(totalExpenses);
 
   // Hitung jumlah transaksi PAID dalam periode ini (semua metode)
   const transactionCount = await prisma.transaction.count({
@@ -230,7 +241,7 @@ export async function createClosing(
   const { periodStart, isFirstClosing } = await resolvePeriodStart(branchId);
   const paidAtFilter = isFirstClosing ? { gte: periodStart } : { gt: periodStart };
 
-  // Hitung expectedCash dari server (total CASH PAID sejak closing terakhir)
+  // Hitung expectedCash dari server (total CASH PAID sejak closing terakhir minus pengeluaran)
   const cashPayments = await prisma.transactionPayment.aggregate({
     where: {
       method: 'CASH',
@@ -243,7 +254,18 @@ export async function createClosing(
     _sum: { amount: true },
   });
 
-  const expectedCash = cashPayments._sum.amount ?? new Prisma.Decimal(0);
+  // Pengeluaran sejak closing terakhir dalam periode ini (Keputusan Q3)
+  const expenseSum = await prisma.expense.aggregate({
+    where: {
+      branchId,
+      createdAt: paidAtFilter,
+    },
+    _sum: { amount: true },
+  });
+
+  const totalCashIn = cashPayments._sum.amount ?? new Prisma.Decimal(0);
+  const totalExpenses = expenseSum._sum.amount ?? new Prisma.Decimal(0);
+  const expectedCash = totalCashIn.sub(totalExpenses);
   const variance = actualCash.sub(expectedCash);
 
   // Atomik: buat CashClosing + audit log

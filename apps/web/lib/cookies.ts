@@ -5,10 +5,15 @@ const ACCESS_MAX_AGE = 15 * 60; // 15 menit, sama dengan umur JWT access
 const REFRESH_MAX_AGE = 7 * 24 * 60 * 60; // 7 hari, sama dengan umur JWT refresh
 
 function baseOptions() {
+  const isSecure =
+    process.env.COOKIE_SECURE !== undefined
+      ? process.env.COOKIE_SECURE === 'true'
+      : process.env.NODE_ENV === 'production';
+
   return {
     httpOnly: true,
     sameSite: 'lax' as const,
-    secure: process.env.NODE_ENV === 'production',
+    secure: isSecure,
     path: '/',
   };
 }

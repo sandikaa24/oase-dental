@@ -7,8 +7,10 @@
     "lint": "pnpm --filter @oase/web lint",
     "db:migrate": "pnpm --filter @oase/web exec prisma migrate dev",
     "db:seed": "pnpm --filter @oase/web exec prisma db seed",
+    "db:seed:prod": "pnpm --filter @oase/web db:seed:prod",
     "db:reset": "pnpm --filter @oase/web exec prisma migrate reset --force",
     "db:studio": "pnpm --filter @oase/web exec prisma studio"
   },
+  "packageManager": "pnpm@11.24.0",
   "engines": { "node": ">=18.17.0" }
 }

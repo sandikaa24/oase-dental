@@ -73,3 +73,9 @@ export class ScheduleOverlapError extends AppError {
     super(message, 409, 'SCHEDULE_OVERLAP');
   }
 }
+
+export class TooManyRequestsError extends AppError {
+  constructor(message: string = 'Terlalu banyak percobaan login. Coba lagi dalam 15 menit.') {
+    super(message, 429, 'TOO_MANY_REQUESTS');
+  }
+}

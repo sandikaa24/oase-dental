@@ -1,0 +1,87 @@
+version: '3.8'
+
+services:
+  # ─── 1. DATABASE POSTGRESQL (Persistent Volume + Healthcheck) ───
+  postgres:
+    image: postgres:16-alpine
+    container_name: oase-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-oase_db}
+      POSTGRES_USER: ${POSTGRES_USER:-oase_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Wajib mengisi POSTGRES_PASSWORD di .env}
+    ports:
+      - "5432:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-oase_user} -d ${POSTGRES_DB:-oase_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - oase-network
+
+  # ─── 2. APLIKASI WEB NEXT.JS (Standalone Container) ───
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: oase-app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-oase_user}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-oase_db}?schema=public
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?Wajib mengisi JWT_ACCESS_SECRET di .env}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?Wajib mengisi JWT_REFRESH_SECRET di .env}
+      APP_URL: ${APP_URL:-https://klinik.example.com}
+      UPLOAD_DIR: /app/uploads/expense-proofs
+      SEED_OWNER_EMAIL: ${SEED_OWNER_EMAIL:-owner@klinik.example.com}
+      SEED_OWNER_PASSWORD: ${SEED_OWNER_PASSWORD:-password-sangat-kuat-min-12-char}
+      SEED_BRANCH_CODE: ${SEED_BRANCH_CODE:-PUSAT}
+      SEED_BRANCH_NAME: ${SEED_BRANCH_NAME:-OASE Dental Clinic — Pusat}
+    volumes:
+      - uploads-data:/app/uploads
+    networks:
+      - oase-network
+
+  # ─── 3. REVERSE PROXY & AUTOMATIC TLS (Caddy) ───
+  caddy:
+    image: caddy:2-alpine
+    container_name: oase-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - app
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:-:80}
+    command: caddy reverse-proxy --from {$APP_DOMAIN:-:80} --to app:3000
+    volumes:
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      - oase-network
+
+volumes:
+  db-data:
+    name: oase-db-data
+  uploads-data:
+    name: oase-uploads-data
+  caddy-data:
+    name: oase-caddy-data
+  caddy-config:
+    name: oase-caddy-config
+
+networks:
+  oase-network:
+    name: oase-network
+    driver: bridge

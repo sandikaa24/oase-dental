@@ -426,6 +426,8 @@ async function runSuite() {
       `URL: ${body.data?.url}`
     );
 
+    const uploadedUrl = body.data?.url;
+
     // 6.4 CASHIER ditolak mengunggah bukti
     res = await fetch(`${BASE_URL}/api/v1/uploads/expense-proof`, {
       method: 'POST',
@@ -433,6 +435,24 @@ async function runSuite() {
       body: validForm,
     });
     assert(res.status === 403, 'EXP-6.4', 'CASHIER ditolak mengunggah bukti nota (403 Forbidden)');
+
+    // 6.5 MANAGER/OWNER berhasil mengakses file bukti yang telah diunggah
+    res = await fetch(`${BASE_URL}${uploadedUrl}`, {
+      headers: { Cookie: managerAuth.cookies },
+    });
+    assert(res.status === 200, 'EXP-6.5', 'MANAGER berhasil mengunduh/melihat bukti nota via route serving (200 OK)');
+
+    // 6.6 CASHIER ditolak mengakses route serving bukti nota (403 FORBIDDEN)
+    res = await fetch(`${BASE_URL}${uploadedUrl}`, {
+      headers: { Cookie: cashierAuth.cookies },
+    });
+    assert(res.status === 403, 'EXP-6.6', 'CASHIER ditolak mengakses file bukti nota (403 Forbidden)');
+
+    // 6.7 File tidak ada menghasilkan 404 NOT_FOUND
+    res = await fetch(`${BASE_URL}/api/v1/uploads/expense-proof/non-existent-image.jpg`, {
+      headers: { Cookie: managerAuth.cookies },
+    });
+    assert(res.status === 404, 'EXP-6.7', 'Akses file bukti nota yang tidak ada mengembalikan 404 NOT_FOUND');
 
     // ─── SECTION 7: IMMUTABILITY (TIDAK ADA EDIT / DELETE) ────────────────────
     console.log('\n--- EXP-7: Immutability (Tidak Ada Edit / Delete) ---');

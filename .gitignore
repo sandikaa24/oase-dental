@@ -13,3 +13,5 @@ coverage/
 *.log
 ```cookies.txt
 build/
+/uploads/
+/apps/web/uploads/

@@ -78,6 +78,16 @@ Baca semua file di `docs/` SEBELUM menulis kode apa pun.
     null) — keduanya wajib berakhir pada UX yang benar, bukan
     pesan error guard. Skenario ini lahir dari bug nyata Tugas 4
     (OWNER terblokir kartu stok meski 104 test PASS).
+16. **Aturan Lingkungan & Proteksi Database (Anti-Menyiram DB):**
+    - `.env` lokal = Docker/Postgres dev lokal, PERMANEN.
+    - Kredensial staging/remote HIDUP di env var per-perintah
+      terminal atau file terpisah yang ter-gitignore (misal
+      `.env.staging`) — TIDAK PERNAH di `.env`.
+    - Test suite (`run-all-regression.mjs`) WAJIB menolak jalan
+      jika `DATABASE_URL` mengandung kata `"supabase"`, `"pooler."`,
+      atau `"staging"` (guard 3 baris di awal runner).
+    - Pelanggaran = test suite menyiram database staging atau
+      — jauh lebih fatal nanti — database produksi klinik.
 
 ---
 

@@ -1,4 +1,27 @@
 import { execSync } from 'child_process';
+import fs from 'fs';
+
+// Guard: Proteksi Lingkungan Database (AGENTS.md Aturan 16)
+function getActiveDatabaseUrl() {
+  if (process.env.DATABASE_URL) return process.env.DATABASE_URL;
+  for (const file of ['apps/web/.env', '.env']) {
+    if (fs.existsSync(file)) {
+      for (const line of fs.readFileSync(file, 'utf8').split('\n')) {
+        const trimmed = line.trim();
+        if (trimmed.startsWith('#')) continue;
+        const m = trimmed.match(/^DATABASE_URL\s*=\s*["']?([^"'\r\n]+)/);
+        if (m) return m[1];
+      }
+    }
+  }
+  return '';
+}
+const activeDbUrl = getActiveDatabaseUrl();
+if (/supabase|pooler\.|staging/i.test(activeDbUrl)) {
+  console.error('\n❌ FATAL: Test suite DITOLAK! DATABASE_URL terdeteksi mengarah ke Supabase/Staging/Remote DB.');
+  console.error('Aturan AGENTS.md #16: Test suite hanya boleh dijalankan di database dev lokal (Docker/localhost).\n');
+  process.exit(1);
+}
 
 const testSuites = [
   'phase0-regression-test.mjs',

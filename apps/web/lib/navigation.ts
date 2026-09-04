@@ -84,7 +84,11 @@ export const NAV_ITEMS: NavItem[] = [
     label: 'Laporan',
     href: '/admin/reports',
     iconName: 'BarChart3',
-    requiredPermission: Permission.SALES_REPORT,
+    requiredPermission: [
+      Permission.SALES_REPORT,
+      Permission.STOCK_REPORT,
+      Permission.EXPENSE_REPORT,
+    ],
     group: 'management',
   },
   {

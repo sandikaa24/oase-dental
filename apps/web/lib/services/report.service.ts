@@ -281,7 +281,7 @@ export async function getInventoryReport(
         itemName: material?.name || 'Unknown',
         currentQuantity: sl.quantity,
         minStock: material?.minStock || 0,
-        isLowStock: material ? sl.quantity < material.minStock : false,
+        isLowStock: material ? sl.quantity <= material.minStock : false,
         wac: wac.toFixed(2),
         totalValuation: valuation.toFixed(2),
       };
@@ -405,5 +405,5 @@ export async function getOwnerDashboard() {
     return { date: dStr, revenue: dayTotal.toFixed(2) };
   });
 
-  return { summary, trending };
+  return { summary, trending, sevenDayTrend: trending };
 }

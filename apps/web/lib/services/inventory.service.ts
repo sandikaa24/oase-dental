@@ -107,7 +107,7 @@ export async function listStock(
       const key = `${targetBranchId}_MATERIAL_${m.id}`;
       const sl = stockMap.get(key);
       const qty = sl ? sl.quantity : 0;
-      const isLow = qty < m.minStock;
+      const isLow = qty <= m.minStock;
 
       if (query.lowStock && !isLow) continue;
 
@@ -132,7 +132,7 @@ export async function listStock(
     for (const sl of stockLevels) {
       const m = materials.find((mat) => mat.id === sl.itemId);
       if (!m) continue;
-      const isLow = sl.quantity < m.minStock;
+      const isLow = sl.quantity <= m.minStock;
       if (query.lowStock && !isLow) continue;
 
       results.push({

@@ -482,6 +482,7 @@ Variance negatif = defisit (kurang); positif = surplus (lebih); nol = tepat.
 - **Metode**: Weighted Average Cost (WAC).
 - **Nilai Persediaan**: WAC berjalan per item dari SEMUA `STOCK_IN`. WAC = `SUM(unitCost × qty) / SUM(qty)`.
 - **HPP Periode (Biaya Stock In)**: Dihitung dari movement `STOCK_IN` (jumlah × `unitCost`) dalam rentang tanggal yang dipilih.
+- **Definisi Stok Kritis (Low Stock)**: Kuantitas saat ini kurang dari atau sama dengan batas minimum (`quantity <= minStock`). Item dengan `quantity <= minStock` mengembalikan `isLowStock: true`.
 
 ---
 

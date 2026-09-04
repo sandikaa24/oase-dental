@@ -144,7 +144,46 @@ async function run() {
     assert(true, 'Shape: inventory totalValuation (skipped, empty)');
   }
 
-  console.log(`\\n--- RESULT: ${passed}/${assertions} PASSED ---`);
+  console.log('\n3. Testing Boundary isLowStock (qty <= minStock)');
+  const testBranch = await prisma.branch.findFirst();
+  const testMat = await prisma.material.create({
+    data: {
+      name: `Test Boundary Material ${Date.now()}`,
+      sku: `SKU-BND-${Date.now()}`,
+      unit: 'pcs',
+      minStock: 10,
+    },
+  });
+
+  // Case A: quantity === minStock (10 === 10) -> MUST be isLowStock: true
+  const stockLevelA = await prisma.stockLevel.create({
+    data: {
+      branchId: testBranch.id,
+      itemId: testMat.id,
+      itemType: 'MATERIAL',
+      quantity: 10,
+    },
+  });
+
+  const invResA = await getJson('/reports/inventory?limit=100');
+  const foundA = invResA.data.find((i) => i.id === stockLevelA.id);
+  assert(foundA && foundA.isLowStock === true, 'Boundary: quantity === minStock (10 === 10) MUST be isLowStock: true');
+
+  // Case B: quantity === minStock + 1 (11 > 10) -> MUST be isLowStock: false
+  await prisma.stockLevel.update({
+    where: { id: stockLevelA.id },
+    data: { quantity: 11 },
+  });
+
+  const invResB = await getJson('/reports/inventory?limit=100');
+  const foundB = invResB.data.find((i) => i.id === stockLevelA.id);
+  assert(foundB && foundB.isLowStock === false, 'Boundary: quantity === minStock + 1 (11 > 10) MUST be isLowStock: false');
+
+  // Cleanup
+  await prisma.stockLevel.delete({ where: { id: stockLevelA.id } });
+  await prisma.material.delete({ where: { id: testMat.id } });
+
+  console.log(`\n--- RESULT: ${passed}/${assertions} PASSED ---`);
   if (passed !== assertions) {
     process.exit(1);
   }

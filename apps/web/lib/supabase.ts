@@ -16,8 +16,7 @@ export interface UploadProofResult {
 export async function uploadExpenseProof(
   fileBuffer: Buffer,
   fileName: string,
-  _mimeType?: string
+  mimeType?: string
 ): Promise<string> {
-  void _mimeType;
-  return saveExpenseProof(fileBuffer, fileName);
+  return saveExpenseProof(fileBuffer, fileName, mimeType);
 }

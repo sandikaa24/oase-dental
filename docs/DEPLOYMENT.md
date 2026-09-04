@@ -137,15 +137,79 @@ Jadwalkan backup dieksekusi setiap malam pukul 02:00 WIB via `crontab -e`:
 
 ---
 
-## 5. Jalur Staging (Vercel)
+## 5. Jalur Staging (Vercel + Supabase `oase-staging`)
 
-1. Hubungkan repository GitHub ke Vercel Dashboard.
-2. Atur Root Directory ke `./apps/web` (atau biarkan pnpm monorepo workspace).
-3. Isi Environment Variables pada Settings Vercel:
-   - `DATABASE_URL`: Connection string PostgreSQL eksternal (Supabase/Neon).
-   - `JWT_ACCESS_SECRET` & `JWT_REFRESH_SECRET`.
-   - `APP_URL`: Domain staging Vercel (misal `https://oase-dental-staging.vercel.app`).
-4. Jalankan migrasi melalui pipeline CI/CD atau terminal lokal terhubung ke DB staging.
+Jalur deployment Staging ditujukan untuk demo dan peninjauan fungsional/UI bersama klien. Staging menggunakan **Vercel Serverless** terhubung ke database **Supabase PostgreSQL `oase-staging`** (Region Singapore).
+
+### 5.1 Pengaturan Project di Vercel Dashboard
+1. **Import Repository**:
+   - Buka [Vercel Dashboard](https://vercel.com/dashboard) → *Add New Project* → pilih repositori `sandikaa24/oase-dental`.
+2. **Pengaturan Monorepo & Root Directory**:
+   - **Framework Preset**: `Next.js`
+   - **Root Directory**: Klik *Edit*, pilih folder `apps/web`.
+   - Pastikan opsi *"Include source files outside of the Root Directory in the Build Step"* dalam keadaan **AKTIF** (agar paket `@oase/shared` dan pnpm workspace terdeteksi).
+3. **Region Serverless Function**:
+   - Repositori telah dilengkapi file `vercel.json` yang mengunci region ke **`sin1`** (Singapore / AWS ap-southeast-1). Hal ini menempatkan komputasi serverless Vercel dalam satu fasilitas jaringan dengan database Supabase Singapore, meminimalkan latensi kueri.
+
+### 5.2 Konfigurasi Environment Variables di Vercel
+Tambahkan seluruh variabel lingkungan berikut pada tab **Project Settings > Environment Variables** (centang untuk *Production*, *Preview*, dan *Development* bila diperlukan):
+
+| Nama Variabel | Contoh Format Nilai | Keterangan Wajib |
+|---|---|---|
+| `DATABASE_URL` | `postgresql://postgres.[ref]:[pwd]@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres?pgbouncer=true` | **Wajib port 6543** + parameter `?pgbouncer=true` (PgBouncer Transaction Pooler untuk serverless). |
+| `DIRECT_URL` | `postgresql://postgres.[ref]:[pwd]@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres` | **Wajib port 5432** direct connection (digunakan Prisma Client untuk validasi skema). |
+| `JWT_ACCESS_SECRET` | *(string acak minimal 32 karakter)* | Kunci enkripsi token akses JWT sesi staging. |
+| `JWT_REFRESH_SECRET` | *(string acak minimal 32 karakter)* | Kunci enkripsi refresh token staging. |
+| `COOKIE_SECURE` | `true` | Wajib `true` karena domain Vercel berjalan pada HTTPS. |
+| `NODE_ENV` | `production` | Mengaktifkan optimasi runtime produksi Next.js. |
+| `APP_URL` | `https://oase-dental-staging.vercel.app` | URL domain Vercel staging Anda. |
+| `STORAGE_DRIVER` | `supabase` | Mengaktifkan driver penyimpanan bukti nota ke Supabase Storage. |
+| `SUPABASE_URL` | `https://[ref].supabase.co` | Endpoint REST project Supabase `oase-staging`. |
+| `SUPABASE_SERVICE_ROLE_KEY` | `eyJhbGciOi...` | Kunci bypass RLS server-side untuk upload bukti nota ke bucket `expense-proofs`. |
+
+> [!CAUTION]
+> **JANGAN PERNAH MENYIMPAN KREDENSIAL DI FILE YANG DI-COMMIT KE GIT!**
+> Seluruh kredensial rahasia di atas wajib dimasukkan langsung oleh Owner melalui Vercel dashboard.
+
+### 5.3 Menjalankan Migrasi Skema ke Supabase Staging dari Lokal
+Karena PgBouncer pooler (port 6543) tidak mendukung perintah DDL migrasi skema (`pg_advisory_lock`), eksekusi migrasi skema dijalankan sekali dari komputer lokal Owner melalui **connection direct (port 5432)**:
+
+1. Buka terminal di komputer lokal dari root repositori `d:\OASE`.
+2. Jalankan perintah migrasi Prisma dengan mengarahkan `DATABASE_URL` ke `DIRECT_URL`:
+   ```powershell
+   $env:DATABASE_URL="postgresql://postgres.[ref]:[password]@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres"
+   pnpm --filter @oase/web exec prisma migrate deploy
+   ```
+3. Output akan menampilkan seluruh riwayat migrasi sukses diterapkan ke database Supabase staging.
+
+### 5.4 Seeding Data Awal Staging
+Setelah skema tabel terbentuk di Supabase staging, inisialisasi akun Owner dan cabang pusat menggunakan script produksi (0 dummy):
+
+```powershell
+$env:NODE_ENV="production"
+$env:DATABASE_URL="postgresql://postgres.[ref]:[password]@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres"
+$env:SEED_OWNER_EMAIL="owner@oasedental.id"
+$env:SEED_OWNER_PASSWORD="password-owner-sangat-kuat-min-12-char"
+$env:SEED_BRANCH_CODE="PUSAT"
+$env:SEED_BRANCH_NAME="OASE Dental Clinic — Pusat"
+
+pnpm db:seed:prod
+```
+
+Setelah akun Owner terbentuk, Owner dapat langsung login ke web staging Vercel dan membuat akun Manager serta Kasir melalui menu **Kelola Pengguna** (`/admin/users`).
+
+### 5.5 Prosedur Reset Data Staging
+Jika selama sesi review data transaksi staging telah kotor dan ingin direset kembali ke kondisi awal yang bersih:
+1. Jalankan kueri pembersihan tabel transaksi operasional via Supabase SQL Editor:
+   ```sql
+   TRUNCATE TABLE transactions, transaction_items, cash_closings, expenses, stock_opnames, stock_opname_items, inventory_movements, attendances, leave_requests CASCADE;
+   ```
+2. Atau jalankan ulang migrasi bersih bila diperlukan:
+   ```powershell
+   $env:DATABASE_URL="postgresql://postgres.[ref]:[password]@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres"
+   pnpm --filter @oase/web exec prisma migrate reset --force
+   pnpm db:seed:prod
+   ```
 
 ---
 
@@ -173,30 +237,135 @@ Jadwalkan backup dieksekusi setiap malam pukul 02:00 WIB via `crontab -e`:
 
 ---
 
-## 7. Mode Production Sementara di Windows PC (Transisi)
+## 7. Mode Production Sementara di Windows PC (Transisi Go-Live)
 
-Apabila sistem hendak dijalankan dalam mode production secara mandiri di PC Windows klinik sebelum server VPS Linux tersedia, ikuti panduan transisi berikut:
+Sesuai keputusan arsitektur awal, sistem OASE dapat dijalankan langsung pada PC Windows klinik dengan memadukan **Docker Desktop untuk PostgreSQL** dan **Node.js native untuk Next.js App**:
 
-### 7.1 Menjalankan Aplikasi
-Jalankan perintah build dan start dari root repository:
-```bash
+### 7.1 Prasyarat & Konfigurasi Lingkungan
+1. **Docker Desktop for Windows**: Terinstal dan aktif (menggunakan backend WSL2).
+2. **Node.js v20+ & pnpm v9+**: Terinstal di Windows host.
+3. **File `.env` Produksi di Root Repositori**:
+   ```env
+   # Database (Docker container postgres di localhost)
+   POSTGRES_DB=oase_db
+   POSTGRES_USER=oase_user
+   POSTGRES_PASSWORD=ganti_dengan_password_sangat_rahasia_123
+   DATABASE_URL="postgresql://oase_user:ganti_dengan_password_sangat_rahasia_123@localhost:5432/oase_db?schema=public"
+
+   # Auth & Session Cookie
+   JWT_ACCESS_SECRET="min_32_karakter_acak_rahasia_jwt_access_token_oase"
+   JWT_REFRESH_SECRET="min_32_karakter_acak_rahasia_jwt_refresh_token_oase"
+   COOKIE_SECURE=false
+
+   # Application & Runtime
+   NODE_ENV=production
+   APP_URL="http://localhost:3000"
+   PORT=3000
+   UPLOAD_DIR="./apps/web/public/uploads"
+
+   # Initial Seed Owner
+   SEED_OWNER_EMAIL="owner@oasedental.id"
+   SEED_OWNER_PASSWORD="password-owner-kuat-minimal-12-karakter"
+   SEED_BRANCH_CODE="PUSAT"
+   SEED_BRANCH_NAME="OASE Dental Clinic — Pusat"
+   ```
+   > [!IMPORTANT]
+   > `COOKIE_SECURE=false` wajib digunakan karena akses produksi awal berjalan melalui protokol HTTP lokal (LAN/localhost) tanpa sertifikat TLS HTTPS kustom.
+
+### 7.2 Urutan Inisialisasi Database & Seeding Pertama Kali
+Jalankan langkah-langkah berikut secara berurutan:
+1. **Jalankan Kontainer Database PostgreSQL**:
+   ```powershell
+   docker compose up -d postgres
+   ```
+   Verifikasi kontainer aktif:
+   ```powershell
+   docker ps --filter "name=oase-postgres"
+   ```
+2. **Terapkan Migrasi Skema**:
+   ```powershell
+   pnpm --filter @oase/web exec prisma migrate deploy
+   ```
+3. **Inisialisasi Akun Owner & Cabang Utama (Seed Produksi)**:
+   ```powershell
+   $env:NODE_ENV="production"; pnpm db:seed:prod
+   ```
+   *Catatan: Script ini idempoten, menolak data dummy, dan hanya membuat 1 akun Owner serta 1 cabang pusat.*
+
+### 7.3 Menjalankan Aplikasi Web Produksi
+Kompilasi dan jalankan server Next.js:
+```powershell
 pnpm build
 pnpm start
 ```
-- Menjalankan `pnpm start` secara otomatis menetapkan `NODE_ENV=production`.
-- Dalam mode ini, seluruh proteksi keamanan tingkat produksi aktif penuh, termasuk **In-Memory Rate Limiter** pada endpoint login (`/api/v1/auth/login`, maksimal 5 kegagalan per IP/email per 15 menit).
+- Server aktif melayani request kasir dan staf di `http://localhost:3000` (atau IP lokal LAN klinik misal `http://192.168.1.100:3000`).
+- Mode `NODE_ENV=production` mengaktifkan in-memory rate limiter (maksimal 5 kegagalan login berturut-turut per 15 menit).
 
-### 7.2 Peringatan Database & Seeding
+### 7.4 Kebijakan Daya & Pencegahan Sleep PC Windows
+Agar operasional kasir dan pencatatan absensi tidak terputus di tengah hari:
 > [!WARNING]
-> **JANGAN jalankan `pnpm db:seed:prod` selama masih memakai DB dev!**
-> Script `seed.prod.ts` ditujukan eksklusif untuk database produksi yang masih bersih/kosong. Jika Anda masih menggunakan database development/staging, jangan jalankan script tersebut agar data operasional yang ada tidak terganggu.
+> **PC Windows yang menjadi host server TIDAK BOLEH SLEEP pada jam operasional klinik!**
 
-### 7.3 Backup Harian via Windows Task Scheduler
-Untuk mengamankan data klinik di Windows PC secara berkala:
-1. **Database**: Jalankan `pg_dump` ke file `.sql` menggunakan binary PostgreSQL lokal.
-2. **File Uploads**: Salin folder penyimpanan bukti nota pengeluaran (`uploads/` atau path yang dikonfigurasi di `UPLOAD_DIR`).
-3. **Automasi**: Buat script `.bat` atau `.ps1` yang menjalankan kedua proses di atas, lalu jadwalkan eksekusi otomatis setiap hari di luar jam operasional klinik melalui **Windows Task Scheduler** (`taskschd.msc`).
+Jalankan perintah berikut di PowerShell (Run as Administrator) untuk menonaktifkan sleep saat terhubung ke listrik AC:
+```powershell
+powercfg /change standby-timeout-ac 0
+powercfg /change hibernate-timeout-ac 0
+```
 
-### 7.4 Catatan Arsitektur
-> [!NOTE]
-> Menjalankan aplikasi langsung di Windows PC merupakan **mode transisi operasional sementara**. Target akhir standar rilis sistem OASE tetap mengacu pada arsitektur **Self-Hosted VPS Docker** (Linux + Docker Compose + Caddy otomatis HTTPS) sesuai panduan utama di Bagian 2 dokumen ini demi keandalan, isolasi proses, dan kedaulatan data jangka panjang.
+### 7.5 Otomatisasi Backup & Task Scheduler Windows
+Gunakan script `scripts\backup-prod.ps1` yang otomatis mengeksekusi `pg_dump`, mengompresi volume uploads bukti kuitansi, menghapus arsip > 7 hari, dan mencatat log.
+
+Daftarkan 2 trigger pada **Windows Task Scheduler** (`taskschd.msc`):
+
+#### Trigger 1: Backup Harian Setelah Tutup Klinik
+- **Nama Task**: `OASE-Dental-Daily-Backup`
+- **Trigger**: *Daily*, pukul `23:00` WIB setiap hari.
+- **Action**: *Start a program*
+  - **Program/script**: `powershell.exe`
+  - **Add arguments**: `-ExecutionPolicy Bypass -WindowStyle Hidden -File "D:\OASE\scripts\backup-prod.ps1" -RetentionDays 7`
+  - **Start in**: `D:\OASE`
+- **Settings**: Centang *"Run whether user is logged on or not"* dan *"Do not store password"*.
+
+#### Trigger 2: At Startup (Auto-Start Services & Backup Saat Boot)
+- **Nama Task**: `OASE-Dental-Startup-AutoRun`
+- **Trigger**: *At startup* (dengan penundaan 1 menit untuk memastikan Docker engine siap).
+- **Action**: *Start a program*
+  - **Program/script**: `powershell.exe`
+  - **Add arguments**: `-ExecutionPolicy Bypass -Command "docker compose -f D:\OASE\docker-compose.yml up -d postgres; powershell -ExecutionPolicy Bypass -File D:\OASE\scripts\backup-prod.ps1; cd D:\OASE; pnpm start"`
+  - **Start in**: `D:\OASE`
+
+---
+
+## 8. Prosedur Fallback Manual Hari Pertama (SOP Kertas → Input Ulang)
+
+Apabila terjadi situasi darurat pada hari pertama go-live (pemadaman listrik berkepanjangan, kegagalan perangkat keras PC, atau kerusakan jaringan):
+
+### 8.1 Formulir Kertas Fisik Darurat (Kesiapan Meja Kasir)
+Sebelum klinik dibuka, kasir dan front-desk wajib menyiapkan bundel formulir kertas manual:
+1. **Formulir Transaksi Pelayanan Pasien**:
+   - Kolom: `[Nomor Urut / Jam Pelayanan]`, `[Nama Pasien / No. RM]`, `[Dokter Pemeriksa]`, `[Tindakan Layanan & Obat yang Diberikan]`, `[Tarif Satuan & Total Tagihan]`, `[Metode Pembayaran: Tunai / Debit EDC / QRIS Statis]`, `[Nomor Bukti Approval EDC / RRN]`, `[Nama & Paraf Kasir]`.
+2. **Formulir Pengeluaran Kas Darurat**:
+   - Kolom: `[Jam]`, `[Keperluan Belanja / Biaya]`, `[Nominal]`, `[Penerima / Toko]`, `[Kuitansi Fisik / Bon Terlampir]`.
+3. **Kartu Stok Bahan Medis Fisik**:
+   - Catat setiap ampul anestesi, komposit, atau obat yang diambil selama sistem offline.
+
+### 8.2 Prosedur Rekonsiliasi & Input Ulang (Back-Entry)
+Segera setelah PC server dan sistem kembali menyala normal:
+1. **Buka Shift Kasir**: Pastikan kasir login dan memeriksa jam sistem server.
+2. **Urutan Input Data Berurutan (Chronological Order)**:
+   - **Langkah 1 (Absensi)**: Pastikan absensi jam masuk staf klinik diinput atau disesuaikan terlebih dahulu.
+   - **Langkah 2 (Stok Masuk / Penyesuaian)**: Jika ada penerimaan bahan medis dari supplier selama offline, input melalui menu *Inventaris > Penerimaan Stok* agar HPP WAC akurat.
+   - **Langkah 3 (Transaksi Kasir)**: Masukkan satu per satu transaksi dari form kertas ke menu *Kasir (POS)* sesuai urutan waktu pasien dilayani.
+     - Pilih dokter dan layanan yang sesuai.
+     - Masukkan metode bayar (Tunai, Debit dengan nomor referensi EDC yang dicatat di kertas, atau QRIS).
+     - Selesaikan pembayaran (`PAID`).
+   - **Langkah 4 (Pengeluaran Operasional)**: Masukkan seluruh pengeluaran kas darurat pada menu *Pengeluaran*, lampirkan foto bon/kuitansi fisik yang sudah difoto melalui kamera HP/scanner.
+3. **Verifikasi & Rekonsiliasi Closing Kas**:
+   - Buka menu *Tutup Kas (Closing)*.
+   - Bandingkan kalkulasi sistem dengan fisik:
+     - Total Fisik Uang Tunai di laci kasir == `cashRevenue` pada sistem closing.
+     - Total Struk EDC Mandiri/BCA == `debitRevenue`.
+     - Total Laporan Settlement QRIS == `qrisRevenue`.
+   - Jika semua angka cocok, masukkan nominal uang fisik dan submit closing kas (`CLOSED`).
+   - Lampirkan form kertas transaksi darurat ke dalam ordner fisik arsip kas harian bersama struk closing digital.
+

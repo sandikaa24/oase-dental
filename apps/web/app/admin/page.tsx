@@ -613,7 +613,7 @@ function OwnerDashboardView() {
 interface TrendPoint {
   date: string;
   revenue: string;
-  transactions: number;
+  transactions?: number;
 }
 
 function SevenDayTrendChart({ trend }: { trend: TrendPoint[] }) {

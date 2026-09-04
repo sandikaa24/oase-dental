@@ -28,12 +28,15 @@ function ensureUploadDir(): void {
 }
 
 /**
- * Menyimpan buffer file bukti pengeluaran ke filesystem lokal.
- * Mengembalikan relative URL yang dapat diakses oleh client yang terotentikasi.
+ * Menyimpan buffer file bukti pengeluaran.
+ * Adaptif berdasarkan STORAGE_DRIVER:
+ * - 'supabase': Mengunggah ke Supabase Storage REST API bucket 'expense-proofs' (staging Vercel).
+ * - default ('local'): Menyimpan ke filesystem lokal (/app/uploads/expense-proofs pada Docker/PC).
  */
 export async function saveExpenseProof(
   fileBuffer: Buffer,
-  fileName: string
+  fileName: string,
+  mimeType?: string
 ): Promise<string> {
   // Sanitasi nama file
   const safeName = path.basename(fileName);
@@ -41,6 +44,42 @@ export async function saveExpenseProof(
     throw new ValidationError('Nama file tidak valid');
   }
 
+  // 1. Jalur Supabase Storage (Staging Vercel)
+  if (process.env.STORAGE_DRIVER === 'supabase') {
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const bucketName = 'expense-proofs';
+
+    if (!supabaseUrl || !serviceRoleKey) {
+      throw new ValidationError(
+        'STORAGE_DRIVER diset ke supabase tetapi SUPABASE_URL atau SUPABASE_SERVICE_ROLE_KEY belum dikonfigurasi'
+      );
+    }
+
+    const uploadUrl = `${supabaseUrl}/storage/v1/object/${bucketName}/${safeName}`;
+    const contentType = mimeType || 'image/jpeg';
+
+    const res = await fetch(uploadUrl, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${serviceRoleKey}`,
+        'Content-Type': contentType,
+        'x-upsert': 'true',
+      },
+      body: new Uint8Array(fileBuffer),
+    });
+
+    if (!res.ok) {
+      const errorText = await res.text().catch(() => '');
+      throw new ValidationError(
+        `Gagal mengunggah bukti pengeluaran ke Supabase Storage (${res.status}): ${errorText}`
+      );
+    }
+
+    return `${supabaseUrl}/storage/v1/object/public/${bucketName}/${safeName}`;
+  }
+
+  // 2. Jalur Default: Storage Lokal Persisten (Docker VPS / PC Windows)
   ensureUploadDir();
   const filePath = path.join(UPLOADS_ROOT, safeName);
 

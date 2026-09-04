@@ -343,6 +343,7 @@ export async function stockIn(
           materialId: it.itemId,
           itemId: it.itemId,
           quantityDelta: it.quantity,
+          unitCost: it.unitCost, // Tambahan: simpan ke kolom db
           referenceType: 'STOCK_IN',
           notes,
           createdBy: userId,

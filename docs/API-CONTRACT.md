@@ -467,15 +467,21 @@ Variance negatif = defisit (kurang); positif = surplus (lebih); nol = tepat.
 
 | Method | Path | Permission | Deskripsi |
 |---|---|---|---|
-| GET | /reports/sales | OWNER, CASHIER* | `?dateFrom&dateTo&branchId(OWNER)&method&groupBy=day\|month` |
+| GET | /reports/sales | OWNER | `?dateFrom&dateTo&branchId(OWNER)&method&groupBy=day\|month` |
+| GET | /reports/products | OWNER | `?dateFrom&dateTo` — Layanan & obat terlaris (qty+omzet) |
 | GET | /reports/sales/summary | OWNER | Konsolidasi semua cabang per periode |
 | GET | /reports/expenses | OWNER, MANAGER | Per branch + kategori |
-| GET | /reports/gross-profit | OWNER | `?dateFrom&dateTo` — penjualan − stock-in cost − pengeluaran |
-| GET | /reports/inventory | OWNER, MANAGER | Stok + nilai + low stock |
+| GET | /reports/gross-profit | OWNER | `?dateFrom&dateTo` — penjualan − HPP WAC − pengeluaran |
+| GET | /reports/inventory | OWNER, MANAGER | Stok + nilai WAC + low stock |
 | GET | /reports/attendance | OWNER, MANAGER | Rekap per karyawan per bulan |
-| GET | /reports/:any/export | sama dengan report asal | `?format=csv` → Content-Type text/csv |
+| GET | /reports/:any/export | sama dengan report asal | TUNDA (Q10: Export CSV menyusul di tugas frontend) |
 
-\* Catatan Keputusan Q5: CASHIER tidak memiliki akses ke endpoint `/reports/sales`. Seluruh data ringkasan omset & transaksi hari ini untuk kasir disediakan melalui endpoint `/dashboard/cashier`. Modul laporan ditujukan eksklusif untuk OWNER (dan MANAGER untuk laporan operasional pada cabang aktifnya).
+\* Catatan Keputusan Q5 & Q9: CASHIER dan MANAGER tidak memiliki akses ke endpoint `/reports/sales`, `/reports/gross-profit`, dan `/reports/products`. Seluruh data ringkasan omset & transaksi hari ini untuk kasir disediakan melalui endpoint `/dashboard/cashier`. Modul laporan penjualan ditujukan eksklusif untuk OWNER. MANAGER hanya bisa akses operasional (`/reports/inventory`, `/reports/expenses`, `/reports/attendance`) pada cabang aktifnya.
+
+**Keputusan Desain HPP & Nilai Persediaan (BINDING)**:
+- **Metode**: Weighted Average Cost (WAC).
+- **Nilai Persediaan**: WAC berjalan per item dari SEMUA `STOCK_IN`. WAC = `SUM(unitCost × qty) / SUM(qty)`.
+- **HPP Periode (Biaya Stock In)**: Dihitung dari movement `STOCK_IN` (jumlah × `unitCost`) dalam rentang tanggal yang dipilih.
 
 ---
 
@@ -514,8 +520,8 @@ Catatan field:
 
 ## 15. Audit Log `[OWNER]`
 
-`GET /audit-logs` — filter `action`, `entity`, `actorId`, `dateFrom/To`.
-Read-only.
+`GET /audit-logs` — filter `action`, `entity`, `actorId`, `dateFrom/To`, dengan pagination `?page&limit`.
+Read-only. Response shape: `{ success, data: [...], meta: { page, limit, total, totalPages } }`.
 
 ---
 

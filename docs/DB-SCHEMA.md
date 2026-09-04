@@ -249,6 +249,7 @@ model InventoryMovement {
   materialId    String?
   itemId        String
   quantityDelta Int    // positif = masuk, negatif = keluar
+  unitCost      Decimal? @db.Decimal(12, 2)
   referenceType MovementType
   referenceId   String? // transaction id / opname id / stock-in batch id
   notes         String?

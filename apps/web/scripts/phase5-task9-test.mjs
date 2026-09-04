@@ -133,12 +133,12 @@ async function runSuite() {
     const cashierAuth = await login(cashier ? cashier.email : 'cashier@oase.id', '1234');
     assert(cashierAuth.status === 200, 'SETUP-3', 'Login CASHIER berhasil');
 
-    // Tanggal WIB hari ini dan besok
-    const today = new Date();
-    const todayStr = today.toISOString().split('T')[0];
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const tomorrowStr = tomorrow.toISOString().split('T')[0];
+    // Tanggal WIB hari ini dan besok (menggunakan timezone Asia/Jakarta)
+    const todayJakartaStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta' }).format(new Date());
+    const todayStr = todayJakartaStr;
+    const tomorrowDate = new Date();
+    tomorrowDate.setDate(tomorrowDate.getDate() + 2);
+    const tomorrowStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta' }).format(tomorrowDate);
 
     // ─── SECTION 1: VALIDASI INPUT ──────────────────────────────────────────
     console.log('\n--- EXP-1: Validasi Input Pengeluaran ---');

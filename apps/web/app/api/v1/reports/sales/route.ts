@@ -14,7 +14,7 @@ export const GET = withErrorHandler(async (req: Request) => {
   const query = salesReportQuerySchema.parse(Object.fromEntries(url.searchParams));
 
   // PRD: Owner can filter by branchId
-  const branchId = query.branchId;
+  const branchId: string | undefined = query.branchId;
 
   const { meta, ...data } = await getSalesReport(
     branchId,

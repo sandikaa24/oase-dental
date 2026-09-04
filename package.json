@@ -11,6 +11,6 @@
     "db:reset": "pnpm --filter @oase/web exec prisma migrate reset --force",
     "db:studio": "pnpm --filter @oase/web exec prisma studio"
   },
-  "packageManager": "pnpm@11.24.0",
+  "packageManager": "pnpm@9.15.4",
   "engines": { "node": ">=18.17.0" }
 }

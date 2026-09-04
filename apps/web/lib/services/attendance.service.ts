@@ -32,7 +32,7 @@ export function getJakartaDateTime(date: Date = new Date()) {
 
   const dateStr = `${year}-${month}-${day}`;
   const timeStr = `${hour}:${minute}`;
-  const workDate = new Date(`${dateStr}T00:00:00.000Z`);
+  const workDate = new Date(`${dateStr}T00:00:00+07:00`);
 
   return { dateStr, timeStr, workDate };
 }

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { PaymentMethod, ExpenseCategory } from '@prisma/client';
+import { PaymentMethod, ExpenseCategory } from '@oase/shared';
 
 export const baseReportQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),

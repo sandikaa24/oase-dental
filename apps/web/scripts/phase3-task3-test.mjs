@@ -77,6 +77,7 @@ async function login(email, password) {
 async function cleanupClosings(branchId) {
   if (!branchId) return;
   await prisma.cashClosing.deleteMany({ where: { branchId } });
+  await prisma.expense.deleteMany({ where: { branchId } });
   console.log(`  [SETUP] Closing data dihapus untuk branchId: ${branchId}`);
 }
 

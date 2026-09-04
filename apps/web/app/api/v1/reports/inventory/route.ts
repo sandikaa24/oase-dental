@@ -14,7 +14,7 @@ export const GET = withErrorHandler(async (req: Request) => {
   const query = baseReportQuerySchema.parse(Object.fromEntries(url.searchParams));
 
   // Role check for branch filter
-  let branchId = query.branchId;
+  let branchId: string | undefined = query.branchId;
   if (auth.role !== 'OWNER') {
     branchId = auth.branchId || undefined; // Force manager to active branch
   }

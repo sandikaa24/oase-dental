@@ -57,8 +57,10 @@ export class ConflictError extends AppError {
 }
 
 export class InsufficientStockError extends AppError {
-  constructor(message: string = 'Stok tidak mencukupi') {
+  public readonly available?: number;
+  constructor(message: string = 'Stok tidak mencukupi', available?: number) {
     super(message, 409, 'INSUFFICIENT_STOCK');
+    this.available = available;
   }
 }
 

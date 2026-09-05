@@ -16,12 +16,13 @@ export function ok<T>(data: T, meta?: { page: number; limit: number; total: numb
  * { success: false, message, code }
  */
 export function fail(error: AppError) {
-  return NextResponse.json(
-    {
-      success: false as const,
-      message: error.message,
-      code: error.code,
-    },
-    { status: error.statusCode },
-  );
+  const payload: Record<string, unknown> = {
+    success: false as const,
+    message: error.message,
+    code: error.code,
+  };
+  if ('available' in error && (error as { available?: number }).available !== undefined) {
+    payload.available = (error as { available?: number }).available;
+  }
+  return NextResponse.json(payload, { status: error.statusCode });
 }

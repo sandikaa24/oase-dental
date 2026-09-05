@@ -44,6 +44,7 @@ const testSuites = [
   'phase5-task9-test.mjs',
   'phase3-task10-test.mjs',
   'phase3-task13-2-test.mjs',
+  'phase3-task-b1-stock-test.mjs',
 ];
 
 console.log('======================================================================');

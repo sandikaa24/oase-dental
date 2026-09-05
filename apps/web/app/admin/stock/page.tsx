@@ -12,15 +12,12 @@ import { MovementHistoryDrawer } from '@/components/stock/movement-history-drawe
 import { BranchSelector } from '@/components/inventory/branch-selector';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import {
   Boxes,
   Plus,
   Search,
   AlertTriangle,
   Clock,
-  CheckCircle2,
-  Filter,
 } from 'lucide-react';
 
 export default function StockManagementPage() {
@@ -56,7 +53,7 @@ export default function StockManagementPage() {
   const [itemForDrawer, setItemForDrawer] = useState<StockItem | null>(null);
 
   // Query data stok cabang
-  const { data, isLoading, isError, error } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: [
       'stock-list',
       effectiveBranchId,
@@ -79,12 +76,12 @@ export default function StockManagementPage() {
     enabled: !!user,
   });
 
-  const stockData = data?.data?.items || [];
+  const stockData = useMemo(() => data?.data?.items || [], [data?.data?.items]);
   const currentBranchId = data?.data?.branchId || effectiveBranchId;
 
   // Ringkasan metrik statistik
   const summaryMetrics = useMemo(() => {
-    let totalItems = stockData.length;
+    const totalItems = stockData.length;
     let lowStockCount = 0;
     let expiredCount = 0;
     let expiringSoonCount = 0;

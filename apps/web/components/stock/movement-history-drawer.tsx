@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { StockItem, StockMovementItem, StockMovementType } from './stock-types';
+import { StockItem, StockMovementItem } from './stock-types';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';

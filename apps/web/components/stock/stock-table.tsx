@@ -12,7 +12,6 @@ import {
   History,
   AlertTriangle,
   Clock,
-  Package,
   CheckCircle2,
   Pencil,
 } from 'lucide-react';

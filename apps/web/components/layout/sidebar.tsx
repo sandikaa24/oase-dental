@@ -21,6 +21,7 @@ import {
   ShieldAlert,
   Globe,
   Sparkles,
+  Boxes,
   X,
 } from 'lucide-react';
 
@@ -29,6 +30,7 @@ const iconMap: Record<string, React.ElementType> = {
   ShoppingCart,
   Receipt,
   Package,
+  Boxes,
   CreditCard,
   Clock,
   CalendarDays,

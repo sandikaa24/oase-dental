@@ -36,8 +36,15 @@ export const NAV_ITEMS: NavItem[] = [
     group: 'operations',
   },
   {
+    id: 'stock',
+    label: 'Stok',
+    href: '/admin/stock',
+    iconName: 'Boxes',
+    group: 'operations',
+  },
+  {
     id: 'inventory',
-    label: 'Inventaris & Stok',
+    label: 'Inventaris & Bahan',
     href: '/admin/inventory',
     iconName: 'Package',
     requiredPermission: [

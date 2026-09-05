@@ -82,12 +82,22 @@ Baca semua file di `docs/` SEBELUM menulis kode apa pun.
     - `.env` lokal = Docker/Postgres dev lokal, PERMANEN.
     - Kredensial staging/remote HIDUP di env var per-perintah
       terminal atau file terpisah yang ter-gitignore (misal
-      `.env.staging`) — TIDAK PERNAH di `.env`.
+      `.env.staging`, `.env.prod`) — TIDAK PERNAH di `.env`.
     - Test suite (`run-all-regression.mjs`) WAJIB menolak jalan
       jika `DATABASE_URL` mengandung kata `"supabase"`, `"pooler."`,
       atau `"staging"` (guard 3 baris di awal runner).
     - Pelanggaran = test suite menyiram database staging atau
       — jauh lebih fatal nanti — database produksi klinik.
+17. **Aturan Operasi DB Remote:**
+    - Semua koneksi remote disimpan di `.env.staging` / `.env.prod`
+      — `.env` lokal TIDAK PERNAH diedit untuk operasi remote.
+    - Wajib verifikasi project ref SEBELUM migrate: output
+      `prisma migrate status` harus menunjukkan host yang diharapkan,
+      dibaca dan dilaporkan sebelum deploy.
+    - Satu sumber kebenaran: connection string diambil dari
+      dashboard, disimpan di file env terpisah — bukan diketik ulang
+      (mencegah typo ref seperti kasus jawpwlq... vs rbdvqx...).
+
 
 ---
 

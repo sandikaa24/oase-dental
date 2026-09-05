@@ -18,3 +18,4 @@ build/
 .env*
 !.env.example
 /apps/web/public/uploads/
+.env.staging

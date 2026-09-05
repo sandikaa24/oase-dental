@@ -568,3 +568,161 @@ Read-only. Response shape: `{ success, data: [...], meta: { page, limit, total, 
 5. Tidak ada endpoint tanpa permission check — termasuk GET.
 6. IDOR guard: setiap akses by `:id` harus verifikasi ownership branch
    (untuk role non-OWNER).
+
+---
+
+## 18. Manajemen Stok & Produk (Task B1)
+
+Modul manajemen stok independen dengan mutasi manual atomik (`IN`, `OUT`, `ADJUSTMENT`). Tidak ada pemotongan otomatis dari kasir.
+
+### 18.1 Master Produk
+
+| Method | Path | Role | Deskripsi |
+|---|---|---|---|
+| GET | `/api/v1/products` | OWNER, MANAGER, CASHIER | List produk dengan filter `?search&category&isActive&page&limit` |
+| POST | `/api/v1/products` | OWNER, MANAGER | Tambah master produk baru |
+| GET | `/api/v1/products/:id` | OWNER, MANAGER, CASHIER | Detail produk beserta data stok seluruh cabang |
+| PUT | `/api/v1/products/:id` | OWNER, MANAGER | Update data produk |
+| DELETE | `/api/v1/products/:id` | OWNER, MANAGER | Soft delete produk (`isActive: false`) |
+
+**POST /api/v1/products** — Request Body:
+```json
+{
+  "name": "Amoxicillin 500mg",
+  "sku": "OBAT-AMX-500",
+  "unit": "strip",
+  "category": "Obat",
+  "costPrice": 12500,
+  "isActive": true
+}
+```
+
+Response 201:
+```json
+{
+  "success": true,
+  "data": {
+    "id": "uuid",
+    "name": "Amoxicillin 500mg",
+    "sku": "OBAT-AMX-500",
+    "unit": "strip",
+    "category": "Obat",
+    "costPrice": "12500.00",
+    "isActive": true,
+    "createdAt": "2026-09-06T01:00:00.000Z",
+    "updatedAt": "2026-09-06T01:00:00.000Z"
+  }
+}
+```
+
+---
+
+### 18.2 Stok per Cabang
+
+| Method | Path | Role | Deskripsi |
+|---|---|---|---|
+| GET | `/api/v1/stock` | OWNER, MANAGER, CASHIER | Lihat stok cabang dengan filter `?branchId&search&category&lowStock&expiredStatus&page&limit` |
+
+Response 200:
+```json
+{
+  "success": true,
+  "data": {
+    "branchId": "uuid-cabang",
+    "items": [
+      {
+        "productId": "uuid-produk",
+        "name": "Paracetamol 500mg",
+        "sku": "OBAT-PCT-500",
+        "unit": "strip",
+        "category": "Obat",
+        "costPrice": "4500.00",
+        "branchId": "uuid-cabang",
+        "stockId": "uuid-stock",
+        "quantity": 5,
+        "minStock": 10,
+        "expiredDate": "2026-09-20",
+        "expiredWarning": "EXPIRING_SOON",
+        "isLowStock": true,
+        "updatedAt": "2026-09-06T01:00:00.000Z"
+      }
+    ]
+  },
+  "meta": { "page": 1, "limit": 20, "total": 1, "totalPages": 1 }
+}
+```
+
+`expiredWarning`:
+- `"EXPIRED"`: Merah (expiredDate $\le$ hari ini)
+- `"EXPIRING_SOON"`: Kuning ($<$ 30 hari ke depan)
+- `"NORMAL"`: Hijau / Aman
+
+---
+
+### 18.3 Mutasi Stok Manual
+
+| Method | Path | Role | Deskripsi |
+|---|---|---|---|
+| POST | `/api/v1/stock/mutation` | OWNER, MANAGER | Catat mutasi stok manual (`IN`, `OUT`, `ADJUSTMENT`) |
+
+**POST /api/v1/stock/mutation** — Request Body:
+```json
+{
+  "productId": "uuid-produk",
+  "branchId": "uuid-cabang",
+  "type": "OUT",
+  "qty": 15,
+  "note": "Pemakaian tindakan",
+  "expiredDate": "2027-06-30",
+  "minStock": 10
+}
+```
+
+Response 201 (Sukses):
+```json
+{
+  "success": true,
+  "data": {
+    "movement": {
+      "id": "uuid-movement",
+      "productId": "uuid-produk",
+      "branchId": "uuid-cabang",
+      "type": "OUT",
+      "qty": 15,
+      "qtyBefore": 50,
+      "qtyAfter": 35,
+      "note": "Pemakaian tindakan",
+      "userId": "uuid-actor",
+      "createdAt": "2026-09-06T01:00:00.000Z"
+    },
+    "stock": {
+      "id": "uuid-stock",
+      "productId": "uuid-produk",
+      "branchId": "uuid-cabang",
+      "quantity": 35,
+      "minStock": 10,
+      "expiredDate": "2027-06-30T00:00:00.000Z",
+      "updatedAt": "2026-09-06T01:00:00.000Z"
+    }
+  }
+}
+```
+
+Response 409 (Stok Tidak Mencukupi saat mutasi `OUT`):
+```json
+{
+  "success": false,
+  "message": "Stok tidak mencukupi untuk pengeluaran barang",
+  "code": "INSUFFICIENT_STOCK",
+  "available": 35
+}
+```
+
+---
+
+### 18.4 Riwayat Mutasi
+
+| Method | Path | Role | Deskripsi |
+|---|---|---|---|
+| GET | `/api/v1/stock/movements` | OWNER, MANAGER, CASHIER | Riwayat mutasi per produk / cabang (`?productId&branchId&type&page&limit`) |
+

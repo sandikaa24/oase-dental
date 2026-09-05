@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { fetchApi } from '@/lib/api-client';
 import { User, Employee, UserRole } from './user-types';
 import { Button } from '@/components/ui/button';
@@ -35,8 +35,13 @@ export function UserModal({
   const [error, setError] = useState<string | null>(null);
 
   // Filter karyawan aktif yang belum punya akun user (atau karyawan milik user yang sedang diedit)
-  const candidateEmployees = employees.filter(
-    (emp) => emp.active && (!emp.user || (isEditing && user?.employeeId === emp.id))
+  // Memoized agar referensi array stabil dan tidak memicu reset form pada setiap keystroke
+  const candidateEmployees = useMemo(
+    () =>
+      employees.filter(
+        (emp) => emp.active && (!emp.user || (isEditing && user?.employeeId === emp.id))
+      ),
+    [employees, isEditing, user?.employeeId]
   );
 
   useEffect(() => {
@@ -51,6 +56,7 @@ export function UserModal({
       } else {
         setEmail('');
         setRole('CASHIER');
+        // Default selection: otomatis memilih karyawan kandidat pertama yang aktif & belum punya akun
         setEmployeeId(candidateEmployees[0]?.id || '');
       }
     }
@@ -225,6 +231,8 @@ export function UserModal({
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
+                  aria-label={showPassword ? 'Sembunyikan password' : 'Lihat password'}
+                  title={showPassword ? 'Sembunyikan password' : 'Lihat password'}
                   className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted hover:text-foreground p-0.5 rounded"
                 >
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}

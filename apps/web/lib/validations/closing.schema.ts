@@ -32,6 +32,15 @@ export const closingListQuerySchema = z.object({
 export type ClosingListQuery = z.infer<typeof closingListQuerySchema>;
 
 /**
+ * Schema validasi untuk GET /cash-closings/preview (query params khusus OWNER)
+ */
+export const closingPreviewQuerySchema = z.object({
+  branchId: z.string().uuid('branchId harus berformat UUID').optional(),
+});
+export type ClosingPreviewQuery = z.infer<typeof closingPreviewQuerySchema>;
+
+
+/**
  * Schema validasi untuk POST /cash-closings/:id/reopen
  * reason wajib min 10 karakter (sesuai API-CONTRACT).
  */

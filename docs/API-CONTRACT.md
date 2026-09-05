@@ -372,7 +372,7 @@ Response 201:
 | Method | Path | Deskripsi |
 |---|---|---|
 | GET | /cash-closings | List + filter status; OWNER: `?branchId` |
-| GET | /cash-closings/preview | Hitung `expectedCash` real-time sejak closing terakhir |
+| GET | /cash-closings/preview | Hitung `expectedCash` real-time sejak closing terakhir; OWNER: `?branchId` |
 | GET | /cash-closings/:id | Detail |
 | POST | /cash-closings | Buat & tutup sekaligus |
 | POST | /cash-closings/:id/reopen | `[OWNER]` `{ reason (min 10) }` |
@@ -406,13 +406,17 @@ Rules:
   }
 }
 ```
-Catatan field:
+Catatan field & aturan akses:
+- `branchId` pada request:
+  - `OWNER`: dapat menggunakan query param `?branchId=<uuid>` untuk mempreview kas cabang tertentu.
+  - `CASHIER` / non-OWNER: query param `?branchId` diabaikan total; branch selalu diambil dari JWT claim sesi.
 - `expectedCash` — total CASH dari transaksi PAID sejak closing terakhir (string Decimal).
 - `transactionCount` — jumlah transaksi PAID semua metode dalam periode.
 - `totalRevenue` — total omset semua metode dalam periode (string Decimal).
 - `alreadyClosedToday` — `true` jika sudah ada closing CLOSED hari ini (kasir tidak bisa submit lagi).
 - `lastClosingDate` — ISO timestamp closing terakhir; `null` jika belum pernah ada closing.
 - `periodStart` — ISO timestamp awal periode; timestamp transaksi PAID pertama di cabang jika belum pernah ada closing (atau workDate hari ini jika belum ada transaksi). Fallback epoch dilarang.
+
 
 **GET /cash-closings** — Response 200 (dengan pagination):
 ```json

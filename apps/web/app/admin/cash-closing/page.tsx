@@ -9,32 +9,55 @@ import { ClosingForm } from '@/components/closing/closing-form';
 import { ClosingDetailCard } from '@/components/closing/closing-detail-card';
 import { ClosingHistoryTable } from '@/components/closing/closing-history-table';
 import { ReopenDialog } from '@/components/closing/reopen-dialog';
-import { ErrorBanner } from '@/components/ui/placeholder';
+import { ErrorBanner, EmptyState } from '@/components/ui/placeholder';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Receipt, History } from 'lucide-react';
+import { Receipt, History, Building2 } from 'lucide-react';
 import type { ClosingPreview, CashClosing } from '@/components/closing/closing-types';
+import type { Branch } from '@/components/inventory/branch-selector';
 
 export default function CashClosingPage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
+  const isOwner = user?.role === 'OWNER';
+  const [selectedBranchId, setSelectedBranchId] = useState<string>('');
   const [historyPage, setHistoryPage] = useState(1);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [reopenTarget, setReopenTarget] = useState<CashClosing | null>(null);
   const [reopenError, setReopenError] = useState<string | null>(null);
 
-  const canReopen = user?.role === 'OWNER';
+  const canReopen = isOwner;
 
-  // ─── Fetch preview (untuk kasir & owner aktif di branch) ─────────────────
+  // Resolusi branch aktif:
+  // - Non-OWNER (CASHIER): selalu terkunci pada user.activeBranchId dari JWT sesi
+  // - OWNER: menggunakan selectedBranchId yang dipilih manual (default kosong / scope semua cabang)
+  const effectiveBranchId = isOwner ? selectedBranchId : (user?.activeBranchId || '');
+
+  // ─── Query daftar cabang aktif untuk dropdown OWNER ────────────────────────
+  const { data: branchesData, isLoading: branchesLoading } = useQuery<ApiResponse<Branch[]>>({
+    queryKey: ['branches', 'list'],
+    queryFn: () => fetchApi<Branch[]>('/api/v1/branches?limit=100'),
+    enabled: isOwner,
+    staleTime: 60_000,
+  });
+  const activeBranches = (branchesData?.data ?? []).filter((b) => b.active);
+
+  // ─── Fetch preview (hanya jika branch aktif ada) ───────────────────────────
   const {
     data: previewData,
     isLoading: previewLoading,
     error: previewError,
     refetch: refetchPreview,
   } = useQuery<ApiResponse<ClosingPreview>>({
-    queryKey: ['closing-preview'],
-    queryFn: () => fetchApi<ClosingPreview>('/api/v1/cash-closings/preview'),
-    enabled: !!user && (user.role === 'CASHIER' || user.role === 'OWNER'),
+    queryKey: ['closing-preview', effectiveBranchId],
+    queryFn: () => {
+      const url = isOwner && effectiveBranchId
+        ? `/api/v1/cash-closings/preview?branchId=${encodeURIComponent(effectiveBranchId)}`
+        : '/api/v1/cash-closings/preview';
+      return fetchApi<ClosingPreview>(url);
+    },
+    // GUARD ATURAN 12.4: Bila scope = semua cabang & branchId belum ada -> JANGAN panggil API preview
+    enabled: !!user && (user.role === 'CASHIER' || user.role === 'OWNER') && Boolean(effectiveBranchId),
     staleTime: 30_000, // 30 detik
   });
 
@@ -47,8 +70,13 @@ export default function CashClosingPage() {
     error: historyError,
     refetch: refetchHistory,
   } = useQuery<ApiResponse<CashClosing[]>>({
-    queryKey: ['closing-history', historyPage],
-    queryFn: () => fetchApi<CashClosing[]>(`/api/v1/cash-closings?page=${historyPage}&limit=10`),
+    queryKey: ['closing-history', historyPage, effectiveBranchId],
+    queryFn: () => {
+      const url = effectiveBranchId
+        ? `/api/v1/cash-closings?page=${historyPage}&limit=10&branchId=${encodeURIComponent(effectiveBranchId)}`
+        : `/api/v1/cash-closings?page=${historyPage}&limit=10`;
+      return fetchApi<CashClosing[]>(url);
+    },
     enabled: !!user,
     staleTime: 30_000,
   });
@@ -124,7 +152,7 @@ export default function CashClosingPage() {
   return (
     <div className="space-y-6">
       {/* Header halaman */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-2 border-b border-border">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-2 border-b border-border">
         <div>
           <div className="flex items-center gap-2">
             <div className="p-2 rounded-lg bg-warning-bg text-warning-icon">
@@ -136,6 +164,33 @@ export default function CashClosingPage() {
             Rekonsiliasi kas tunai dan closing kas shift kasir
           </p>
         </div>
+
+        {/* Dropdown Pemilihan Cabang Khusus OWNER */}
+        {isOwner && (
+          <div className="flex items-center gap-2 self-start sm:self-auto">
+            <label htmlFor="closing-branch-select" className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 shrink-0">
+              <Building2 className="h-3.5 w-3.5 text-primary" />
+              <span>Cabang:</span>
+            </label>
+            <select
+              id="closing-branch-select"
+              value={selectedBranchId}
+              onChange={(e) => {
+                setSelectedBranchId(e.target.value);
+                setHistoryPage(1);
+              }}
+              disabled={branchesLoading}
+              className="h-8 px-2.5 py-1 text-xs rounded-lg border border-border bg-surface text-foreground font-medium shadow-xs focus:ring-1 focus:ring-primary focus:outline-none transition-all disabled:opacity-50"
+            >
+              <option value="">-- Pilih Cabang --</option>
+              {activeBranches.map((branch) => (
+                <option key={branch.id} value={branch.id}>
+                  {branch.name} ({branch.code})
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
       {/* Error reopen banner */}
@@ -150,54 +205,67 @@ export default function CashClosingPage() {
       {/* Seksi Preview & Form — hanya untuk CASHIER dan OWNER */}
       {(user?.role === 'CASHIER' || user?.role === 'OWNER') && (
         <section className="space-y-4">
-          <h2 className="text-base font-semibold text-foreground">
-            Status Kas Hari Ini
-          </h2>
+          <div className="flex items-center justify-between">
+            <h2 className="text-base font-semibold text-foreground">
+              Status Kas Hari Ini
+            </h2>
+          </div>
 
-          {previewLoading && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              {[0, 1, 2, 3].map((i) => (
-                <div key={i} className="rounded-lg border border-border bg-surface p-4">
-                  <Skeleton className="h-4 w-28 mb-2" />
-                  <Skeleton className="h-7 w-36" />
-                </div>
-              ))}
-            </div>
-          )}
-
-          {previewFetchError && !previewLoading && (
-            <ErrorBanner
-              title="Gagal Memuat Preview Kas"
-              message={previewFetchError.message}
-              onRetry={() => refetchPreview()}
+          {/* GUARD EMPTY STATE: Bila belum ada cabang aktif (mis. OWNER scope semua cabang) */}
+          {!effectiveBranchId ? (
+            <EmptyState
+              icon={<Building2 className="h-6 w-6 text-primary" />}
+              title="Pilih cabang untuk melihat status kas"
+              description="Pilih cabang operasional pada pemilih cabang di atas untuk melihat ringkasan omset kas berjalan dan status closing kasir hari ini."
             />
-          )}
-
-          {preview && !previewLoading && (
+          ) : (
             <>
-              {/* Preview metrik */}
-              <ClosingPreviewPanel preview={preview} />
+              {previewLoading && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {[0, 1, 2, 3].map((i) => (
+                    <div key={i} className="rounded-lg border border-border bg-surface p-4">
+                      <Skeleton className="h-4 w-28 mb-2" />
+                      <Skeleton className="h-7 w-36" />
+                    </div>
+                  ))}
+                </div>
+              )}
 
-              {/* Form atau read-only detail */}
-              {preview.alreadyClosedToday ? (
-                /* Hari ini sudah closing — tampilkan detail read-only */
-                <div className="space-y-2">
-                  {historyData?.data && historyData.data[0] && (
-                    <ClosingDetailCard
-                      closing={historyData.data[0]}
-                      canReopen={canReopen}
-                      onReopen={() => historyData.data && historyData.data[0] && setReopenTarget(historyData.data[0])}
+              {previewFetchError && !previewLoading && (
+                <ErrorBanner
+                  title="Gagal Memuat Preview Kas"
+                  message={previewFetchError.message}
+                  onRetry={() => refetchPreview()}
+                />
+              )}
+
+              {preview && !previewLoading && (
+                <>
+                  {/* Preview metrik */}
+                  <ClosingPreviewPanel preview={preview} />
+
+                  {/* Form atau read-only detail */}
+                  {preview.alreadyClosedToday ? (
+                    /* Hari ini sudah closing — tampilkan detail read-only */
+                    <div className="space-y-2">
+                      {historyData?.data && historyData.data[0] && (
+                        <ClosingDetailCard
+                          closing={historyData.data[0]}
+                          canReopen={canReopen}
+                          onReopen={() => historyData.data && historyData.data[0] && setReopenTarget(historyData.data[0])}
+                        />
+                      )}
+                    </div>
+                  ) : (
+                    /* Belum closing — tampilkan form */
+                    <ClosingForm
+                      expectedCash={preview.expectedCash}
+                      onSubmit={handleSubmit}
+                      isSubmitting={isSubmitting}
+                      submitError={submitError}
                     />
                   )}
-                </div>
-              ) : (
-                /* Belum closing — tampilkan form */
-                <ClosingForm
-                  expectedCash={preview.expectedCash}
-                  onSubmit={handleSubmit}
-                  isSubmitting={isSubmitting}
-                  submitError={submitError}
-                />
+                </>
               )}
             </>
           )}
@@ -239,3 +307,4 @@ export default function CashClosingPage() {
     </div>
   );
 }
+

@@ -412,6 +412,47 @@ async function run() {
     );
   }
 
+  // ─── TUGAS 12.4: Guard Branch & Keamanan Parameter Preview Closing ─────────
+  console.log('\n--- TUGAS 12.4: Guard Branch & Keamanan Parameter Preview ---');
+
+  // 1. OWNER + ?branchId=<uuid> -> 200 OK & branchId cocok
+  const ownerPreviewWithBranch = await req(`/api/v1/cash-closings/preview?branchId=${branchId}`, 'GET', null, ownerCookie);
+  assert(
+    ownerPreviewWithBranch.status === 200 && ownerPreviewWithBranch.data?.data?.branchId === branchId,
+    'T12.4-1',
+    'OWNER dapat mempreview closing dengan ?branchId valid',
+    `branchId: ${ownerPreviewWithBranch.data?.data?.branchId}`
+  );
+
+  // 2. OWNER tanpa branchId (scope semua cabang) -> 400 Bad Request
+  const ownerPreviewNoBranch = await req('/api/v1/cash-closings/preview', 'GET', null, ownerCookie);
+  assert(
+    ownerPreviewNoBranch.status === 400 && String(ownerPreviewNoBranch.data?.message || '').includes('Branch aktif diperlukan'),
+    'T12.4-2',
+    'OWNER tanpa branchId ditolak 400 (Branch aktif diperlukan)',
+    `status: ${ownerPreviewNoBranch.status}, msg: ${ownerPreviewNoBranch.data?.message}`
+  );
+
+  // 3. OWNER + ?branchId=invalid-uuid -> 400 Validation Error
+  const ownerPreviewInvalidBranch = await req('/api/v1/cash-closings/preview?branchId=bukan-uuid', 'GET', null, ownerCookie);
+  assert(
+    ownerPreviewInvalidBranch.status === 400,
+    'T12.4-3',
+    'OWNER dengan branchId bukan UUID ditolak 400 (Validation Error)',
+    `status: ${ownerPreviewInvalidBranch.status}`
+  );
+
+  // 4. CASHIER + ?branchId=<dummy-cabang-lain> -> query param DIABAIKAN, tetap cabang kasir sendiri
+  const dummyOtherBranchUuid = 'a0000000-0000-0000-0000-000000000099';
+  const cashierTamperedPreview = await req(`/api/v1/cash-closings/preview?branchId=${dummyOtherBranchUuid}`, 'GET', null, cashierCookie);
+  assert(
+    cashierTamperedPreview.status === 200 && cashierTamperedPreview.data?.data?.branchId === branchId,
+    'T12.4-4',
+    'CASHIER + query param branchId lain diabaikan total, tetap mengembalikan branchId dari JWT sesi',
+    `expected branchId: ${branchId}, actual: ${cashierTamperedPreview.data?.data?.branchId}`
+  );
+
+
   // ─── Cleanup post-test ───────────────────────────────────────────────────────
   console.log('\n[TEARDOWN] Membersihkan data test...');
   await cleanupClosings(branchId);

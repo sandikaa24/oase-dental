@@ -64,6 +64,7 @@ export function UsersTab({ employees }: UsersTabProps) {
     const q = search.toLowerCase();
     return (
       u.email.toLowerCase().includes(q) ||
+      (u.username && u.username.toLowerCase().includes(q)) ||
       (u.employee?.name && u.employee.name.toLowerCase().includes(q))
     );
   });
@@ -287,6 +288,11 @@ export function UsersTab({ employees }: UsersTabProps) {
                       <tr key={u.id} className="hover:bg-slate-50/70 transition-colors">
                         <td className="py-3 px-4">
                           <div className="font-semibold text-foreground">{u.email}</div>
+                          {u.username ? (
+                            <div className="text-[11px] font-mono text-muted">@{u.username}</div>
+                          ) : (
+                            <div className="text-[11px] font-mono text-slate-400">-</div>
+                          )}
                           {u.id === currentUser?.id && (
                             <span className="text-[10px] text-primary font-semibold">(Akun Anda)</span>
                           )}

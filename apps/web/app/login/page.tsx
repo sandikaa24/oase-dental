@@ -13,7 +13,7 @@ export default function LoginPage() {
   const router = useRouter();
   const { user, isLoading: authLoading, login } = useAuth();
 
-  const [email, setEmail] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -31,7 +31,7 @@ export default function LoginPage() {
     setIsSubmitting(true);
 
     try {
-      await login(email, password);
+      await login(identifier, password);
       router.push('/admin');
     } catch (err: unknown) {
       if (err instanceof Error) {
@@ -45,8 +45,8 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center p-4 bg-gradient-to-br from-teal-50/50 via-background to-blue-50/40">
-      <div className="w-full max-w-md">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-background px-4">
+      <div className="w-full max-w-sm">
         {/* Brand Logo Header */}
         <div className="flex flex-col items-center text-center mb-8">
           <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-white shadow-sm mb-3">
@@ -64,7 +64,7 @@ export default function LoginPage() {
           <CardHeader className="space-y-1 pb-4">
             <CardTitle className="text-lg text-center">Masuk ke Akun</CardTitle>
             <CardDescription className="text-xs text-center">
-              Masukkan email dan kata sandi Anda untuk mengakses dashboard
+              Masukkan username atau email dan kata sandi Anda untuk mengakses dashboard
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -78,13 +78,13 @@ export default function LoginPage() {
 
               <div className="space-y-1">
                 <Input
-                  label="Email"
-                  type="email"
-                  placeholder="nama@oasedental.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  label="Username atau Email"
+                  type="text"
+                  placeholder="Username atau email"
+                  value={identifier}
+                  onChange={(e) => setIdentifier(e.target.value)}
                   required
-                  autoComplete="email"
+                  autoComplete="username"
                   disabled={isSubmitting || authLoading}
                 />
               </div>

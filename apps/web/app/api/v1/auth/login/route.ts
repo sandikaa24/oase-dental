@@ -20,14 +20,14 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   const body = await req.json();
   const input = loginSchema.parse(body);
   const ip = getClientIp(req);
-  const rateLimitKey = getRateLimitKey(ip, input.email);
+  const rateLimitKey = getRateLimitKey(ip, input.identifier);
 
   // Cek batas percobaan gagal (in-memory sliding window, 5 gagal / 15 menit)
   checkLoginRateLimit(rateLimitKey);
 
   try {
     const { user, tokens } = await login({
-      email: input.email,
+      identifier: input.identifier,
       password: input.password,
       ip,
     });

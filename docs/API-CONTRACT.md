@@ -34,8 +34,11 @@ Permission ditulis sebagai: `[OWNER]`, `[OWNER, MANAGER]`, dst.
 
 **POST /auth/login**
 ```json
-// Request
+// Request (identifier: email ATAU username, keduanya case-insensitive)
 { "email": "owner@oase.id", "password": "secret123" }
+// ATAU
+{ "identifier": "owner", "password": "secret123" }
+
 // Response 200
 { "success": true, "data": { "user": { "id": "...", "email": "...", "role": "OWNER", "name": "...", "activeBranchId": null, "branches": [] } } }
 ```
@@ -64,16 +67,22 @@ switch-branch sebelum akses endpoint operasional.
 ---
 
 ## 3. Users `[OWNER]`
-
+ 
 | Method | Path | Deskripsi |
 |---|---|---|
 | GET | /users | List + filter `role`, `active`, `branchId` |
-| POST | /users | Create. `{ email, password (min 8), role, employeeId? }` |
-| PATCH | /users/:id | Update. Non-OWNER wajib punya employeeId |
+| POST | /users | Create. `{ email, username?, password, role, employeeId? }` |
+| PATCH | /users/:id | Update. `{ email?, username?, role?, employeeId? }` |
 | PATCH | /users/:id/status | Aktif/nonaktif (tidak bisa nonaktifkan diri sendiri) |
 | PATCH | /users/:id/reset-password | `{ newPassword }` oleh OWNER |
 
-Validasi: role non-OWNER → `employeeId` wajib dan employee harus `active`.
+Validasi:
+- Role non-OWNER → `employeeId` wajib dan employee harus `active`.
+- `username`: 3–20 karakter, lowercase `[a-z0-9._-]`, unique.
+- Kebijakan password minimal per role:
+  - CASHIER & EMPLOYEE: minimal 6 karakter
+  - MANAGER: minimal 8 karakter
+  - OWNER: minimal 12 karakter
 
 ---
 

@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { fetchApi } from '@/lib/api-client';
 import { User, Employee, UserRole } from './user-types';
+import { getMinPasswordLength } from '@/lib/validations/user.schema';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ErrorBanner } from '@/components/ui/placeholder';
@@ -26,6 +27,7 @@ export function UserModal({
   const isEditing = !!user;
 
   const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [role, setRole] = useState<UserRole>('CASHIER');
@@ -51,10 +53,12 @@ export function UserModal({
       setShowPassword(false);
       if (user) {
         setEmail(user.email);
+        setUsername(user.username || '');
         setRole(user.role);
         setEmployeeId(user.employeeId || '');
       } else {
         setEmail('');
+        setUsername('');
         setRole('CASHIER');
         // Default selection: otomatis memilih karyawan kandidat pertama yang aktif & belum punya akun
         setEmployeeId(candidateEmployees[0]?.id || '');
@@ -63,6 +67,8 @@ export function UserModal({
   }, [open, user, candidateEmployees]);
 
   if (!open) return null;
+
+  const minPasswordLength = getMinPasswordLength(role);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -79,16 +85,19 @@ export function UserModal({
       return;
     }
 
-    if (!isEditing && (!password || password.length < 8)) {
-      setError('Password akun baru minimal harus 8 karakter.');
+    if (!isEditing && (!password || password.length < minPasswordLength)) {
+      setError(`Password akun baru untuk role ${role} minimal harus ${minPasswordLength} karakter.`);
       return;
     }
+
+    const trimmedUsername = username.trim().toLowerCase() || null;
 
     setIsSubmitting(true);
     try {
       if (isEditing && user) {
         const payload: Record<string, unknown> = {
           email: trimmedEmail,
+          username: trimmedUsername,
         };
         // Perubahan role hanya jika bukan OWNER ke/dari
         if (user.role !== 'OWNER' && role !== 'OWNER') {
@@ -106,6 +115,7 @@ export function UserModal({
       } else {
         const payload = {
           email: trimmedEmail,
+          username: trimmedUsername,
           password,
           role,
           employeeId: role === 'OWNER' ? undefined : employeeId,
@@ -214,16 +224,36 @@ export function UserModal({
             />
           </div>
 
+          {/* Username Login */}
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-slate-700">Username Login</label>
+            <Input
+              type="text"
+              placeholder="Contoh: kasir_jkt1"
+              value={username}
+              onChange={(e) => setUsername(e.target.value.toLowerCase())}
+              className="text-xs font-mono"
+            />
+            <p className="text-[10px] text-muted">
+              3–20 karakter, huruf kecil, angka, titik, underscore, dan strip (opsional).
+            </p>
+          </div>
+
           {/* Password (hanya saat create baru) */}
           {!isEditing && (
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-700">Password Awal *</label>
+              <label className="text-xs font-semibold text-slate-700 flex items-center justify-between">
+                <span>Password Awal *</span>
+                <span className="text-[10px] font-normal text-muted">
+                  Role {role}: minimal {minPasswordLength} karakter
+                </span>
+              </label>
               <div className="relative">
                 <Input
                   type={showPassword ? 'text' : 'password'}
                   required
-                  minLength={8}
-                  placeholder="Minimal 8 karakter"
+                  minLength={minPasswordLength}
+                  placeholder={`Minimal ${minPasswordLength} karakter`}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="pr-9 text-xs font-mono"

@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { fetchApi } from '@/lib/api-client';
 import { User } from './user-types';
+import { getMinPasswordLength } from '@/lib/validations/user.schema';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ErrorBanner } from '@/components/ui/placeholder';
@@ -36,12 +37,14 @@ export function ResetPasswordModal({
 
   if (!open || !user) return null;
 
+  const minPasswordLength = getMinPasswordLength(user.role);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
-    if (!newPassword || newPassword.length < 8) {
-      setError('Password baru minimal harus 8 karakter.');
+    if (!newPassword || newPassword.length < minPasswordLength) {
+      setError(`Password baru untuk role ${user.role} minimal harus ${minPasswordLength} karakter.`);
       return;
     }
 
@@ -102,13 +105,18 @@ export function ResetPasswordModal({
           </div>
 
           <div className="space-y-1">
-            <label className="text-xs font-semibold text-slate-700">Password Baru *</label>
+            <label className="text-xs font-semibold text-slate-700 flex items-center justify-between">
+              <span>Password Baru *</span>
+              <span className="text-[10px] font-normal text-muted">
+                Role {user.role}: minimal {minPasswordLength} karakter
+              </span>
+            </label>
             <div className="relative">
               <Input
                 type={showPassword ? 'text' : 'password'}
                 required
-                minLength={8}
-                placeholder="Minimal 8 karakter"
+                minLength={minPasswordLength}
+                placeholder={`Minimal ${minPasswordLength} karakter`}
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 className="pr-9 text-xs font-mono"

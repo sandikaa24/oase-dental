@@ -68,13 +68,13 @@ export function AuthProvider({
   }, [initialUser, refreshSession]);
 
   const login = async (
-    email: string,
+    identifier: string,
     password: string,
     branchId?: string
   ): Promise<UserSession> => {
     const res = await fetchApi<{ user: UserSession }>('/api/v1/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ email, password, branchId }),
+      body: JSON.stringify({ identifier, email: identifier, password, branchId }),
     });
 
     if (!res.data?.user) {

@@ -24,8 +24,8 @@ async function main() {
       // 1. OWNER pertama: tanpa employee, akses semua cabang
       await tx.user.upsert({
         where: { email: ownerEmail },
-        update: {},
-        create: { email: ownerEmail, passwordHash: ownerHash, role: 'OWNER' },
+        update: { username: 'owner' },
+        create: { email: ownerEmail, username: 'owner', passwordHash: ownerHash, role: 'OWNER' },
       });
 
     // 2. Dua cabang

@@ -21,6 +21,7 @@ export interface Employee {
   user?: {
     id: string;
     email: string;
+    username?: string | null;
     role: UserRole;
     active: boolean;
   } | null;
@@ -31,6 +32,7 @@ export interface Employee {
 export interface User {
   id: string;
   email: string;
+  username?: string | null;
   role: UserRole;
   employeeId?: string | null;
   active: boolean;

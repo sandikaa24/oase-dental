@@ -98,14 +98,29 @@ async function issueSession(params: {
  * assignment di-set otomatis, lebih dari 1 wajib switch-branch dulu.
  */
 export async function login(input: {
-  email: string;
+  identifier?: string;
+  email?: string;
   password: string;
   ip: string | null;
 }): Promise<{ user: PublicUser; tokens: SessionTokens }> {
-  const user = await prisma.user.findUnique({
-    where: { email: input.email },
+  const rawIdentifier = (input.identifier || input.email || '').trim().toLowerCase();
+
+  // Prioritas lookup: email dulu, lalu username (keduanya case-insensitive)
+  let user = await prisma.user.findFirst({
+    where: {
+      email: { equals: rawIdentifier, mode: 'insensitive' },
+    },
     include: { employee: { select: { name: true, active: true } } },
   });
+
+  if (!user) {
+    user = await prisma.user.findFirst({
+      where: {
+        username: { equals: rawIdentifier, mode: 'insensitive' },
+      },
+      include: { employee: { select: { name: true, active: true } } },
+    });
+  }
 
   const passwordValid = user ? await verifyPassword(input.password, user.passwordHash) : false;
 

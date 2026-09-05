@@ -2,11 +2,13 @@ import { prisma } from '../prisma';
 import { type UserRole, Prisma } from '@prisma/client';
 import { ConflictError, NotFoundError, ValidationError } from '../errors';
 import { hashPassword } from '../auth';
+import { getMinPasswordLength } from '../validations/user.schema';
 
 // ─── Select publik: TIDAK ada passwordHash ────────────────────────────────────
 const userPublicSelect = {
   id: true,
   email: true,
+  username: true,
   role: true,
   employeeId: true,
   active: true,
@@ -105,6 +107,7 @@ export async function getUserById(id: string) {
 export async function createUser(
   input: {
     email: string;
+    username?: string | null;
     password: string;
     role: UserRole;
     employeeId?: string;
@@ -133,13 +136,23 @@ export async function createUser(
     }
   }
 
+  // Role-based password policy check
+  const minLen = getMinPasswordLength(input.role);
+  if (input.password.length < minLen) {
+    throw new ValidationError(`Password untuk role ${input.role} minimal ${minLen} karakter`);
+  }
+
+  // Normalisasi username lowercase (Kendala 1)
+  const normalizedUsername = input.username ? input.username.trim().toLowerCase() : null;
+
   const passwordHash = await hashPassword(input.password);
 
   try {
     const user = await prisma.$transaction(async (tx) => {
       const created = await tx.user.create({
         data: {
-          email: input.email,
+          email: input.email.trim().toLowerCase(),
+          username: normalizedUsername,
           passwordHash,
           role: input.role,
           employeeId: input.employeeId ?? null,
@@ -154,7 +167,7 @@ export async function createUser(
           action: 'CREATE',
           entity: 'User',
           entityId: created.id,
-          after: { email: created.email, role: created.role, employeeId: created.employeeId },
+          after: { email: created.email, username: created.username, role: created.role, employeeId: created.employeeId },
           ip,
         },
       });
@@ -168,6 +181,9 @@ export async function createUser(
       const meta = (error as { meta?: { target?: string[] } }).meta;
       if (meta?.target?.includes('email')) {
         throw new ConflictError('Email sudah terdaftar', 'DUPLICATE');
+      }
+      if (meta?.target?.includes('username')) {
+        throw new ConflictError('Username sudah terdaftar', 'DUPLICATE');
       }
       if (meta?.target?.includes('employeeId')) {
         // employeeId unique → employee ini sudah punya user
@@ -186,6 +202,7 @@ export async function updateUser(
   id: string,
   input: {
     email?: string;
+    username?: string | null;
     role?: UserRole;
     employeeId?: string | null;
   },
@@ -194,7 +211,7 @@ export async function updateUser(
 ) {
   const existing = await prisma.user.findUnique({
     where: { id },
-    select: { id: true, email: true, role: true, employeeId: true, active: true },
+    select: { id: true, email: true, username: true, role: true, employeeId: true, active: true },
   });
 
   if (!existing) {
@@ -229,12 +246,15 @@ export async function updateUser(
     }
   }
 
-  const before = { email: existing.email, role: existing.role, employeeId: existing.employeeId };
+  const before = { email: existing.email, username: existing.username, role: existing.role, employeeId: existing.employeeId };
 
   try {
     const user = await prisma.$transaction(async (tx) => {
       const updateData: Record<string, unknown> = {};
-      if (input.email !== undefined) updateData.email = input.email;
+      if (input.email !== undefined) updateData.email = input.email.trim().toLowerCase();
+      if ('username' in input) {
+        updateData.username = input.username ? input.username.trim().toLowerCase() : null;
+      }
       if (input.role !== undefined) updateData.role = input.role;
       if ('employeeId' in input) updateData.employeeId = input.employeeId ?? null;
 
@@ -265,6 +285,9 @@ export async function updateUser(
       const meta = (error as { meta?: { target?: string[] } }).meta;
       if (meta?.target?.includes('email')) {
         throw new ConflictError('Email sudah terdaftar', 'DUPLICATE');
+      }
+      if (meta?.target?.includes('username')) {
+        throw new ConflictError('Username sudah terdaftar', 'DUPLICATE');
       }
       if (meta?.target?.includes('employeeId')) {
         throw new ConflictError('Karyawan ini sudah memiliki akun user', 'DUPLICATE');
@@ -335,11 +358,17 @@ export async function resetPassword(
 ) {
   const existing = await prisma.user.findUnique({
     where: { id },
-    select: { id: true, email: true },
+    select: { id: true, email: true, role: true },
   });
 
   if (!existing) {
     throw new NotFoundError('User tidak ditemukan');
+  }
+
+  // Role-based password policy check (User Constraint)
+  const minLen = getMinPasswordLength(existing.role);
+  if (newPassword.length < minLen) {
+    throw new ValidationError(`Password untuk role ${existing.role} minimal ${minLen} karakter`);
   }
 
   const passwordHash = await hashPassword(newPassword);

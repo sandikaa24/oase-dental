@@ -75,7 +75,7 @@ export class ScheduleOverlapError extends AppError {
 }
 
 export class TooManyRequestsError extends AppError {
-  constructor(message: string = 'Terlalu banyak percobaan login. Coba lagi dalam 15 menit.') {
+  constructor(message: string = 'Terlalu banyak percobaan login. Coba lagi dalam 15 detik.') {
     super(message, 429, 'TOO_MANY_REQUESTS');
   }
 }

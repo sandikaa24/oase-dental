@@ -24,6 +24,7 @@ if (/supabase|pooler\.|staging/i.test(activeDbUrl)) {
 }
 
 const testSuites = [
+  'rate-limit-unit-test.mjs',
   'phase0-regression-test.mjs',
   'phase1-task2-guard-test.mjs',
   'phase1-task3-test.mjs',

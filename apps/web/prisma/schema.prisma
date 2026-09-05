@@ -98,9 +98,17 @@ enum AuditAction {
   LEAVE_APPROVED
   LEAVE_REJECTED
   ATTENDANCE_CORRECTED
+  STOCK_MUTATION
+}
+
+enum StockMovementType {
+  IN
+  OUT
+  ADJUSTMENT
 }
 
 // ==================== MODELS ====================
+
 
 model Branch {
   id      String  @id @default(uuid())
@@ -120,6 +128,8 @@ model Branch {
   attendances        Attendance[]
   stockLevels        StockLevel[]
   numberSequences    NumberSequence[]
+  productStocks      ProductBranchStock[]
+  stockMovements     StockMovement[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -153,6 +163,7 @@ model User {
 
   refreshTokens RefreshToken[]
   auditLogs     AuditLog[]     @relation("AuditActor")
+  stockMovements StockMovement[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -511,3 +522,61 @@ model PortalPage {
 
   @@map("portal_pages")
 }
+
+// ==================== MANAJEMEN STOK (TASK B1) ====================
+
+model Product {
+  id        String   @id @default(uuid())
+  name      String
+  sku       String?
+  unit      String
+  category  String
+  costPrice Decimal? @db.Decimal(12, 2)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  branchStocks   ProductBranchStock[]
+  stockMovements StockMovement[]
+
+  @@unique([name, isActive])
+  @@index([category])
+  @@map("products")
+}
+
+model ProductBranchStock {
+  id          String    @id @default(uuid())
+  productId   String
+  product     Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  branchId    String
+  branch      Branch    @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  quantity    Int       @default(0)
+  minStock    Int       @default(0)
+  expiredDate DateTime? @db.Date
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([productId, branchId])
+  @@index([branchId])
+  @@map("product_branch_stocks")
+}
+
+model StockMovement {
+  id        String            @id @default(uuid())
+  productId String
+  product   Product           @relation(fields: [productId], references: [id], onDelete: Cascade)
+  branchId  String
+  branch    Branch            @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  type      StockMovementType
+  qty       Int
+  qtyBefore Int
+  qtyAfter  Int
+  note      String?
+  userId    String
+  user      User              @relation(fields: [userId], references: [id])
+  createdAt DateTime          @default(now())
+
+  @@index([productId, branchId, createdAt])
+  @@map("stock_movements")
+}
+

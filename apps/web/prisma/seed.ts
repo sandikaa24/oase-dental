@@ -199,7 +199,120 @@ async function main() {
         sortOrder: 1,
       },
     });
+
+    // 6. Seed Produk & Stok Cabang (Task B1: Manajemen Stok)
+    const now = new Date();
+    const plus6Months = new Date(now.getFullYear(), now.getMonth() + 6, now.getDate());
+    const plus15Days = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 15);
+    const plus20Days = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 20);
+    const plus1Year = new Date(now.getFullYear() + 1, now.getMonth(), now.getDate());
+    const minus5Days = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 5);
+
+    const sampleProducts = [
+      {
+        name: 'Amoxicillin 500mg',
+        sku: 'OBAT-AMX-500',
+        unit: 'strip',
+        category: 'Obat',
+        costPrice: 12500,
+        quantity: 50,
+        minStock: 20,
+        expiredDate: plus6Months,
+      },
+      {
+        name: 'Paracetamol 500mg',
+        sku: 'OBAT-PCT-500',
+        unit: 'strip',
+        category: 'Obat',
+        costPrice: 4500,
+        quantity: 5,
+        minStock: 10,
+        expiredDate: plus15Days, // Warning kuning: < 30 hari & stok rendah
+      },
+      {
+        name: 'Sarung Tangan Latex M',
+        sku: 'BHP-GLV-M',
+        unit: 'box',
+        category: 'Bahan Habis Pakai',
+        costPrice: 65000,
+        quantity: 2,
+        minStock: 5, // Warning stok rendah
+        expiredDate: null,
+      },
+      {
+        name: 'Masker Medis 3-Ply',
+        sku: 'BHP-MSK-3P',
+        unit: 'box',
+        category: 'Bahan Habis Pakai',
+        costPrice: 35000,
+        quantity: 30,
+        minStock: 10,
+        expiredDate: plus1Year,
+      },
+      {
+        name: 'Lidocaine 2% Injeksi',
+        sku: 'OBAT-LDC-02',
+        unit: 'ampul',
+        category: 'Obat Anestesi',
+        costPrice: 18000,
+        quantity: 15,
+        minStock: 10,
+        expiredDate: minus5Days, // Warning merah: expired lewat
+      },
+      {
+        name: 'Kasa Steril 7.5x7.5',
+        sku: 'BM-KAS-75',
+        unit: 'pack',
+        category: 'Bahan Medis',
+        costPrice: 8500,
+        quantity: 100,
+        minStock: 15,
+        expiredDate: plus20Days, // Warning kuning: < 30 hari
+      },
+    ];
+
+    for (const prodData of sampleProducts) {
+      const product = await tx.product.upsert({
+        where: { name_isActive: { name: prodData.name, isActive: true } },
+        update: {
+          sku: prodData.sku,
+          unit: prodData.unit,
+          category: prodData.category,
+          costPrice: prodData.costPrice,
+        },
+        create: {
+          name: prodData.name,
+          sku: prodData.sku,
+          unit: prodData.unit,
+          category: prodData.category,
+          costPrice: prodData.costPrice,
+          isActive: true,
+        },
+      });
+
+      await tx.productBranchStock.upsert({
+        where: {
+          productId_branchId: {
+            productId: product.id,
+            branchId: jkt.id,
+          },
+        },
+        update: {
+          quantity: prodData.quantity,
+          minStock: prodData.minStock,
+          expiredDate: prodData.expiredDate,
+        },
+        create: {
+          productId: product.id,
+          branchId: jkt.id,
+          quantity: prodData.quantity,
+          minStock: prodData.minStock,
+          expiredDate: prodData.expiredDate,
+        },
+      });
+    }
   }, { timeout: 30000, maxWait: 10000 });
+
 
   console.log('Seed selesai.');
   console.log('  OWNER   :', ownerEmail);

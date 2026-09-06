@@ -13,7 +13,7 @@ import { ErrorBanner, EmptyState } from '@/components/ui/placeholder';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Receipt, History, Building2 } from 'lucide-react';
 import type { ClosingPreview, CashClosing } from '@/components/closing/closing-types';
-import type { Branch } from '@/components/inventory/branch-selector';
+import type { Branch } from '@/components/shared/branch-selector';
 
 export default function CashClosingPage() {
   const { user } = useAuth();

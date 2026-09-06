@@ -298,13 +298,13 @@ function ManagerDashboardView() {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Manajemen Inventaris &amp; Stok</CardTitle>
-            <CardDescription>Kelola penerimaan stok masuk dan stok opname berkala</CardDescription>
+            <CardTitle className="text-base">Manajemen Stok</CardTitle>
+            <CardDescription>Kelola stok produk, mutasi, dan stok opname berkala</CardDescription>
           </CardHeader>
           <CardContent>
-            <Link href="/admin/inventory">
+            <Link href="/admin/stock">
               <Button variant="secondary" size="sm" className="gap-2">
-                Buka Inventaris
+                Buka Modul Stok
                 <ArrowRight className="h-4 w-4" />
               </Button>
             </Link>

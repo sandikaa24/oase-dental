@@ -163,7 +163,7 @@ export function ProductsTab() {
       <div className="rounded-xl border border-border bg-surface shadow-sm overflow-hidden">
         <div className="p-4 border-b border-border flex items-center justify-between">
           <div>
-            <h3 className="text-sm font-bold text-foreground">Peringkat Layanan &amp; Obat Terlaris</h3>
+            <h3 className="text-sm font-bold text-foreground">Peringkat Layanan &amp; Produk Terlaris</h3>
             <p className="text-xs text-muted">Diurutkan berdasarkan kuantitas transaksi terbanyak (Sort by Qty Descending)</p>
           </div>
         </div>

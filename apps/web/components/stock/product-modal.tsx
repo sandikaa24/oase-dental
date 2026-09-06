@@ -196,7 +196,7 @@ export function ProductModal({
               id="product-sku"
               value={form.sku}
               onChange={(e) => handleChange('sku', e.target.value)}
-              placeholder="Contoh: OBAT-AMX-500"
+              placeholder="Contoh: BHP-GLV-001"
               error={errors.sku}
               disabled={isSubmitting}
               autoComplete="off"
@@ -212,7 +212,7 @@ export function ProductModal({
               id="product-unit"
               value={form.unit}
               onChange={(e) => handleChange('unit', e.target.value)}
-              placeholder="strip, box, botol, ampul, pcs"
+              placeholder="box, strip, botol, ampul, pcs"
               error={errors.unit}
               disabled={isSubmitting}
               autoComplete="off"
@@ -230,7 +230,7 @@ export function ProductModal({
               id="product-category"
               value={form.category}
               onChange={(e) => handleChange('category', e.target.value)}
-              placeholder="Obat, Bahan Medis, BHP, dll."
+              placeholder="BHP, Bahan Tindakan, Alat Operasional, ATK, dll."
               error={errors.category}
               disabled={isSubmitting}
               autoComplete="off"

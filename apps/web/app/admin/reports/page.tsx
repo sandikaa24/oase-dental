@@ -126,7 +126,7 @@ export default function ReportsPage() {
             </h1>
             <p className="text-xs text-muted">
               {role === 'OWNER'
-                ? 'Konsolidasi kinerja keuangan, penjualan obat, stok bahan, dan audit trail'
+                ? 'Konsolidasi kinerja keuangan, penjualan layanan & produk, stok bahan, dan audit trail'
                 : 'Laporan operasional persediaan bahan medis dan pencatatan beban cabang'}
             </p>
           </div>

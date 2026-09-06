@@ -119,7 +119,7 @@ export function ExpensesTab() {
               >
                 <option value="">Semua Kategori</option>
                 <option value="OPERASIONAL">Operasional</option>
-                <option value="MEDIS">Bahan / Obat Medis</option>
+                <option value="MEDIS">Bahan / BHP Medis</option>
                 <option value="UTILITAS">Utilitas (Air, Listrik, Internet)</option>
                 <option value="GAJI_BONUS">Gaji &amp; Bonus</option>
                 <option value="LAINNYA">Lain-lain</option>

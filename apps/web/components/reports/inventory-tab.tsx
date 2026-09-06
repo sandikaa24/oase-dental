@@ -135,7 +135,7 @@ export function InventoryTab() {
         <Card className="border-border">
           <CardHeader className="p-4 pb-2">
             <div className="flex items-center justify-between">
-              <span className="text-xs text-muted">Bahan Stok Kritis (Low Stock)</span>
+              <span className="text-xs text-muted">Produk Stok Kritis (Low Stock)</span>
               <div className="p-1.5 rounded-md bg-danger-bg text-danger-icon">
                 <AlertTriangle className="h-4 w-4" />
               </div>
@@ -158,7 +158,7 @@ export function InventoryTab() {
         <Card className="border-border">
           <CardHeader className="p-4 pb-2">
             <div className="flex items-center justify-between">
-              <span className="text-xs text-muted">Total Variasi Bahan</span>
+              <span className="text-xs text-muted">Total Variasi Produk</span>
               <div className="p-1.5 rounded-md bg-info-bg text-info-icon">
                 <Package className="h-4 w-4" />
               </div>
@@ -167,7 +167,7 @@ export function InventoryTab() {
               <Skeleton className="h-7 w-16 mt-1" />
             ) : (
               <CardTitle className="text-lg font-bold text-info-text">
-                {meta ? meta.total : items.length} Bahan
+                {meta ? meta.total : items.length} Produk
               </CardTitle>
             )}
           </CardHeader>
@@ -183,8 +183,8 @@ export function InventoryTab() {
       <div className="rounded-xl border border-border bg-surface shadow-sm overflow-hidden">
         <div className="p-4 border-b border-border flex items-center justify-between">
           <div>
-            <h3 className="text-sm font-bold text-foreground">Daftar Valuasi &amp; Posisi Stok Fisik</h3>
-            <p className="text-xs text-muted">Metode kalkulasi harga pokok Weighted Average Cost (WAC) dari riwayat stock-in</p>
+            <h3 className="text-sm font-bold text-foreground">Daftar Valuasi &amp; Posisi Stok Produk</h3>
+            <p className="text-xs text-muted">Valuasi stok berdasarkan harga pokok per produk aktif di cabang</p>
           </div>
         </div>
 
@@ -199,7 +199,7 @@ export function InventoryTab() {
           <div className="p-8">
             <EmptyState
               title="Tidak Ada Data Persediaan"
-              description="Belum ada data stok bahan medis pada cabang ini."
+              description="Belum ada data stok produk pada cabang ini."
             />
           </div>
         ) : (
@@ -207,11 +207,11 @@ export function InventoryTab() {
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-50 border-b border-border text-slate-600 font-semibold uppercase tracking-wider">
                 <tr>
-                  <th className="py-3 px-4">Nama Bahan Medis</th>
+                  <th className="py-3 px-4">Nama Produk</th>
                   <th className="py-3 px-4 text-center">Stok Fisik</th>
                   <th className="py-3 px-4 text-center">Batas Min.</th>
                   <th className="py-3 px-4 text-center">Status Stok</th>
-                  <th className="py-3 px-4 text-right">Harga Pokok WAC</th>
+                  <th className="py-3 px-4 text-right">Harga Pokok (HPP)</th>
                   <th className="py-3 px-4 text-right">Total Valuasi</th>
                 </tr>
               </thead>
@@ -257,7 +257,7 @@ export function InventoryTab() {
         {meta?.totalPages && meta.totalPages > 1 && (
           <div className="p-3 border-t border-border flex items-center justify-between text-xs text-muted">
             <span>
-              Menampilkan halaman {meta.page || 1} dari {meta.totalPages} ({meta.total || 0} bahan)
+              Menampilkan halaman {meta.page || 1} dari {meta.totalPages} ({meta.total || 0} produk)
             </span>
             <div className="flex items-center gap-1">
               <button

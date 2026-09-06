@@ -225,73 +225,92 @@ export async function getGrossProfitReport(
   };
 }
 
-// 5. Laporan Inventory (dengan WAC berjalan)
+// 5. Laporan Inventory / Stok (Model B1: Product & ProductBranchStock)
 export async function getInventoryReport(
   branchId: string | undefined,
   page: number = 1,
   limit: number = 20
 ) {
-  const where: Prisma.StockLevelWhereInput = {
-    ...(branchId && { branchId }),
-  };
+  if (branchId) {
+    const total = await prisma.product.count({
+      where: { isActive: true },
+    });
 
-  const total = await prisma.stockLevel.count({ where });
-  const stockLevels = await prisma.stockLevel.findMany({
-    where,
-    skip: (page - 1) * limit,
-    take: limit,
-  });
-
-  // Calculate WAC per item from ALL STOCK_IN movements
-  // WAC = SUM(unitCost * qty) / SUM(qty)
-  const data = await Promise.all(
-    stockLevels.map(async (sl) => {
-      // Get all stock in for this branch & item
-      const stockIns = await prisma.inventoryMovement.findMany({
-        where: {
-          branchId: sl.branchId,
-          itemId: sl.itemId,
-          referenceType: 'STOCK_IN',
-          unitCost: { not: null },
+    const products = await prisma.product.findMany({
+      where: { isActive: true },
+      include: {
+        branchStocks: {
+          where: { branchId },
         },
-        select: { quantityDelta: true, unitCost: true }
-      });
+      },
+      orderBy: [{ name: 'asc' }],
+      skip: (page - 1) * limit,
+      take: limit,
+    });
 
-      let totalVal = 0;
-      let totalQty = 0;
-      stockIns.forEach(move => {
-        totalVal += move.quantityDelta * Number(move.unitCost);
-        totalQty += move.quantityDelta;
-      });
-
-      const wac = totalQty > 0 ? (totalVal / totalQty) : 0;
-      const valuation = sl.quantity * wac;
-
-      // also need min stock to determine if low
-      // for MVP we lookup Material
-      const material = await prisma.material.findUnique({
-        where: { id: sl.itemId },
-        select: { name: true, minStock: true }
-      });
+    const data = products.map((p) => {
+      const stock = p.branchStocks[0] || null;
+      const quantity = stock ? stock.quantity : 0;
+      const minStock = stock ? stock.minStock : 0;
+      const costPrice = p.costPrice ? Number(p.costPrice) : 0;
+      const valuation = quantity * costPrice;
 
       return {
-        id: sl.id,
-        branchId: sl.branchId,
-        itemId: sl.itemId,
-        itemName: material?.name || 'Unknown',
-        currentQuantity: sl.quantity,
-        minStock: material?.minStock || 0,
-        isLowStock: material ? sl.quantity <= material.minStock : false,
-        wac: wac.toFixed(2),
+        id: stock?.id || p.id,
+        branchId,
+        itemId: p.id,
+        itemName: p.name,
+        currentQuantity: quantity,
+        minStock,
+        isLowStock: quantity <= minStock,
+        wac: costPrice.toFixed(2),
         totalValuation: valuation.toFixed(2),
       };
-    })
-  );
+    });
 
-  return {
-    data,
-    meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
-  };
+    return {
+      data,
+      meta: { page, limit, total, totalPages: Math.ceil(total / limit) || 1 },
+    };
+  } else {
+    const total = await prisma.product.count({
+      where: { isActive: true },
+    });
+
+    const products = await prisma.product.findMany({
+      where: { isActive: true },
+      include: {
+        branchStocks: true,
+      },
+      orderBy: [{ name: 'asc' }],
+      skip: (page - 1) * limit,
+      take: limit,
+    });
+
+    const data = products.map((p) => {
+      const totalQty = p.branchStocks.reduce((sum, s) => sum + s.quantity, 0);
+      const maxMinStock = p.branchStocks.reduce((max, s) => Math.max(max, s.minStock), 0);
+      const costPrice = p.costPrice ? Number(p.costPrice) : 0;
+      const valuation = totalQty * costPrice;
+
+      return {
+        id: p.id,
+        branchId: '',
+        itemId: p.id,
+        itemName: p.name,
+        currentQuantity: totalQty,
+        minStock: maxMinStock,
+        isLowStock: totalQty <= maxMinStock,
+        wac: costPrice.toFixed(2),
+        totalValuation: valuation.toFixed(2),
+      };
+    });
+
+    return {
+      data,
+      meta: { page, limit, total, totalPages: Math.ceil(total / limit) || 1 },
+    };
+  }
 }
 
 // 6. Laporan Absensi

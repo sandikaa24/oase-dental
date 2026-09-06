@@ -146,42 +146,42 @@ async function run() {
 
   console.log('\n3. Testing Boundary isLowStock (qty <= minStock)');
   const testBranch = await prisma.branch.findFirst();
-  const testMat = await prisma.material.create({
+  const testProd = await prisma.product.create({
     data: {
-      name: `Test Boundary Material ${Date.now()}`,
+      name: `Test Boundary Product ${Date.now()}`,
       sku: `SKU-BND-${Date.now()}`,
       unit: 'pcs',
-      minStock: 10,
+      category: 'BHP',
     },
   });
 
   // Case A: quantity === minStock (10 === 10) -> MUST be isLowStock: true
-  const stockLevelA = await prisma.stockLevel.create({
+  const stockA = await prisma.productBranchStock.create({
     data: {
       branchId: testBranch.id,
-      itemId: testMat.id,
-      itemType: 'MATERIAL',
+      productId: testProd.id,
       quantity: 10,
+      minStock: 10,
     },
   });
 
   const invResA = await getJson('/reports/inventory?limit=100');
-  const foundA = invResA.data.find((i) => i.id === stockLevelA.id);
+  const foundA = invResA.data.find((i) => i.itemId === testProd.id);
   assert(foundA && foundA.isLowStock === true, 'Boundary: quantity === minStock (10 === 10) MUST be isLowStock: true');
 
   // Case B: quantity === minStock + 1 (11 > 10) -> MUST be isLowStock: false
-  await prisma.stockLevel.update({
-    where: { id: stockLevelA.id },
+  await prisma.productBranchStock.update({
+    where: { id: stockA.id },
     data: { quantity: 11 },
   });
 
   const invResB = await getJson('/reports/inventory?limit=100');
-  const foundB = invResB.data.find((i) => i.id === stockLevelA.id);
+  const foundB = invResB.data.find((i) => i.itemId === testProd.id);
   assert(foundB && foundB.isLowStock === false, 'Boundary: quantity === minStock + 1 (11 > 10) MUST be isLowStock: false');
 
   // Cleanup
-  await prisma.stockLevel.delete({ where: { id: stockLevelA.id } });
-  await prisma.material.delete({ where: { id: testMat.id } });
+  await prisma.productBranchStock.delete({ where: { id: stockA.id } });
+  await prisma.product.delete({ where: { id: testProd.id } });
 
   console.log(`\n--- RESULT: ${passed}/${assertions} PASSED ---`);
   if (passed !== assertions) {

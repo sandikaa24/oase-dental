@@ -40,28 +40,41 @@ export const updateProductSchema = z.object({
   isActive: z.boolean().optional(),
 });
 
-export const stockMutationSchema = z.object({
-  productId: z.string().uuid('ID produk tidak valid'),
-  branchId: z.string().uuid('ID cabang tidak valid'),
-  type: z.enum(['IN', 'OUT', 'ADJUSTMENT'], {
-    errorMap: () => ({ message: 'Tipe mutasi harus IN, OUT, atau ADJUSTMENT' }),
-  }),
-  qty: z
-    .number({ required_error: 'Jumlah (qty) wajib diisi' })
-    .int('Jumlah (qty) harus berupa bilangan bulat')
-    .gt(0, 'Jumlah (qty) harus lebih besar dari 0'),
-  note: z.string().trim().max(500, 'Catatan maksimal 500 karakter').nullable().optional(),
-  expiredDate: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Format tanggal kadaluarsa harus YYYY-MM-DD')
-    .nullable()
-    .optional(),
-  minStock: z
-    .number()
-    .int('Min stok harus berupa bilangan bulat')
-    .min(0, 'Min stok tidak boleh negatif')
-    .optional(),
-});
+export const stockMutationSchema = z
+  .object({
+    productId: z.string().uuid('ID produk tidak valid'),
+    branchId: z.string().uuid('ID cabang tidak valid'),
+    type: z.enum(['IN', 'OUT', 'ADJUSTMENT'], {
+      errorMap: () => ({ message: 'Tipe mutasi harus IN, OUT, atau ADJUSTMENT' }),
+    }),
+    qty: z
+      .number({ required_error: 'Jumlah (qty) wajib diisi' })
+      .int('Jumlah (qty) harus berupa bilangan bulat')
+      .min(0, 'Jumlah (qty) tidak boleh negatif'),
+    note: z.string().trim().max(500, 'Catatan maksimal 500 karakter').nullable().optional(),
+    expiredDate: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, 'Format tanggal kadaluarsa harus YYYY-MM-DD')
+      .nullable()
+      .optional(),
+    minStock: z
+      .number()
+      .int('Batas minimum stok harus berupa bilangan bulat')
+      .min(0, 'Batas minimum stok tidak boleh negatif')
+      .optional(),
+  })
+  .refine(
+    (data) => {
+      if ((data.type === 'IN' || data.type === 'OUT') && data.qty <= 0) {
+        return false;
+      }
+      return true;
+    },
+    {
+      message: 'Jumlah (qty) untuk mutasi IN atau OUT harus lebih besar dari 0',
+      path: ['qty'],
+    }
+  );
 
 export const stockListQuerySchema = z.object({
   branchId: z.string().uuid().optional(),

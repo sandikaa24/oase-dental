@@ -9,7 +9,8 @@ import { StockTable } from '@/components/stock/stock-table';
 import { ProductModal } from '@/components/stock/product-modal';
 import { MutationModal } from '@/components/stock/mutation-modal';
 import { MovementHistoryDrawer } from '@/components/stock/movement-history-drawer';
-import { BranchSelector } from '@/components/inventory/branch-selector';
+import { OpnameModal } from '@/components/stock/opname-modal';
+import { BranchSelector } from '@/components/shared/branch-selector';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import {
@@ -18,6 +19,7 @@ import {
   Search,
   AlertTriangle,
   Clock,
+  ClipboardCheck,
 } from 'lucide-react';
 
 export default function StockManagementPage() {
@@ -51,6 +53,8 @@ export default function StockManagementPage() {
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [itemForDrawer, setItemForDrawer] = useState<StockItem | null>(null);
+
+  const [opnameModalOpen, setOpnameModalOpen] = useState(false);
 
   // Query data stok cabang
   const { data, isLoading } = useQuery({
@@ -145,15 +149,26 @@ export default function StockManagementPage() {
             onSelectBranch={setSelectedBranchId}
           />
           {canMutate && (
-            <Button
-              variant="primary"
-              size="md"
-              onClick={handleOpenCreate}
-              className="gap-1.5 shadow-xs"
-            >
-              <Plus className="h-4 w-4" />
-              <span>Tambah Produk</span>
-            </Button>
+            <>
+              <Button
+                variant="outline"
+                size="md"
+                onClick={() => setOpnameModalOpen(true)}
+                className="gap-1.5 shadow-xs"
+              >
+                <ClipboardCheck className="h-4 w-4 text-primary" />
+                <span>Stock Opname</span>
+              </Button>
+              <Button
+                variant="primary"
+                size="md"
+                onClick={handleOpenCreate}
+                className="gap-1.5 shadow-xs"
+              >
+                <Plus className="h-4 w-4" />
+                <span>Tambah Produk</span>
+              </Button>
+            </>
           )}
         </div>
       </div>
@@ -320,6 +335,15 @@ export default function StockManagementPage() {
         open={mutationModalOpen}
         onOpenChange={setMutationModalOpen}
         item={itemForMutation}
+        branchId={currentBranchId}
+        onSuccess={handleRefresh}
+      />
+
+      {/* Modal Stock Opname Fisik */}
+      <OpnameModal
+        open={opnameModalOpen}
+        onOpenChange={setOpnameModalOpen}
+        items={stockData}
         branchId={currentBranchId}
         onSuccess={handleRefresh}
       />

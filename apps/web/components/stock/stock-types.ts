@@ -4,6 +4,7 @@ export type StockMovementType = 'IN' | 'OUT' | 'ADJUSTMENT';
 
 export interface StockItem {
   productId: string;
+  materialId?: string;
   name: string;
   sku: string | null;
   unit: string;
@@ -16,6 +17,7 @@ export interface StockItem {
   expiredDate: string | null;
   expiredWarning: ExpiredWarning;
   isLowStock: boolean;
+  batchCount?: number;
   updatedAt: string;
 }
 

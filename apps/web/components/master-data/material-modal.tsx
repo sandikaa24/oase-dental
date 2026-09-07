@@ -26,7 +26,9 @@ export function MaterialModal({
 
   const [name, setName] = useState('');
   const [sku, setSku] = useState('');
+  const [category, setCategory] = useState('Bahan Tindakan');
   const [unit, setUnit] = useState('box');
+  const [costPrice, setCostPrice] = useState('');
   const [minStock, setMinStock] = useState('5');
   const [isStockTracked, setIsStockTracked] = useState(true);
   const [active, setActive] = useState(true);
@@ -40,14 +42,18 @@ export function MaterialModal({
       if (material) {
         setName(material.name);
         setSku(material.sku);
+        setCategory(material.category || 'Bahan Tindakan');
         setUnit(material.unit);
+        setCostPrice(material.costPrice !== null && material.costPrice !== undefined ? String(material.costPrice) : '');
         setMinStock(String(material.minStock));
         setIsStockTracked(material.isStockTracked);
         setActive(material.active);
       } else {
         setName('');
         setSku('');
+        setCategory('Bahan Tindakan');
         setUnit('box');
+        setCostPrice('');
         setMinStock('5');
         setIsStockTracked(true);
         setActive(true);
@@ -60,6 +66,11 @@ export function MaterialModal({
   const handleMinStockChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const raw = sanitizeDigits(e.target.value);
     setMinStock(raw);
+  };
+
+  const handleCostPriceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = sanitizeDigits(e.target.value);
+    setCostPrice(raw);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -80,14 +91,21 @@ export function MaterialModal({
 
     setIsSubmitting(true);
     try {
-      const payload = {
+      const payload: Record<string, unknown> = {
         name: trimmedName,
         sku: trimmedSku,
         unit: unit.trim() || 'box',
+        category: category.trim() || 'Bahan Tindakan',
         minStock: minStock.trim() ? parseInt(minStock, 10) : 0,
         isStockTracked,
         active,
       };
+
+      if (costPrice.trim()) {
+        payload.costPrice = parseInt(costPrice, 10);
+      } else {
+        payload.costPrice = null;
+      }
 
       if (isEditing && material) {
         await fetchApi(`/api/v1/materials/${material.id}`, {
@@ -163,6 +181,34 @@ export function MaterialModal({
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 className="text-xs"
+              />
+            </div>
+          </div>
+
+          {/* Kategori & Estimasi HPP */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-slate-700">Kategori Bahan *</label>
+              <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                className="w-full h-9 rounded-md border border-slate-300 bg-white px-3 py-1 text-xs text-foreground shadow-xs focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+              >
+                <option value="Bahan Tindakan">Bahan Tindakan</option>
+                <option value="BHP">BHP (Bahan Habis Pakai)</option>
+                <option value="Alat Operasional">Alat Operasional</option>
+                <option value="ATK">ATK / Perlengkapan</option>
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-slate-700">Estimasi HPP / Modal (Rp)</label>
+              <Input
+                type="text"
+                inputMode="numeric"
+                placeholder="Contoh: 25000"
+                value={costPrice}
+                onChange={handleCostPriceChange}
+                className="text-xs font-mono"
               />
             </div>
           </div>

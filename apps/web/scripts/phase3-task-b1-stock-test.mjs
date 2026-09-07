@@ -1,16 +1,20 @@
 /**
- * TUGAS B1 — TEST SUITE: Manajemen Stok Independen (Mutasi Manual)
+ * TUGAS B1 — TEST SUITE: Manajemen Stok Berbasis Master Bahan Klinis (Single Source of Truth)
  *
  * Menguji:
  * 1. Autentikasi & Setup Role (OWNER, CASHIER, cabang)
- * 2. CRUD Master Produk & Validasi Zod (termasuk costPrice)
- * 3. Keunikan Nama & Soft-Delete Produk
- * 4. RBAC Master Produk (CASHIER read-only, OWNER/MANAGER write)
+ * 2. Guard Satu Pintu: POST /api/v1/products DITOLAK (403)
+ * 3. Master Bahan Klinis — CRUD & Validasi Zod (category & costPrice)
+ * 4. RBAC Master Bahan & Stok (CASHIER 403 untuk stok, 200 untuk katalog & POS)
  * 5. Query Stok per Cabang (Indikator Expired & Stok Rendah)
- * 6. Validasi Zod Mutasi Stok (qty <= 0, tipe mutasi tidak valid)
- * 7. Mutasi Stok IN, OUT (valid & over-limit 409 dengan properti available), ADJUSTMENT
- * 8. Anti-IDOR & Scoping Cabang Lintas Cabang (403)
- * 9. Riwayat Mutasi Stok (Audit & Filter)
+ * 6. Validasi Zod Mutasi Stok (qty <= 0, tipe mutasi tidak valid, format tanggal)
+ * 7. Mutasi Stok IN, OUT (valid & over-limit 409 dengan available), ADJUSTMENT
+ * 8. KEPUTUSAN KEDALUWARSA OWNER (Batch-level expiry):
+ *    - Batch lewat kedaluwarsa terdeteksi 'EXPIRED'
+ *    - Batch mendekati kedaluwarsa terdeteksi 'EXPIRING_SOON'
+ *    - Item tanpa batch tidak menyebabkan error (status 'NORMAL')
+ * 9. Anti-IDOR & Scoping Cabang Lintas Cabang (403)
+ * 10. Riwayat Mutasi Stok (Audit & Filter)
  */
 
 import fs from 'fs';
@@ -79,7 +83,7 @@ function extractCookies(setCookieHeader) {
 
 async function main() {
   console.log('======================================================================');
-  console.log('SUITE TUGAS B1 — MANAJEMEN STOK INDEPENDEN & MUTASI MANUAL');
+  console.log('SUITE TUGAS B1 — MANAJEMEN STOK SATU PINTU BAHAN KLINIS (BATCH EXPIRY)');
   console.log('======================================================================\n');
 
   // ─── 1. Autentikasi ──────────────────────────────────────────────────────────
@@ -105,147 +109,123 @@ async function main() {
   const branchBdg = branches.find(b => b.code === 'BDG') || branches[1] || branchJkt;
   check('1c. Minimal 1 cabang tersedia untuk pengujian', !!branchJkt && !!branchJkt.id);
 
-  // ─── 2. Master Produk — CRUD & Validasi Zod ──────────────────────────────────
-  console.log('\n--- 2. Master Produk — CRUD & Validasi Zod ---');
+  // ─── 2. Guard Satu Pintu & Master Bahan Klinis ────────────────────────────────
+  console.log('\n--- 2. Guard Satu Pintu & Master Bahan Klinis ---');
   const uniqueSuffix = Date.now().toString().slice(-5);
-  const prodName1 = `Item Uji B1-${uniqueSuffix}`;
-  const prodSku1 = `SKU-B1-${uniqueSuffix}`;
+  const matName1 = `Bahan Klinis Uji B1-${uniqueSuffix}`;
+  const matSku1 = `MAT-B1-${uniqueSuffix}`;
 
-  // 2a. Validasi Zod: Name kosong ditolak
-  const rVal1 = await req('/api/v1/products', 'POST', {
+  // 2a. Guard Satu Pintu: POST /api/v1/products DITOLAK
+  const rGuardOldProduct = await req('/api/v1/products', 'POST', {
+    name: matName1,
+    unit: 'pcs',
+    category: 'BHP',
+  }, ownerCookie);
+  check(
+    '2a. Guard Satu Pintu: POST /api/v1/products DITOLAK -> 403 Forbidden',
+    rGuardOldProduct.status === 403 && String(rGuardOldProduct.data?.message).includes('Master Data Bahan Klinis')
+  );
+
+  // 2b. Validasi Zod: Name kosong di /api/v1/materials ditolak
+  const rValName = await req('/api/v1/materials', 'POST', {
     name: '',
+    sku: matSku1,
     unit: 'pcs',
-    category: 'Umum',
   }, ownerCookie);
-  check('2a. Nama produk kosong ditolak -> 400', rVal1.status === 400 && rVal1.data?.code === 'VALIDATION_ERROR');
+  check('2b. Nama bahan kosong ditolak -> 400', rValName.status === 400 && rValName.data?.code === 'VALIDATION_ERROR');
 
-  // 2b. Validasi Zod: CostPrice negatif ditolak
-  const rVal2 = await req('/api/v1/products', 'POST', {
-    name: prodName1,
+  // 2c. Validasi Zod: CostPrice negatif di /api/v1/materials ditolak
+  const rValCost = await req('/api/v1/materials', 'POST', {
+    name: matName1,
+    sku: matSku1,
     unit: 'pcs',
-    category: 'Umum',
-    costPrice: -5000,
+    costPrice: -10000,
   }, ownerCookie);
-  check('2b. CostPrice negatif ditolak -> 400', rVal2.status === 400 && rVal2.data?.code === 'VALIDATION_ERROR');
+  check('2c. CostPrice negatif ditolak -> 400', rValCost.status === 400 && rValCost.data?.code === 'VALIDATION_ERROR');
 
-  // 2c. Create Produk Valid
-  const rCreate = await req('/api/v1/products', 'POST', {
-    name: prodName1,
-    sku: prodSku1,
+  // 2d. Create Bahan Klinis Valid di Master Data
+  const rCreate = await req('/api/v1/materials', 'POST', {
+    name: matName1,
+    sku: matSku1,
     unit: 'botol',
-    category: 'Bahan Medis',
+    category: 'Bahan Tindakan',
     costPrice: 25000,
+    minStock: 10,
   }, ownerCookie);
-  check('2c. Pembuatan produk dengan costPrice valid -> 201', rCreate.status === 201 && rCreate.data?.success);
-  const createdProduct = rCreate.data?.data;
-  const productId = createdProduct?.id;
+  check('2d. Pembuatan bahan klinis di Master Data -> 201', rCreate.status === 201 && rCreate.data?.success);
+  const createdMaterial = rCreate.data?.data;
+  const materialId = createdMaterial?.id;
 
-  // 2d. Duplicate Product Name aktif ditolak
-  const rDup = await req('/api/v1/products', 'POST', {
-    name: prodName1,
+  // 2e. Duplikasi SKU bahan klinis ditolak -> 409
+  const rDupSku = await req('/api/v1/materials', 'POST', {
+    name: `${matName1} Dup`,
+    sku: matSku1,
     unit: 'botol',
-    category: 'Bahan Medis',
   }, ownerCookie);
-  check('2d. Duplikasi nama produk aktif ditolak -> 409', rDup.status === 409 && rDup.data?.code === 'DUPLICATE_PRODUCT_NAME');
+  check('2e. Duplikasi SKU bahan klinis ditolak -> 409 DUPLICATE', rDupSku.status === 409);
 
-  // 2e. List Products
-  const rList = await req('/api/v1/products?limit=10', 'GET', null, ownerCookie);
-  check('2e. List produk berhasil -> 200 dengan meta pagination', rList.status === 200 && Array.isArray(rList.data?.data) && !!rList.data?.meta);
+  // 2f. List Bahan Klinis Master Data
+  const rList = await req('/api/v1/materials?limit=10', 'GET', null, ownerCookie);
+  check('2f. List bahan klinis berhasil -> 200 dengan pagination', rList.status === 200 && Array.isArray(rList.data?.data));
 
-  // 2f. Get Product Detail
-  const rDetail = await req(`/api/v1/products/${productId}`, 'GET', null, ownerCookie);
-  check('2f. Detail produk by ID -> 200', rDetail.status === 200 && rDetail.data?.data?.id === productId);
+  // 2g. Get Detail Bahan Klinis
+  const rDetail = await req(`/api/v1/materials/${materialId}`, 'GET', null, ownerCookie);
+  check('2g. Detail bahan klinis by ID -> 200', rDetail.status === 200 && rDetail.data?.data?.id === materialId);
 
-  // 2g. Update Product
-  const rUpdate = await req(`/api/v1/products/${productId}`, 'PUT', {
-    name: `${prodName1} Updated`,
+  // 2h. Update Bahan Klinis
+  const rUpdate = await req(`/api/v1/materials/${materialId}`, 'PATCH', {
     unit: 'pack',
     costPrice: 27500,
   }, ownerCookie);
-  check('2g. Update produk -> 200', rUpdate.status === 200 && rUpdate.data?.data?.unit === 'pack');
+  check('2h. Update bahan klinis -> 200', rUpdate.status === 200 && rUpdate.data?.data?.unit === 'pack');
 
-  // 2h. Soft Delete Product
-  const rDelete = await req(`/api/v1/products/${productId}`, 'DELETE', null, ownerCookie);
-  check('2h. Soft delete produk -> 200 (isActive: false)', rDelete.status === 200 && rDelete.data?.data?.isActive === false);
-
-  // 2i. Auto-generate SKU saat sku tidak diberikan
-  const rAutoSku = await req('/api/v1/products', 'POST', {
-    name: `Auto SKU Product ${uniqueSuffix}`,
-    unit: 'box',
-    category: 'BHP',
-  }, ownerCookie);
-  const autoSkuVal = rAutoSku.data?.data?.sku;
-  check('2i. Auto-generate SKU berbasis prefix kategori (BHP-XXXX) -> 201', rAutoSku.status === 201 && /^BHP-\d{4}$/.test(autoSkuVal));
-
-  // 2j. Duplikasi SKU manual ditolak -> 409
-  const rDupSku = await req('/api/v1/products', 'POST', {
-    name: `Dup SKU Product ${uniqueSuffix}`,
-    sku: autoSkuVal,
-    unit: 'pcs',
-    category: 'BHP',
-  }, ownerCookie);
-  check('2j. Duplikasi SKU manual ditolak -> 409 DUPLICATE_PRODUCT_SKU', rDupSku.status === 409 && rDupSku.data?.code === 'DUPLICATE_PRODUCT_SKU');
-
-  // 2k. Update SKU ke SKU yang sudah ada ditolak -> 409
-  const rDupUpdate = await req(`/api/v1/products/${productId}`, 'PUT', {
-    sku: autoSkuVal,
-  }, ownerCookie);
-  check('2k. Update produk ke SKU milik produk lain ditolak -> 409', rDupUpdate.status === 409 && rDupUpdate.data?.code === 'DUPLICATE_PRODUCT_SKU');
-
-  // Aktifkan kembali produk untuk pengujian mutasi stok berikutnya
-  await req(`/api/v1/products/${productId}`, 'PUT', { isActive: true }, ownerCookie);
-
-  // ─── 3. RBAC Master Produk ───────────────────────────────────────────────────
-  console.log('\n--- 3. RBAC Master Produk ---');
-  // CASHIER dilarang membuat produk
-  const rCashierCreate = await req('/api/v1/products', 'POST', {
+  // ─── 3. RBAC Master Bahan & Stok ─────────────────────────────────────────────
+  console.log('\n--- 3. RBAC Master Bahan & Stok ---');
+  // CASHIER dilarang membuat bahan klinis
+  const rCashierCreate = await req('/api/v1/materials', 'POST', {
     name: `Cashier Item ${uniqueSuffix}`,
+    sku: `CASH-${uniqueSuffix}`,
     unit: 'pcs',
-    category: 'Umum',
   }, cashierCookie);
-  check('3a. CASHIER tambah produk ditolak -> 403', rCashierCreate.status === 403);
+  check('3a. CASHIER tambah bahan klinis ditolak -> 403', rCashierCreate.status === 403);
 
-  // CASHIER dilarang update produk
-  const rCashierUpdate = await req(`/api/v1/products/${productId}`, 'PUT', {
+  // CASHIER dilarang update bahan klinis
+  const rCashierUpdate = await req(`/api/v1/materials/${materialId}`, 'PATCH', {
     unit: 'box',
   }, cashierCookie);
-  check('3b. CASHIER update produk ditolak -> 403', rCashierUpdate.status === 403);
+  check('3b. CASHIER update bahan klinis ditolak -> 403', rCashierUpdate.status === 403);
 
-  // CASHIER dilarang delete produk
-  const rCashierDelete = await req(`/api/v1/products/${productId}`, 'DELETE', null, cashierCookie);
-  check('3c. CASHIER delete produk ditolak -> 403', rCashierDelete.status === 403);
+  // CASHIER dilarang melihat modul stok cabang
+  const rCashierStock = await req('/api/v1/stock', 'GET', null, cashierCookie);
+  check('3c. CASHIER akses modul stok cabang ditolak -> 403 Forbidden', rCashierStock.status === 403);
 
-  // CASHIER dilarang melihat list produk (semua endpoint master produk 403 untuk CASHIER)
-  const rCashierList = await req('/api/v1/products', 'GET', null, cashierCookie);
-  check('3d. CASHIER melihat list produk ditolak -> 403 Forbidden', rCashierList.status === 403);
+  // CASHIER dilarang melihat master bahan klinis (403 Forbidden)
+  const rCashierMaterials = await req('/api/v1/materials', 'GET', null, cashierCookie);
+  check('3d. CASHIER melihat master bahan ditolak -> 403 Forbidden', rCashierMaterials.status === 403);
 
-  // 3e. Regresi POS: CASHIER tetap dapat melihat katalog penjualan via /api/v1/pos/catalog
+  // Regresi POS: CASHIER tetap dapat melihat katalog penjualan via /api/v1/pos/catalog
   const rCashierPos = await req('/api/v1/pos/catalog', 'GET', null, cashierCookie);
   check('3e. Regresi POS: CASHIER tetap dapat mengakses /api/v1/pos/catalog -> 200', rCashierPos.status === 200 && Array.isArray(rCashierPos.data?.data));
 
-  // ─── 4. Query Stok Cabang & Indikator Expired / Stok Rendah ───────────────────
-  console.log('\n--- 4. Query Stok Cabang & Indikator ---');
+  // ─── 4. Query Stok Cabang & Filter Indikator ──────────────────────────────────
+  console.log('\n--- 4. Query Stok Cabang & Filter Indikator ---');
   // OWNER query stok cabang JKT
   const rStockJkt = await req(`/api/v1/stock?branchId=${branchJkt.id}`, 'GET', null, ownerCookie);
-  check('4a. OWNER query stok cabang JKT -> 200', rStockJkt.status === 200 && Array.isArray(rStockJkt.data?.data?.items));
-
-  // CASHIER query stok cabang dilarang (stok tersembunyi total -> 403)
-  const rCashierStock = await req('/api/v1/stock', 'GET', null, cashierCookie);
-  check('4b. CASHIER query stok cabang ditolak -> 403 Forbidden', rCashierStock.status === 403);
+  check('4a. OWNER query stok cabang JKT -> 200', rStockJkt.status === 200 && Array.isArray(rStockJkt.data?.data?.stocks || rStockJkt.data?.data?.items));
 
   // Filter lowStock
   const rStockLow = await req(`/api/v1/stock?branchId=${branchJkt.id}&lowStock=true`, 'GET', null, ownerCookie);
-  check('4c. Filter lowStock query -> 200', rStockLow.status === 200);
+  check('4b. Filter lowStock query -> 200', rStockLow.status === 200);
 
   // Filter expiredStatus
   const rStockExp = await req(`/api/v1/stock?branchId=${branchJkt.id}&expiredStatus=expSoon`, 'GET', null, ownerCookie);
-  check('4d. Filter expiredStatus expSoon query -> 200', rStockExp.status === 200);
+  check('4c. Filter expiredStatus expSoon query -> 200', rStockExp.status === 200);
 
   // ─── 5. Validasi Zod Mutasi Stok ─────────────────────────────────────────────
   console.log('\n--- 5. Validasi Zod Mutasi Stok ---');
   // Qty = 0 ditolak
   const rMutZero = await req('/api/v1/stock/mutation', 'POST', {
-    productId,
+    materialId,
     branchId: branchJkt.id,
     type: 'IN',
     qty: 0,
@@ -254,7 +234,7 @@ async function main() {
 
   // Qty negatif ditolak
   const rMutNeg = await req('/api/v1/stock/mutation', 'POST', {
-    productId,
+    materialId,
     branchId: branchJkt.id,
     type: 'IN',
     qty: -10,
@@ -263,7 +243,7 @@ async function main() {
 
   // Tipe mutasi salah ditolak
   const rMutType = await req('/api/v1/stock/mutation', 'POST', {
-    productId,
+    materialId,
     branchId: branchJkt.id,
     type: 'TRANSFER',
     qty: 10,
@@ -272,7 +252,7 @@ async function main() {
 
   // Format expiredDate salah ditolak
   const rMutExp = await req('/api/v1/stock/mutation', 'POST', {
-    productId,
+    materialId,
     branchId: branchJkt.id,
     type: 'IN',
     qty: 10,
@@ -281,22 +261,23 @@ async function main() {
   check('5d. Format expiredDate bukan YYYY-MM-DD ditolak -> 400', rMutExp.status === 400 && rMutExp.data?.code === 'VALIDATION_ERROR');
 
   // ─── 6. Logika Mutasi Stok (IN, OUT, ADJUSTMENT) ─────────────────────────────
-  console.log('\n--- 6. Logika Mutasi Stok (IN, OUT, ADJUSTMENT) ---');
-  // 6a. Mutasi IN
+  console.log('\n--- 6. Logika Mutasi Stok & Pencatatan Batch ---');
+  // 6a. Mutasi IN dengan batch kedaluwarsa
   const rMutIn = await req('/api/v1/stock/mutation', 'POST', {
-    productId,
+    materialId,
     branchId: branchJkt.id,
     type: 'IN',
     qty: 50,
     note: 'Pengadaan awal barang uji',
+    batchNumber: `LOT-A-${uniqueSuffix}`,
     minStock: 10,
     expiredDate: '2027-06-30',
   }, ownerCookie);
-  check('6a. Mutasi IN -> 201 (qty bertambah ke 50)', rMutIn.status === 201 && rMutIn.data?.data?.stock?.quantity === 50);
+  check('6a. Mutasi IN dengan batch -> 201 (qty bertambah ke 50)', rMutIn.status === 201 && rMutIn.data?.data?.stock?.quantity === 50);
 
   // 6b. Mutasi OUT Valid
   const rMutOutValid = await req('/api/v1/stock/mutation', 'POST', {
-    productId,
+    materialId,
     branchId: branchJkt.id,
     type: 'OUT',
     qty: 15,
@@ -304,9 +285,9 @@ async function main() {
   }, ownerCookie);
   check('6b. Mutasi OUT valid -> 201 (qty menjadi 35)', rMutOutValid.status === 201 && rMutOutValid.data?.data?.stock?.quantity === 35);
 
-  // 6c. Mutasi OUT Melebihi Stok (Harus 409 dengan response body berisi properti available)
+  // 6c. Mutasi OUT Melebihi Stok (Harus 409 dengan properti available)
   const rMutOutOver = await req('/api/v1/stock/mutation', 'POST', {
-    productId,
+    materialId,
     branchId: branchJkt.id,
     type: 'OUT',
     qty: 100, // stok saat ini 35
@@ -316,62 +297,134 @@ async function main() {
   const hasAvailable = rMutOutOver.data?.available === 35;
   check('6c. Mutasi OUT melebihi stok ditolak -> 409 dengan body { available: 35 }', is409 && hasAvailable);
 
-  // 6d. Mutasi ADJUSTMENT (Menetapkan kuantitas akhir)
+  // 6d. Mutasi ADJUSTMENT
   const rMutAdj = await req('/api/v1/stock/mutation', 'POST', {
-    productId,
+    materialId,
     branchId: branchJkt.id,
     type: 'ADJUSTMENT',
-    qty: 40, // Target final di-set ke 40
+    qty: 40,
     note: 'Hasil stock opname fisik',
   }, ownerCookie);
   const adjSuccess = rMutAdj.status === 201 && rMutAdj.data?.data?.stock?.quantity === 40;
   const movementRecorded = rMutAdj.data?.data?.movement?.qtyBefore === 35 && rMutAdj.data?.data?.movement?.qtyAfter === 40;
   check('6d. Mutasi ADJUSTMENT -> 201 (qtyAfter = 40, delta tercatat)', adjSuccess && movementRecorded);
 
-  // ─── 7. Anti-IDOR & Hak Akses Role pada Mutasi Stok ──────────────────────────
-  console.log('\n--- 7. Anti-IDOR & Hak Akses Role ---');
-  // 7a. CASHIER dilarang mutasi stok
+  // ─── 7. Keputusan Kedaluwarsa Owner (Batch-Level Expiry) ──────────────────────
+  console.log('\n--- 7. Keputusan Kedaluwarsa Owner (Batch-Level Expiry) ---');
+  // Buat 3 item terpisah untuk membuktikan:
+  // 1. Item dengan batch lewat -> muncul di kartu warning 'EXPIRED'
+  // 2. Item dengan batch hampir lewat (< 30 hari) -> muncul di kartu warning 'EXPIRING_SOON'
+  // 3. Item tanpa batch -> status 'NORMAL', tidak menyebabkan error apapun
+
+  // 7a. Item dengan batch lewat kedaluwarsa
+  const rMatExpired = await req('/api/v1/materials', 'POST', {
+    name: `Item Batch Lewat ${uniqueSuffix}`,
+    sku: `EXP-PAST-${uniqueSuffix}`,
+    unit: 'vial',
+    category: 'Bahan Tindakan',
+  }, ownerCookie);
+  const expPastId = rMatExpired.data?.data?.id;
+
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 2);
+  const pastDateStr = yesterday.toISOString().split('T')[0];
+
+  await req('/api/v1/stock/mutation', 'POST', {
+    materialId: expPastId,
+    branchId: branchJkt.id,
+    type: 'IN',
+    qty: 10,
+    expiredDate: pastDateStr,
+    batchNumber: 'LOT-EXPIRED',
+  }, ownerCookie);
+
+  // 7b. Item dengan batch mendekati kedaluwarsa (< 30 hari)
+  const rMatExpSoon = await req('/api/v1/materials', 'POST', {
+    name: `Item Batch Exp Soon ${uniqueSuffix}`,
+    sku: `EXP-SOON-${uniqueSuffix}`,
+    unit: 'ampul',
+    category: 'Bahan Tindakan',
+  }, ownerCookie);
+  const expSoonId = rMatExpSoon.data?.data?.id;
+
+  const soonDate = new Date();
+  soonDate.setDate(soonDate.getDate() + 10);
+  const soonDateStr = soonDate.toISOString().split('T')[0];
+
+  await req('/api/v1/stock/mutation', 'POST', {
+    materialId: expSoonId,
+    branchId: branchJkt.id,
+    type: 'IN',
+    qty: 20,
+    expiredDate: soonDateStr,
+    batchNumber: 'LOT-SOON',
+  }, ownerCookie);
+
+  // 7c. Item tanpa batch (barang tidak memiliki kedaluwarsa)
+  const rMatNoBatch = await req('/api/v1/materials', 'POST', {
+    name: `Item Tanpa Batch ${uniqueSuffix}`,
+    sku: `NO-BATCH-${uniqueSuffix}`,
+    unit: 'pcs',
+    category: 'Alat Operasional',
+  }, ownerCookie);
+  const noBatchId = rMatNoBatch.data?.data?.id;
+
+  await req('/api/v1/stock/mutation', 'POST', {
+    materialId: noBatchId,
+    branchId: branchJkt.id,
+    type: 'IN',
+    qty: 5,
+    // tanpa expiredDate
+  }, ownerCookie);
+
+  // Verifikasi query stok per cabang
+  const rQueryStock = await req(`/api/v1/stock?branchId=${branchJkt.id}&limit=100`, 'GET', null, ownerCookie);
+  const stockItems = rQueryStock.data?.data?.stocks || rQueryStock.data?.data?.items || [];
+
+  const foundPast = stockItems.find(s => s.materialId === expPastId || s.productId === expPastId);
+  const foundSoon = stockItems.find(s => s.materialId === expSoonId || s.productId === expSoonId);
+  const foundNoBatch = stockItems.find(s => s.materialId === noBatchId || s.productId === noBatchId);
+
+  check('7a. Item dengan batch lewat kedaluwarsa terdeteksi warning EXPIRED', foundPast?.expiredWarning === 'EXPIRED');
+  check('7b. Item dengan batch < 30 hari terdeteksi warning EXPIRING_SOON', foundSoon?.expiredWarning === 'EXPIRING_SOON');
+  check('7c. Item tanpa batch tidak error dan memiliki warning NORMAL', foundNoBatch?.expiredWarning === 'NORMAL' && foundNoBatch?.expiredDate === null);
+
+  // ─── 8. Anti-IDOR & Hak Akses Mutasi Cabang ──────────────────────────────────
+  console.log('\n--- 8. Anti-IDOR & Hak Akses Cabang ---');
+  // CASHIER dilarang mutasi
   const rCashierMut = await req('/api/v1/stock/mutation', 'POST', {
-    productId,
+    materialId,
     branchId: branchJkt.id,
     type: 'IN',
     qty: 5,
   }, cashierCookie);
-  check('7a. CASHIER melakukan mutasi ditolak -> 403 Forbidden', rCashierMut.status === 403);
+  check('8a. CASHIER melakukan mutasi ditolak -> 403 Forbidden', rCashierMut.status === 403);
 
-  // 7b. Anti-IDOR: Mutasi cabang lain oleh role selain OWNER ditolak
+  // Anti-IDOR lintas cabang
   if (branchBdg && branchBdg.id !== branchJkt.id) {
     const rIdorMut = await req('/api/v1/stock/mutation', 'POST', {
-      productId,
-      branchId: branchBdg.id, // CASHIER JKT coba mutasi di BDG
+      materialId,
+      branchId: branchBdg.id,
       type: 'IN',
       qty: 5,
     }, cashierCookie);
-    check('7b. Mutasi lintas cabang selain assigned branch ditolak -> 403', rIdorMut.status === 403);
-
-    // CASHIER JKT coba query stok cabang BDG
-    const rIdorQuery = await req(`/api/v1/stock?branchId=${branchBdg.id}`, 'GET', null, cashierCookie);
-    check('7c. Query stok lintas cabang selain assigned branch ditolak -> 403', rIdorQuery.status === 403);
+    check('8b. Mutasi lintas cabang selain assigned branch ditolak -> 403', rIdorMut.status === 403);
   } else {
-    check('7b. (Skipped IDOR: Hanya 1 cabang tersedia)', true);
-    check('7c. (Skipped IDOR query: Hanya 1 cabang tersedia)', true);
+    check('8b. (Skipped IDOR: Hanya 1 cabang)', true);
   }
 
-  // ─── 8. Riwayat Mutasi Stok ──────────────────────────────────────────────────
-  console.log('\n--- 8. Riwayat Mutasi Stok ---');
-  // 8a. List riwayat mutasi
-  const rMovements = await req(`/api/v1/stock/movements?productId=${productId}`, 'GET', null, ownerCookie);
-  const movements = rMovements.data?.data || [];
-  check('8a. Riwayat mutasi produk berhasil diambil -> 200', rMovements.status === 200 && movements.length >= 3);
+  // ─── 9. Riwayat Mutasi Stok ──────────────────────────────────────────────────
+  console.log('\n--- 9. Riwayat Mutasi Stok ---');
+  const rMovements = await req(`/api/v1/stock/movements?materialId=${materialId}`, 'GET', null, ownerCookie);
+  const movements = rMovements.data?.data?.movements || rMovements.data?.data || [];
+  check('9a. Riwayat mutasi bahan klinis berhasil diambil -> 200', rMovements.status === 200 && movements.length >= 3);
 
-  // 8b. Filter by type
-  const rMovIn = await req(`/api/v1/stock/movements?productId=${productId}&type=IN`, 'GET', null, ownerCookie);
-  const inMovements = rMovIn.data?.data || [];
-  check('8b. Filter riwayat type=IN -> 200 (semua tipe IN)', rMovIn.status === 200 && inMovements.every(m => m.type === 'IN'));
+  const rMovIn = await req(`/api/v1/stock/movements?materialId=${materialId}&type=IN`, 'GET', null, ownerCookie);
+  const inMovements = rMovIn.data?.data?.movements || rMovIn.data?.data || [];
+  check('9b. Filter riwayat type=IN -> 200 (semua tipe IN)', rMovIn.status === 200 && inMovements.every(m => m.type === 'IN'));
 
-  // 8c. CASHIER dilarang melihat riwayat mutasi (stok tersembunyi total -> 403)
-  const rCashierMov = await req(`/api/v1/stock/movements?productId=${productId}`, 'GET', null, cashierCookie);
-  check('8c. CASHIER melihat riwayat mutasi ditolak -> 403 Forbidden', rCashierMov.status === 403);
+  const rCashierMov = await req(`/api/v1/stock/movements?materialId=${materialId}`, 'GET', null, cashierCookie);
+  check('9c. CASHIER melihat riwayat mutasi ditolak -> 403 Forbidden', rCashierMov.status === 403);
 
   // ─────────────────────────────────────────────────────────────────────────────
   console.log('\n======================================================================');

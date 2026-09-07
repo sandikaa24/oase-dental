@@ -74,7 +74,7 @@ export function StockTable({
         <table className="w-full text-left text-sm text-foreground">
           <thead className="bg-slate-50 border-b border-border text-xs uppercase font-semibold text-muted tracking-wider">
             <tr>
-              <th scope="col" className="px-4 py-3 sm:px-6">Produk & SKU</th>
+              <th scope="col" className="px-4 py-3 sm:px-6">Bahan & SKU</th>
               <th scope="col" className="px-4 py-3">Kategori</th>
               <th scope="col" className="px-4 py-3 text-right">Stok Cabang</th>
               <th scope="col" className="px-4 py-3 text-right">Min. Stok</th>

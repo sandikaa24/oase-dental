@@ -272,13 +272,14 @@ async function main() {
     ];
 
     for (const prodData of sampleProducts) {
-      const product = await tx.product.upsert({
-        where: { name_isActive: { name: prodData.name, isActive: true } },
+      const material = await tx.material.upsert({
+        where: { sku: prodData.sku },
         update: {
-          sku: prodData.sku,
+          name: prodData.name,
           unit: prodData.unit,
           category: prodData.category,
           costPrice: prodData.costPrice,
+          minStock: prodData.minStock,
         },
         create: {
           name: prodData.name,
@@ -286,30 +287,41 @@ async function main() {
           unit: prodData.unit,
           category: prodData.category,
           costPrice: prodData.costPrice,
-          isActive: true,
+          minStock: prodData.minStock,
+          active: true,
         },
       });
 
-      await tx.productBranchStock.upsert({
+      await tx.materialBranchStock.upsert({
         where: {
-          productId_branchId: {
-            productId: product.id,
+          materialId_branchId: {
+            materialId: material.id,
             branchId: jkt.id,
           },
         },
         update: {
           quantity: prodData.quantity,
           minStock: prodData.minStock,
-          expiredDate: prodData.expiredDate,
         },
         create: {
-          productId: product.id,
+          materialId: material.id,
           branchId: jkt.id,
           quantity: prodData.quantity,
           minStock: prodData.minStock,
-          expiredDate: prodData.expiredDate,
         },
       });
+
+      if (prodData.expiredDate) {
+        await tx.materialStockBatch.create({
+          data: {
+            materialId: material.id,
+            branchId: jkt.id,
+            quantity: prodData.quantity,
+            expiredDate: prodData.expiredDate,
+            costPrice: prodData.costPrice,
+          },
+        });
+      }
     }
   }, { timeout: 30000, maxWait: 10000 });
 

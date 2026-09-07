@@ -7,7 +7,6 @@ import { useAuth } from '@/lib/auth-context';
 import { fetchApi } from '@/lib/api-client';
 import { StockItem, StockListResponse } from '@/components/stock/stock-types';
 import { StockTable } from '@/components/stock/stock-table';
-import { ProductModal } from '@/components/stock/product-modal';
 import { MutationModal } from '@/components/stock/mutation-modal';
 import { MovementHistoryDrawer } from '@/components/stock/movement-history-drawer';
 import { OpnameModal } from '@/components/stock/opname-modal';
@@ -16,7 +15,6 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import {
   Boxes,
-  Plus,
   Search,
   AlertTriangle,
   Clock,
@@ -54,9 +52,6 @@ export default function StockManagementPage() {
   const [page, setPage] = useState(1);
 
   // Modal & Drawer states
-  const [productModalOpen, setProductModalOpen] = useState(false);
-  const [productToEdit, setProductToEdit] = useState<StockItem | null>(null);
-
   const [mutationModalOpen, setMutationModalOpen] = useState(false);
   const [itemForMutation, setItemForMutation] = useState<StockItem | null>(null);
 
@@ -118,16 +113,6 @@ export default function StockManagementPage() {
     setDrawerOpen(true);
   };
 
-  const handleOpenEdit = (item: StockItem) => {
-    setProductToEdit(item);
-    setProductModalOpen(true);
-  };
-
-  const handleOpenCreate = () => {
-    setProductToEdit(null);
-    setProductModalOpen(true);
-  };
-
   const handleRefresh = () => {
     queryClient.invalidateQueries({ queryKey: ['stock-list'] });
   };
@@ -162,26 +147,15 @@ export default function StockManagementPage() {
             onSelectBranch={setSelectedBranchId}
           />
           {canMutate && (
-            <>
-              <Button
-                variant="outline"
-                size="md"
-                onClick={() => setOpnameModalOpen(true)}
-                className="gap-1.5 shadow-xs"
-              >
-                <ClipboardCheck className="h-4 w-4 text-primary" />
-                <span>Stock Opname</span>
-              </Button>
-              <Button
-                variant="primary"
-                size="md"
-                onClick={handleOpenCreate}
-                className="gap-1.5 shadow-xs"
-              >
-                <Plus className="h-4 w-4" />
-                <span>Tambah Produk</span>
-              </Button>
-            </>
+            <Button
+              variant="outline"
+              size="md"
+              onClick={() => setOpnameModalOpen(true)}
+              className="gap-1.5 shadow-xs"
+            >
+              <ClipboardCheck className="h-4 w-4 text-primary" />
+              <span>Stock Opname</span>
+            </Button>
           )}
         </div>
       </div>
@@ -192,11 +166,11 @@ export default function StockManagementPage() {
         <Card className="border-border shadow-xs">
           <CardContent className="p-4 sm:p-5 flex items-center justify-between">
             <div>
-              <div className="text-xs font-medium text-muted">Total Produk</div>
+              <div className="text-xs font-medium text-muted">Total Bahan</div>
               <div className="text-2xl font-bold text-foreground mt-1">
                 {summaryMetrics.totalItems}
               </div>
-              <div className="text-[11px] text-muted mt-0.5">Produk aktif terdaftar</div>
+              <div className="text-[11px] text-muted mt-0.5">Bahan klinis aktif terdaftar</div>
             </div>
             <div className="p-2.5 rounded-lg bg-slate-100 text-slate-600">
               <Boxes className="h-5 w-5" />
@@ -228,7 +202,7 @@ export default function StockManagementPage() {
               <div className="text-2xl font-bold text-amber-700 mt-1">
                 {summaryMetrics.expiringSoonCount}
               </div>
-              <div className="text-[11px] text-amber-600 mt-0.5">Perlu perhatian segera</div>
+              <div className="text-[11px] text-amber-600 mt-0.5">Batch mendekati kadaluarsa</div>
             </div>
             <div className="p-2.5 rounded-lg bg-amber-50 text-amber-600 border border-amber-200">
               <Clock className="h-5 w-5" />
@@ -244,7 +218,7 @@ export default function StockManagementPage() {
               <div className="text-2xl font-bold text-danger-text mt-1">
                 {summaryMetrics.expiredCount}
               </div>
-              <div className="text-[11px] text-danger-text mt-0.5">Wajib segera dikeluarkan</div>
+              <div className="text-[11px] text-danger-text mt-0.5">Batch sudah kadaluarsa</div>
             </div>
             <div className="p-2.5 rounded-lg bg-danger-bg text-danger-icon border border-red-200">
               <AlertTriangle className="h-5 w-5" />
@@ -325,22 +299,13 @@ export default function StockManagementPage() {
         </div>
       </div>
 
-      {/* Tabel Stok Produk */}
+      {/* Tabel Stok Bahan Klinis */}
       <StockTable
         items={stockData}
         isLoading={isLoading}
         canMutate={canMutate}
         onMutateClick={handleOpenMutate}
         onHistoryClick={handleOpenHistory}
-        onEditClick={handleOpenEdit}
-      />
-
-      {/* Modal Tambah / Edit Produk */}
-      <ProductModal
-        open={productModalOpen}
-        onOpenChange={setProductModalOpen}
-        productToEdit={productToEdit}
-        onSuccess={handleRefresh}
       />
 
       {/* Modal Catat Mutasi Manual */}

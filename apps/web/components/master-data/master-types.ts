@@ -27,6 +27,8 @@ export interface Material {
   name: string;
   sku: string;
   unit: string;
+  category?: string;
+  costPrice?: string | number | null;
   minStock: number;
   isStockTracked: boolean;
   active: boolean;

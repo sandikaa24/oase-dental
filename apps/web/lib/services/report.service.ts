@@ -225,19 +225,19 @@ export async function getGrossProfitReport(
   };
 }
 
-// 5. Laporan Inventory / Stok (Model B1: Product & ProductBranchStock)
+// 5. Laporan Inventory / Stok (Model Bahan Klinis & MaterialBranchStock)
 export async function getInventoryReport(
   branchId: string | undefined,
   page: number = 1,
   limit: number = 20
 ) {
   if (branchId) {
-    const total = await prisma.product.count({
-      where: { isActive: true },
+    const total = await prisma.material.count({
+      where: { deletedAt: null, active: true },
     });
 
-    const products = await prisma.product.findMany({
-      where: { isActive: true },
+    const materials = await prisma.material.findMany({
+      where: { deletedAt: null, active: true },
       include: {
         branchStocks: {
           where: { branchId },
@@ -248,18 +248,18 @@ export async function getInventoryReport(
       take: limit,
     });
 
-    const data = products.map((p) => {
-      const stock = p.branchStocks[0] || null;
+    const data = materials.map((m) => {
+      const stock = m.branchStocks[0] || null;
       const quantity = stock ? stock.quantity : 0;
-      const minStock = stock ? stock.minStock : 0;
-      const costPrice = p.costPrice ? Number(p.costPrice) : 0;
+      const minStock = stock ? stock.minStock : (m.minStock || 0);
+      const costPrice = m.costPrice ? Number(m.costPrice) : 0;
       const valuation = quantity * costPrice;
 
       return {
-        id: stock?.id || p.id,
+        id: stock?.id || m.id,
         branchId,
-        itemId: p.id,
-        itemName: p.name,
+        itemId: m.id,
+        itemName: m.name,
         currentQuantity: quantity,
         minStock,
         isLowStock: quantity <= minStock,
@@ -273,12 +273,12 @@ export async function getInventoryReport(
       meta: { page, limit, total, totalPages: Math.ceil(total / limit) || 1 },
     };
   } else {
-    const total = await prisma.product.count({
-      where: { isActive: true },
+    const total = await prisma.material.count({
+      where: { deletedAt: null, active: true },
     });
 
-    const products = await prisma.product.findMany({
-      where: { isActive: true },
+    const materials = await prisma.material.findMany({
+      where: { deletedAt: null, active: true },
       include: {
         branchStocks: true,
       },
@@ -287,17 +287,19 @@ export async function getInventoryReport(
       take: limit,
     });
 
-    const data = products.map((p) => {
-      const totalQty = p.branchStocks.reduce((sum, s) => sum + s.quantity, 0);
-      const maxMinStock = p.branchStocks.reduce((max, s) => Math.max(max, s.minStock), 0);
-      const costPrice = p.costPrice ? Number(p.costPrice) : 0;
+    const data = materials.map((m) => {
+      const totalQty = m.branchStocks.reduce((sum, s) => sum + s.quantity, 0);
+      const maxMinStock = m.branchStocks.length > 0
+        ? m.branchStocks.reduce((max, s) => Math.max(max, s.minStock), 0)
+        : (m.minStock || 0);
+      const costPrice = m.costPrice ? Number(m.costPrice) : 0;
       const valuation = totalQty * costPrice;
 
       return {
-        id: p.id,
+        id: m.id,
         branchId: '',
-        itemId: p.id,
-        itemName: p.name,
+        itemId: m.id,
+        itemName: m.name,
         currentQuantity: totalQty,
         minStock: maxMinStock,
         isLowStock: totalQty <= maxMinStock,
@@ -505,22 +507,22 @@ export async function getProfitLossReport(
 
   const cogsByCategoryRaw = await prisma.$queryRaw<CategoryCogsRaw[]>`
     SELECT
-      p.category,
+      m.category,
       COALESCE(SUM(
         CASE
-          WHEN sm.type = 'OUT' THEN sm.qty * COALESCE(sm."costPrice", p."costPrice", 0)
+          WHEN sm.type = 'OUT' THEN sm.qty * COALESCE(sm."costPrice", m."costPrice", 0)
           WHEN sm.type = 'ADJUSTMENT' AND (sm."qtyAfter" - sm."qtyBefore") < 0 
-            THEN (sm."qtyBefore" - sm."qtyAfter") * COALESCE(sm."costPrice", p."costPrice", 0)
+            THEN (sm."qtyBefore" - sm."qtyAfter") * COALESCE(sm."costPrice", m."costPrice", 0)
           WHEN sm.type = 'ADJUSTMENT' AND (sm."qtyAfter" - sm."qtyBefore") > 0 
-            THEN -1 * (sm."qtyAfter" - sm."qtyBefore") * COALESCE(sm."costPrice", p."costPrice", 0)
+            THEN -1 * (sm."qtyAfter" - sm."qtyBefore") * COALESCE(sm."costPrice", m."costPrice", 0)
           ELSE 0
         END
       ), 0) as total_cogs
     FROM stock_movements sm
-    JOIN products p ON sm."productId" = p.id
+    JOIN materials m ON sm."materialId" = m.id
     WHERE sm."createdAt" >= ${from} AND sm."createdAt" <= ${to}
       AND (${branchId ?? null}::text IS NULL OR sm."branchId" = ${branchId})
-    GROUP BY p.category
+    GROUP BY m.category
   `;
 
   let totalCOGS = 0;
@@ -535,11 +537,11 @@ export async function getProfitLossReport(
   const uncostedCountRaw = await prisma.$queryRaw<Array<{ count: bigint }>>`
     SELECT COUNT(*)::bigint as count
     FROM stock_movements sm
-    JOIN products p ON sm."productId" = p.id
+    JOIN materials m ON sm."materialId" = m.id
     WHERE sm."createdAt" >= ${from} AND sm."createdAt" <= ${to}
       AND (${branchId ?? null}::text IS NULL OR sm."branchId" = ${branchId})
       AND sm.type IN ('OUT', 'ADJUSTMENT')
-      AND sm."costPrice" IS NULL AND p."costPrice" IS NULL
+      AND sm."costPrice" IS NULL AND m."costPrice" IS NULL
   `;
   const uncostedCount = Number(uncostedCountRaw[0]?.count || 0);
 
@@ -601,16 +603,16 @@ export async function getProfitLossReport(
         sm."branchId",
         COALESCE(SUM(
           CASE
-            WHEN sm.type = 'OUT' THEN sm.qty * COALESCE(sm."costPrice", p."costPrice", 0)
+            WHEN sm.type = 'OUT' THEN sm.qty * COALESCE(sm."costPrice", m."costPrice", 0)
             WHEN sm.type = 'ADJUSTMENT' AND (sm."qtyAfter" - sm."qtyBefore") < 0 
-              THEN (sm."qtyBefore" - sm."qtyAfter") * COALESCE(sm."costPrice", p."costPrice", 0)
+              THEN (sm."qtyBefore" - sm."qtyAfter") * COALESCE(sm."costPrice", m."costPrice", 0)
             WHEN sm.type = 'ADJUSTMENT' AND (sm."qtyAfter" - sm."qtyBefore") > 0 
-              THEN -1 * (sm."qtyAfter" - sm."qtyBefore") * COALESCE(sm."costPrice", p."costPrice", 0)
+              THEN -1 * (sm."qtyAfter" - sm."qtyBefore") * COALESCE(sm."costPrice", m."costPrice", 0)
             ELSE 0
           END
         ), 0) as total_cogs
       FROM stock_movements sm
-      JOIN products p ON sm."productId" = p.id
+      JOIN materials m ON sm."materialId" = m.id
       WHERE sm."createdAt" >= ${from} AND sm."createdAt" <= ${to}
       GROUP BY sm."branchId"
     `;
@@ -673,7 +675,7 @@ export async function getProfitLossReport(
     prisma.stockMovement.findMany({
       where: movementWhere,
       include: {
-        product: { select: { id: true, name: true, sku: true, unit: true, category: true, costPrice: true } },
+        material: { select: { id: true, name: true, sku: true, unit: true, category: true, costPrice: true } },
         branch: { select: { id: true, code: true, name: true } },
         user: { select: { id: true, email: true, employee: { select: { name: true } } } },
       },
@@ -685,7 +687,7 @@ export async function getProfitLossReport(
   ]);
 
   const drilldownItems = movements.map((m) => {
-    const costPrice = m.costPrice !== null ? Number(m.costPrice) : (m.product.costPrice !== null ? Number(m.product.costPrice) : 0);
+    const costPrice = m.costPrice !== null ? Number(m.costPrice) : (m.material.costPrice !== null ? Number(m.material.costPrice) : 0);
     let qtyDelta = 0;
     let costImpact = 0;
 
@@ -700,11 +702,12 @@ export async function getProfitLossReport(
     return {
       id: m.id,
       createdAt: m.createdAt.toISOString(),
-      productId: m.productId,
-      productName: m.product.name,
-      sku: m.product.sku,
-      category: m.product.category,
-      unit: m.product.unit,
+      productId: m.materialId,
+      materialId: m.materialId,
+      productName: m.material.name,
+      sku: m.material.sku,
+      category: m.material.category,
+      unit: m.material.unit,
       type: m.type,
       qty: m.qty,
       qtyBefore: m.qtyBefore,

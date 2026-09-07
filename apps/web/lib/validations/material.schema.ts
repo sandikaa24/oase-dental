@@ -6,9 +6,22 @@ import { z } from 'zod';
  */
 export const createMaterialSchema = z
   .object({
-    name: z.string().min(1),
-    sku: z.string().min(1),
-    unit: z.string().min(1),
+    name: z.string().min(1, 'Nama bahan klinis wajib diisi'),
+    sku: z.string().min(1, 'SKU bahan klinis wajib diisi'),
+    unit: z.string().min(1, 'Satuan unit wajib diisi'),
+    category: z.string().min(1).optional().default('Bahan Tindakan'),
+    costPrice: z
+      .union([z.number(), z.string()])
+      .optional()
+      .nullable()
+      .transform((val) => {
+        if (val === undefined || val === null || val === '') return null;
+        const num = typeof val === 'string' ? parseFloat(val) : val;
+        return isNaN(num) ? null : num;
+      })
+      .refine((val) => val === null || val >= 0, {
+        message: 'Harga pokok (costPrice) tidak boleh negatif',
+      }),
     minStock: z.number().int().min(0).optional(),
     isStockTracked: z.boolean().optional(),
     active: z.boolean().optional(),

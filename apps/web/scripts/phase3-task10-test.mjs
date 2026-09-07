@@ -146,7 +146,7 @@ async function run() {
 
   console.log('\n3. Testing Boundary isLowStock (qty <= minStock)');
   const testBranch = await prisma.branch.findFirst();
-  const testProd = await prisma.product.create({
+  const testProd = await prisma.material.create({
     data: {
       name: `Test Boundary Product ${Date.now()}`,
       sku: `SKU-BND-${Date.now()}`,
@@ -156,10 +156,10 @@ async function run() {
   });
 
   // Case A: quantity === minStock (10 === 10) -> MUST be isLowStock: true
-  const stockA = await prisma.productBranchStock.create({
+  const stockA = await prisma.materialBranchStock.create({
     data: {
       branchId: testBranch.id,
-      productId: testProd.id,
+      materialId: testProd.id,
       quantity: 10,
       minStock: 10,
     },
@@ -170,7 +170,7 @@ async function run() {
   assert(foundA && foundA.isLowStock === true, 'Boundary: quantity === minStock (10 === 10) MUST be isLowStock: true');
 
   // Case B: quantity === minStock + 1 (11 > 10) -> MUST be isLowStock: false
-  await prisma.productBranchStock.update({
+  await prisma.materialBranchStock.update({
     where: { id: stockA.id },
     data: { quantity: 11 },
   });
@@ -180,8 +180,8 @@ async function run() {
   assert(foundB && foundB.isLowStock === false, 'Boundary: quantity === minStock + 1 (11 > 10) MUST be isLowStock: false');
 
   // Cleanup
-  await prisma.productBranchStock.delete({ where: { id: stockA.id } });
-  await prisma.product.delete({ where: { id: testProd.id } });
+  await prisma.materialBranchStock.delete({ where: { id: stockA.id } });
+  await prisma.material.delete({ where: { id: testProd.id } });
 
   console.log(`\n--- RESULT: ${passed}/${assertions} PASSED ---`);
   if (passed !== assertions) {

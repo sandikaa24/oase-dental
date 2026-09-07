@@ -42,7 +42,8 @@ export const updateProductSchema = z.object({
 
 export const stockMutationSchema = z
   .object({
-    productId: z.string().uuid('ID produk tidak valid'),
+    productId: z.string().uuid('ID produk tidak valid').optional(),
+    materialId: z.string().uuid('ID bahan klinis tidak valid').optional(),
     branchId: z.string().uuid('ID cabang tidak valid'),
     type: z.enum(['IN', 'OUT', 'ADJUSTMENT'], {
       errorMap: () => ({ message: 'Tipe mutasi harus IN, OUT, atau ADJUSTMENT' }),
@@ -52,6 +53,7 @@ export const stockMutationSchema = z
       .int('Jumlah (qty) harus berupa bilangan bulat')
       .min(0, 'Jumlah (qty) tidak boleh negatif'),
     note: z.string().trim().max(500, 'Catatan maksimal 500 karakter').nullable().optional(),
+    batchNumber: z.string().trim().max(100, 'Nomor batch maksimal 100 karakter').nullable().optional(),
     expiredDate: z
       .string()
       .regex(/^\d{4}-\d{2}-\d{2}$/, 'Format tanggal kadaluarsa harus YYYY-MM-DD')
@@ -63,6 +65,15 @@ export const stockMutationSchema = z
       .min(0, 'Batas minimum stok tidak boleh negatif')
       .optional(),
   })
+  .refine(
+    (data) => {
+      return !!data.productId || !!data.materialId;
+    },
+    {
+      message: 'ID bahan klinis (materialId) wajib diisi',
+      path: ['materialId'],
+    }
+  )
   .refine(
     (data) => {
       if ((data.type === 'IN' || data.type === 'OUT') && data.qty <= 0) {
@@ -91,6 +102,7 @@ export const stockListQuerySchema = z.object({
 
 export const stockMovementsQuerySchema = z.object({
   productId: z.string().uuid().optional(),
+  materialId: z.string().uuid().optional(),
   branchId: z.string().uuid().optional(),
   type: z.enum(['IN', 'OUT', 'ADJUSTMENT']).optional(),
   page: z.coerce.number().int().min(1).default(1),

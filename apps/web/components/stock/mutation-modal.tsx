@@ -27,6 +27,7 @@ interface MutationFormState {
   type: StockMovementType;
   qty: string;
   note: string;
+  batchNumber: string;
   expiredDate: string;
   minStock: string;
 }
@@ -35,6 +36,7 @@ const INITIAL_FORM: MutationFormState = {
   type: 'IN',
   qty: '',
   note: '',
+  batchNumber: '',
   expiredDate: '',
   minStock: '',
 };
@@ -58,6 +60,7 @@ export function MutationModal({
         type: 'IN',
         qty: '',
         note: '',
+        batchNumber: '',
         expiredDate: item.expiredDate || '',
         minStock: String(item.minStock ?? 0),
       });
@@ -109,12 +112,16 @@ export function MutationModal({
     try {
       const payload: Record<string, unknown> = {
         productId: item.productId,
+        materialId: item.materialId || item.productId,
         branchId,
         type: form.type,
         qty: qtyNum,
         note: form.note.trim() || null,
       };
 
+      if (form.batchNumber.trim()) {
+        payload.batchNumber = form.batchNumber.trim();
+      }
       if (form.expiredDate.trim()) {
         payload.expiredDate = form.expiredDate.trim();
       }
@@ -290,37 +297,54 @@ export function MutationModal({
           />
         </div>
 
-        {/* Tanggal Kadaluarsa & Min Stok (Opsional) */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
-          <div>
-            <label htmlFor="mutation-expired" className="block text-xs font-semibold text-foreground mb-1">
-              Tanggal Kadaluarsa (Baru/Update)
-            </label>
-            <Input
-              id="mutation-expired"
-              type="date"
-              value={form.expiredDate}
-              onChange={(e) => handleChange('expiredDate', e.target.value)}
-              error={errors.expiredDate}
-              disabled={isSubmitting}
-            />
+        {/* Input Batch & Tanggal Kadaluarsa (Khusus IN atau bila relevan) */}
+        {form.type === 'IN' && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+            <div>
+              <label htmlFor="mutation-batch" className="block text-xs font-semibold text-foreground mb-1">
+                Nomor Batch / Lot (Opsional)
+              </label>
+              <Input
+                id="mutation-batch"
+                value={form.batchNumber}
+                onChange={(e) => handleChange('batchNumber', e.target.value)}
+                placeholder="Contoh: LOT-2026-A1"
+                error={errors.batchNumber}
+                disabled={isSubmitting}
+                autoComplete="off"
+              />
+            </div>
+            <div>
+              <label htmlFor="mutation-expired" className="block text-xs font-semibold text-foreground mb-1">
+                Tanggal Kadaluarsa Batch
+              </label>
+              <Input
+                id="mutation-expired"
+                type="date"
+                value={form.expiredDate}
+                onChange={(e) => handleChange('expiredDate', e.target.value)}
+                error={errors.expiredDate}
+                disabled={isSubmitting}
+              />
+            </div>
           </div>
+        )}
 
-          <div>
-            <label htmlFor="mutation-minStock" className="block text-xs font-semibold text-foreground mb-1">
-              Peringatan Min. Stok ({item.unit})
-            </label>
-            <Input
-              id="mutation-minStock"
-              type="number"
-              min="0"
-              value={form.minStock}
-              onChange={(e) => handleChange('minStock', e.target.value)}
-              placeholder="0"
-              error={errors.minStock}
-              disabled={isSubmitting}
-            />
-          </div>
+        {/* Min Stok (Opsional) */}
+        <div className="pt-1">
+          <label htmlFor="mutation-minStock" className="block text-xs font-semibold text-foreground mb-1">
+            Peringatan Min. Stok ({item.unit})
+          </label>
+          <Input
+            id="mutation-minStock"
+            type="number"
+            min="0"
+            value={form.minStock}
+            onChange={(e) => handleChange('minStock', e.target.value)}
+            placeholder="0"
+            error={errors.minStock}
+            disabled={isSubmitting}
+          />
         </div>
 
         <DialogFooter>

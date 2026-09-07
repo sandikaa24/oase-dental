@@ -59,12 +59,25 @@ export async function createMaterial(input: {
   name: string;
   sku: string;
   unit: string;
+  category?: string;
+  costPrice?: number | null;
   minStock?: number;
   isStockTracked?: boolean;
   active?: boolean;
 }) {
   try {
-    return await prisma.material.create({ data: input });
+    return await prisma.material.create({
+      data: {
+        name: input.name,
+        sku: input.sku,
+        unit: input.unit,
+        category: input.category || 'Bahan Tindakan',
+        costPrice: input.costPrice !== undefined && input.costPrice !== null ? input.costPrice : null,
+        minStock: input.minStock,
+        isStockTracked: input.isStockTracked,
+        active: input.active,
+      },
+    });
   } catch (error: unknown) {
     throw mapMaterialError(error);
   }
@@ -76,6 +89,8 @@ export async function updateMaterial(
     name?: string;
     sku?: string;
     unit?: string;
+    category?: string;
+    costPrice?: number | null;
     minStock?: number;
     isStockTracked?: boolean;
     active?: boolean;
@@ -87,7 +102,17 @@ export async function updateMaterial(
   }
 
   try {
-    return await prisma.material.update({ where: { id }, data: input });
+    const dataToUpdate: Record<string, unknown> = {};
+    if (input.name !== undefined) dataToUpdate.name = input.name;
+    if (input.sku !== undefined) dataToUpdate.sku = input.sku;
+    if (input.unit !== undefined) dataToUpdate.unit = input.unit;
+    if (input.category !== undefined) dataToUpdate.category = input.category;
+    if (input.costPrice !== undefined) dataToUpdate.costPrice = input.costPrice;
+    if (input.minStock !== undefined) dataToUpdate.minStock = input.minStock;
+    if (input.isStockTracked !== undefined) dataToUpdate.isStockTracked = input.isStockTracked;
+    if (input.active !== undefined) dataToUpdate.active = input.active;
+
+    return await prisma.material.update({ where: { id }, data: dataToUpdate });
   } catch (error: unknown) {
     throw mapMaterialError(error);
   }

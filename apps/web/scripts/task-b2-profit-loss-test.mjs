@@ -140,20 +140,20 @@ async function main() {
 
   // 1. Uji Snapshot costPrice di SEMUA tipe StockMovement (IN, OUT, ADJUSTMENT)
   console.log('--- Uji 1: Snapshot costPrice di SEMUA tipe StockMovement (IN, OUT, ADJUSTMENT) ---');
-  const testProduct = await prisma.product.create({
+  const testProduct = await prisma.material.create({
     data: {
       name: `Produk Uji B2 ${Date.now()}`,
       sku: `BHP-TEST-${Date.now()}`,
       unit: 'pcs',
       category: 'BHP',
       costPrice: new Prisma.Decimal('50000.00'),
-      isActive: true,
+      active: true,
     },
   });
 
   // a. Mutasi IN
   const inRes = await req('/api/v1/stock/mutation', 'POST', {
-    productId: testProduct.id,
+    materialId: testProduct.id,
     branchId: branchJkt.id,
     type: 'IN',
     qty: 20,
@@ -162,7 +162,7 @@ async function main() {
   assert(inRes.status === 201 || inRes.status === 200, 'Mutasi IN berhasil dicatat (200/201)');
 
   const inDb = await prisma.stockMovement.findFirst({
-    where: { productId: testProduct.id, type: 'IN' },
+    where: { materialId: testProduct.id, type: 'IN' },
     orderBy: { createdAt: 'desc' },
   });
   assert(inDb !== null, 'Record StockMovement IN ditemukan di DB');
@@ -170,7 +170,7 @@ async function main() {
 
   // b. Mutasi OUT
   const outRes = await req('/api/v1/stock/mutation', 'POST', {
-    productId: testProduct.id,
+    materialId: testProduct.id,
     branchId: branchJkt.id,
     type: 'OUT',
     qty: 5,
@@ -179,7 +179,7 @@ async function main() {
   assert(outRes.status === 201 || outRes.status === 200, 'Mutasi OUT berhasil dicatat (200/201)');
 
   const outDb = await prisma.stockMovement.findFirst({
-    where: { productId: testProduct.id, type: 'OUT' },
+    where: { materialId: testProduct.id, type: 'OUT' },
     orderBy: { createdAt: 'desc' },
   });
   assert(outDb !== null, 'Record StockMovement OUT ditemukan di DB');
@@ -188,7 +188,7 @@ async function main() {
   // c. Mutasi ADJUSTMENT
   // Stok awal 20 - 5 = 15. Disesuaikan menjadi 12 (susut 3 pcs)
   const adjRes = await req('/api/v1/stock/mutation', 'POST', {
-    productId: testProduct.id,
+    materialId: testProduct.id,
     branchId: branchJkt.id,
     type: 'ADJUSTMENT',
     qty: 12,
@@ -197,7 +197,7 @@ async function main() {
   assert(adjRes.status === 201 || adjRes.status === 200, 'Mutasi ADJUSTMENT berhasil dicatat (200/201)');
 
   const adjDb = await prisma.stockMovement.findFirst({
-    where: { productId: testProduct.id, type: 'ADJUSTMENT' },
+    where: { materialId: testProduct.id, type: 'ADJUSTMENT' },
     orderBy: { createdAt: 'desc' },
   });
   assert(adjDb !== null, 'Record StockMovement ADJUSTMENT ditemukan di DB');
@@ -210,7 +210,11 @@ async function main() {
   const nextDateStr = '2026-09-16';
 
   // Bersihkan data tanggal uji agar isolasi terjamin
-  await prisma.stockMovement.deleteMany({ where: { productId: testProduct.id } });
+  await prisma.transactionPayment.deleteMany({ where: { transaction: { transactionNumber: { startsWith: 'TRX-BND-' } } } });
+  await prisma.transaction.deleteMany({ where: { transactionNumber: { startsWith: 'TRX-BND-' } } });
+  await prisma.expense.deleteMany({ where: { note: { contains: 'boundary test' } } });
+  await prisma.stockMovement.deleteMany({ where: { createdAt: { gte: new Date(`${targetDateStr}T00:00:00.000Z`), lte: new Date(`${nextDateStr}T23:59:59.999Z`) } } });
+  await prisma.stockMovement.deleteMany({ where: { materialId: testProduct.id } });
 
   // Transaksi 1: PAID persis pada 23:59:59 di targetDateStr (HARUS MASUK)
   const boundaryTxIn = await prisma.transaction.create({
@@ -255,7 +259,7 @@ async function main() {
   // Mutasi Stok OUT pada 23:59:59 di targetDateStr (HARUS MASUK HPP: 2 × 50.000 = 100.000)
   const boundaryMovementIn = await prisma.stockMovement.create({
     data: {
-      productId: testProduct.id,
+      materialId: testProduct.id,
       branchId: branchJkt.id,
       type: 'OUT',
       qty: 2,
@@ -270,7 +274,7 @@ async function main() {
   // Mutasi Stok OUT pada 00:00:01 di nextDateStr (TIDAK BOLEH MASUK)
   const boundaryMovementOut = await prisma.stockMovement.create({
     data: {
-      productId: testProduct.id,
+      materialId: testProduct.id,
       branchId: branchJkt.id,
       type: 'OUT',
       qty: 10,
@@ -331,7 +335,7 @@ async function main() {
   // a. ADJUSTMENT negatif: qtyBefore=8, qtyAfter=6 (susut 2 pcs x 50.000 = +100.000 beban)
   await prisma.stockMovement.create({
     data: {
-      productId: testProduct.id,
+      materialId: testProduct.id,
       branchId: branchJkt.id,
       type: 'ADJUSTMENT',
       qty: 6,
@@ -356,7 +360,7 @@ async function main() {
   // b. ADJUSTMENT positif: qtyBefore=6, qtyAfter=7 (surplus 1 pcs x 50.000 = -50.000 koreksi beban)
   await prisma.stockMovement.create({
     data: {
-      productId: testProduct.id,
+      materialId: testProduct.id,
       branchId: branchJkt.id,
       type: 'ADJUSTMENT',
       qty: 7,
@@ -415,19 +419,20 @@ async function main() {
 
   // 5. Uji Produk Lama Tanpa costPrice (Null Safety & uncostedMovementCount)
   console.log('\n--- Uji 5: Kasus Produk Lama Tanpa costPrice ---');
-  const uncostedProduct = await prisma.product.create({
+  const uncostedProduct = await prisma.material.create({
     data: {
       name: `Produk Lama Tanpa HPP ${Date.now()}`,
+      sku: `ATK-TEST-${Date.now()}`,
       unit: 'pcs',
       category: 'ATK',
       costPrice: null, // Null!
-      isActive: true,
+      active: true,
     },
   });
 
   await prisma.stockMovement.create({
     data: {
-      productId: uncostedProduct.id,
+      materialId: uncostedProduct.id,
       branchId: branchJkt.id,
       type: 'OUT',
       qty: 5,
@@ -515,9 +520,9 @@ async function main() {
   console.log('\n--- Membersihkan Data Pengujian ---');
   await prisma.transactionPayment.deleteMany({ where: { transactionId: { in: [boundaryTxIn.id, boundaryTxOut.id] } } });
   await prisma.transaction.deleteMany({ where: { id: { in: [boundaryTxIn.id, boundaryTxOut.id, draftTx.id, cancelledTx.id] } } });
-  await prisma.stockMovement.deleteMany({ where: { productId: { in: [testProduct.id, uncostedProduct.id] } } });
-  await prisma.productBranchStock.deleteMany({ where: { productId: { in: [testProduct.id, uncostedProduct.id] } } });
-  await prisma.product.deleteMany({ where: { id: { in: [testProduct.id, uncostedProduct.id] } } });
+  await prisma.stockMovement.deleteMany({ where: { materialId: { in: [testProduct.id, uncostedProduct.id] } } });
+  await prisma.materialBranchStock.deleteMany({ where: { materialId: { in: [testProduct.id, uncostedProduct.id] } } });
+  await prisma.material.deleteMany({ where: { id: { in: [testProduct.id, uncostedProduct.id] } } });
   await prisma.expense.deleteMany({ where: { id: { in: [boundaryExpenseIn.id, boundaryExpenseOut.id] } } });
   await prisma.auditLog.deleteMany({ where: { entity: 'StockMovement' } });
   await prisma.refreshToken.deleteMany({ where: { userId: managerUser.id } });

@@ -57,9 +57,9 @@ const ALL_TABS: TabItem[] = [
   },
   {
     id: 'gross-profit',
-    label: 'Laba Kotor',
+    label: 'Laba Rugi',
     icon: PieChart,
-    allowedRoles: ['OWNER'],
+    allowedRoles: ['OWNER', 'MANAGER'],
   },
   {
     id: 'audit-logs',

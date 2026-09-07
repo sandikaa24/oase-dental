@@ -85,6 +85,76 @@ export interface GrossProfitData {
   grossProfit: string;
 }
 
+export interface ProfitLossDrilldownItem {
+  id: string;
+  createdAt: string;
+  productId: string;
+  productName: string;
+  sku: string | null;
+  category: string;
+  unit: string;
+  type: 'IN' | 'OUT' | 'ADJUSTMENT';
+  qty: number;
+  qtyBefore: number;
+  qtyAfter: number;
+  qtyDelta: number;
+  costPrice: string;
+  costPriceSnapshot: string | null;
+  costImpact: string;
+  note: string | null;
+  branchCode: string;
+  branchName: string;
+  creatorName: string;
+}
+
+export interface ProfitLossBranchComparison {
+  branchId: string;
+  branchCode: string;
+  branchName: string;
+  revenue: string;
+  cogs: string;
+  expense: string;
+  grossProfit: string;
+  netProfit: string;
+  netProfitMargin: string;
+  status: 'SURPLUS' | 'DEFISIT';
+}
+
+export interface ProfitLossData {
+  period: {
+    dateFrom: string;
+    dateTo: string;
+  };
+  branchId: string | null;
+  summary: {
+    totalRevenue: string;
+    totalCOGS: string;
+    grossProfit: string;
+    grossProfitMargin: string;
+    totalExpense: string;
+    netProfit: string;
+    netProfitMargin: string;
+    status: 'SURPLUS' | 'DEFISIT';
+    transactionCount: number;
+    aov: string;
+    uncostedMovementCount: number;
+  };
+  revenueBreakdown: {
+    byPaymentMethod: Record<string, string>;
+  };
+  cogsBreakdown: {
+    byCategory: Record<string, string>;
+  };
+  expenseBreakdown: {
+    byCategory: Record<string, string>;
+  };
+  branchComparisons: ProfitLossBranchComparison[];
+  stockMovementDrilldown: {
+    data: ProfitLossDrilldownItem[];
+    meta: PaginationMeta;
+  };
+}
+
 export interface AuditLogItem {
   id: string;
   actorId: string | null;

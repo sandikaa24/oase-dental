@@ -47,7 +47,7 @@ export const CLINIC_PILLARS: ClinicPillar[] = [
   {
     id: 'expert-doctors',
     title: 'Dokter Gigi Berpengalaman',
-    description: 'Ditangani oleh tim dokter gigi umum dan spesialis berlisensi aktif (STR) yang komunikatif, teliti, dan mengutamakan kesehatan jangka panjang.',
+    description: 'Ditangani oleh tim dokter gigi berpengalaman dan terlisensi yang komunikatif, teliti, dan mengutamakan kesehatan jangka panjang.',
     iconName: 'Stethoscope',
   },
   {
@@ -58,31 +58,12 @@ export const CLINIC_PILLARS: ClinicPillar[] = [
   },
 ];
 
+/**
+ * kurasi manual owner — isi data asli sebelum rilis
+ * Struktur dipertahankan agar nama asli tinggal ditambahkan nanti.
+ */
 export const CLINIC_DOCTORS: DoctorProfile[] = [
-  {
-    id: 'drg-anisa',
-    name: 'drg. Anisa Pratiwi, Sp.KG',
-    title: 'Spesialis Konservasi Gigi',
-    specialization: 'Perawatan Saluran Akar, Tambal Estetik & Veneer',
-    experience: '8+ tahun pengalaman klinis',
-    scheduleSummary: 'Senin - Kamis (10:00 - 18:00)',
-  },
-  {
-    id: 'drg-budi',
-    name: 'drg. Budi Santoso',
-    title: 'Dokter Gigi Umum',
-    specialization: 'Pembersihan Karang Gigi (Scaling), Pencabutan & Perawatan Preventif',
-    experience: '6+ tahun pengalaman klinis',
-    scheduleSummary: 'Senin - Jumat (09:00 - 17:00)',
-  },
-  {
-    id: 'drg-clarissa',
-    name: 'drg. Clarissa Wijaya, Sp.Ort',
-    title: 'Spesialis Ortodonti',
-    specialization: 'Kawat Gigi (Behel Logam/Keramik) & Aligner Transparan',
-    experience: '7+ tahun pengalaman klinis',
-    scheduleSummary: 'Rabu & Sabtu (13:00 - 20:00)',
-  },
+  // kurasi manual owner — isi data asli sebelum rilis
 ];
 
 export const PATIENT_TESTIMONIALS: PatientTestimonial[] = [

@@ -242,44 +242,80 @@ export default async function HomePage() {
         <div className="text-center space-y-3 max-w-2xl mx-auto mb-12">
           <p className="text-xs font-semibold uppercase tracking-wider text-primary">Tenaga Medis Profesional</p>
           <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
-            Ditangani oleh Dokter Gigi Berdedikasi
+            Tim Dokter Gigi OASE
           </h2>
           <p className="text-sm text-muted-foreground">
-            Dokter kami selalu mengedepankan komunikasi yang ramah, penjelasan komprehensif, dan tindakan yang minim rasa sakit.
+            Tim Dokter Gigi OASE — dokter gigi berpengalaman &amp; terlisensi yang mengutamakan kenyamanan, pendekatan ramah, dan standar kebersihan medis yang ketat.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {CLINIC_DOCTORS.map((doc) => (
-            <div
-              key={doc.id}
-              className="rounded-2xl border border-border bg-card p-6 shadow-sm space-y-4"
-            >
-              <div className="flex items-center gap-3">
+        {CLINIC_DOCTORS.length > 0 ? (
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {CLINIC_DOCTORS.map((doc) => (
+              <div
+                key={doc.id}
+                className="rounded-2xl border border-border bg-card p-6 shadow-sm space-y-4"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                    <Stethoscope className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-foreground">{doc.name}</h3>
+                    <p className="text-xs font-medium text-primary">{doc.title}</p>
+                  </div>
+                </div>
+
+                <div className="space-y-2 text-xs text-muted-foreground pt-2 border-t border-border">
+                  <p>
+                    <strong className="text-foreground">Fokus Tindakan:</strong> {doc.specialization}
+                  </p>
+                  <p>
+                    <strong className="text-foreground">Pengalaman:</strong> {doc.experience}
+                  </p>
+                  <p className="flex items-center gap-1.5 text-primary font-medium pt-1">
+                    <Calendar className="h-3.5 w-3.5 shrink-0" />
+                    <span>{doc.scheduleSummary}</span>
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-border bg-card p-8 sm:p-10 shadow-sm">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 sm:gap-8 divide-y md:divide-y-0 md:divide-x divide-border">
+              <div className="flex flex-col items-center text-center space-y-3 md:px-4">
                 <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
                   <Stethoscope className="h-6 w-6" />
                 </div>
-                <div>
-                  <h3 className="text-base font-bold text-foreground">{doc.name}</h3>
-                  <p className="text-xs font-medium text-primary">{doc.title}</p>
-                </div>
+                <h3 className="text-base font-bold text-foreground">Tenaga Medis Terlisensi</h3>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Seluruh perawatan gigi ditangani langsung oleh dokter gigi profesional dengan izin resmi dan pengalaman klinis terpercaya.
+                </p>
               </div>
 
-              <div className="space-y-2 text-xs text-muted-foreground pt-2 border-t border-border">
-                <p>
-                  <strong className="text-foreground">Fokus Tindakan:</strong> {doc.specialization}
+              <div className="flex flex-col items-center text-center space-y-3 pt-6 md:pt-0 md:px-4">
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                  <ShieldCheck className="h-6 w-6" />
+                </div>
+                <h3 className="text-base font-bold text-foreground">Pendekatan Ramah &amp; Nyaman</h3>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Konsultasi komunikatif dan tindakan yang memprioritaskan kenyamanan pasien untuk pengalaman perawatan bebas rasa cemas.
                 </p>
-                <p>
-                  <strong className="text-foreground">Pengalaman:</strong> {doc.experience}
-                </p>
-                <p className="flex items-center gap-1.5 text-primary font-medium pt-1">
+              </div>
+
+              <div className="flex flex-col items-center text-center space-y-3 pt-6 md:pt-0 md:px-4">
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
                   <Calendar className="h-3.5 w-3.5 shrink-0" />
-                  <span>{doc.scheduleSummary}</span>
+                </div>
+                <h3 className="text-base font-bold text-foreground">Jadwal Praktik Fleksibel</h3>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Layanan konsultasi dan tindakan tersedia setiap hari operasional di seluruh cabang klinik OASE Dental.
                 </p>
               </div>
             </div>
-          ))}
-        </div>
+          </div>
+        )}
       </section>
 
       {/* 6. TESTIMONI PASIEN (ANONIM MEDIS) */}

@@ -98,7 +98,12 @@ async function runTests() {
 
   const tentangHtml = htmlResponses['/tentang-kami'] || '';
   assert(tentangHtml.includes('Autoklaf Class B') || tentangHtml.includes('Sterilisasi'), 'Halaman Tentang Kami memuat edukasi sterilisasi medis');
-  assert(tentangHtml.includes('drg.'), 'Halaman Tentang Kami memuat daftar dokter gigi berlisensi');
+  assert(
+    tentangHtml.includes('Tim Dokter Gigi OASE') &&
+      (tentangHtml.includes('dokter gigi berpengalaman &amp; terlisensi') ||
+        tentangHtml.includes('dokter gigi berpengalaman & terlisensi')),
+    'Halaman Tentang Kami memuat profil netral tim dokter gigi berlisensi tanpa nama fiktif'
+  );
 
   // 5. DEEP-LINK WHATSAPP & CABANG
   console.log('\n--- 5. Deep-Link WhatsApp & Cabang ---');

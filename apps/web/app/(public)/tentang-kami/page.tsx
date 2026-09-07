@@ -142,44 +142,80 @@ export default async function TentangKamiPage() {
           <div className="text-center space-y-3 max-w-2xl mx-auto">
             <p className="text-xs font-semibold uppercase tracking-wider text-primary">Tenaga Medis</p>
             <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
-              Tim Dokter Gigi OASE Dental
+              Tim Dokter Gigi OASE
             </h2>
             <p className="text-sm text-muted-foreground">
-              Tenaga medis berdedikasi tinggi yang siap membantu merawat kesehatan gigi dan senyum Anda.
+              Tim Dokter Gigi OASE — dokter gigi berpengalaman &amp; terlisensi yang berdedikasi tinggi merawat kesehatan gigi dan senyum Anda dengan standar medis terbaik.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {CLINIC_DOCTORS.map((doc) => (
-              <div
-                key={doc.id}
-                className="rounded-2xl border border-border bg-card p-6 shadow-sm space-y-4"
-              >
-                <div className="flex items-center gap-3">
+          {CLINIC_DOCTORS.length > 0 ? (
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              {CLINIC_DOCTORS.map((doc) => (
+                <div
+                  key={doc.id}
+                  className="rounded-2xl border border-border bg-card p-6 shadow-sm space-y-4"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                      <Stethoscope className="h-6 w-6" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-bold text-foreground">{doc.name}</h3>
+                      <p className="text-xs font-medium text-primary">{doc.title}</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 text-xs text-muted-foreground pt-2 border-t border-border">
+                    <p>
+                      <strong className="text-foreground">Fokus:</strong> {doc.specialization}
+                    </p>
+                    <p>
+                      <strong className="text-foreground">Pengalaman:</strong> {doc.experience}
+                    </p>
+                    <p className="flex items-center gap-1.5 text-primary font-medium pt-1">
+                      <Calendar className="h-3.5 w-3.5 shrink-0" />
+                      <span>{doc.scheduleSummary}</span>
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-border bg-card p-8 sm:p-10 shadow-sm">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 sm:gap-8 divide-y md:divide-y-0 md:divide-x divide-border">
+                <div className="flex flex-col items-center text-center space-y-3 md:px-4">
                   <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
                     <Stethoscope className="h-6 w-6" />
                   </div>
-                  <div>
-                    <h3 className="text-base font-bold text-foreground">{doc.name}</h3>
-                    <p className="text-xs font-medium text-primary">{doc.title}</p>
-                  </div>
+                  <h3 className="text-base font-bold text-foreground">Dokter Berpengalaman &amp; Terlisensi</h3>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    Setiap dokter gigi di OASE memiliki izin praktik resmi dan keahlian teruji dalam menangani ragam perawatan gigi secara profesional.
+                  </p>
                 </div>
 
-                <div className="space-y-2 text-xs text-muted-foreground pt-2 border-t border-border">
-                  <p>
-                    <strong className="text-foreground">Fokus:</strong> {doc.specialization}
+                <div className="flex flex-col items-center text-center space-y-3 pt-6 md:pt-0 md:px-4">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                    <ShieldCheck className="h-6 w-6" />
+                  </div>
+                  <h3 className="text-base font-bold text-foreground">Etika &amp; Presisi Medis</h3>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    Mengutamakan tindakan invasif minimal, sterilisasi instrumen ketat, dan komunikasi aktif mengenai setiap langkah perawatan.
                   </p>
-                  <p>
-                    <strong className="text-foreground">Pengalaman:</strong> {doc.experience}
-                  </p>
-                  <p className="flex items-center gap-1.5 text-primary font-medium pt-1">
+                </div>
+
+                <div className="flex flex-col items-center text-center space-y-3 pt-6 md:pt-0 md:px-4">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
                     <Calendar className="h-3.5 w-3.5 shrink-0" />
-                    <span>{doc.scheduleSummary}</span>
+                  </div>
+                  <h3 className="text-base font-bold text-foreground">Konsultasi Terjadwal</h3>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    Reservasi jadwal konsultasi mudah melalui WhatsApp klinik untuk memastikan waktu perawatan yang efisien dan nyaman.
                   </p>
                 </div>
               </div>
-            ))}
-          </div>
+            </div>
+          )}
         </div>
 
         {/* CTA Banner */}

@@ -18,8 +18,36 @@ import {
   CheckCircle,
   XCircle,
   User,
+  ShieldAlert,
 } from 'lucide-react';
+import {
+  Dialog,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+  DialogClose,
+} from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
+
+function isTodayJakarta(dateString?: string | null): boolean {
+  if (!dateString) return false;
+  try {
+    const trxDate = new Date(dateString);
+    const now = new Date();
+    const options: Intl.DateTimeFormatOptions = {
+      timeZone: 'Asia/Jakarta',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    };
+    const trxFormatted = new Intl.DateTimeFormat('en-CA', options).format(trxDate);
+    const nowFormatted = new Intl.DateTimeFormat('en-CA', options).format(now);
+    return trxFormatted === nowFormatted;
+  } catch {
+    return false;
+  }
+}
 
 interface PosTransactionHistoryProps {
   transactions: PosTransaction[];
@@ -40,6 +68,26 @@ export function PosTransactionHistory({
 }: PosTransactionHistoryProps) {
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'DRAFT' | 'PAID' | 'CANCELLED'>('ALL');
   const [search, setSearch] = useState('');
+
+  const [reprintDeniedAlert, setReprintDeniedAlert] = useState<{
+    open: boolean;
+    trxNumber?: string;
+  } | null>(null);
+
+  const handleReceiptClick = (trx: PosTransaction) => {
+    // CASHIER hanya boleh mencetak ulang transaksi hari ini (Asia/Jakarta)
+    if (userRole === 'CASHIER') {
+      const isToday = isTodayJakarta(trx.paidAt || trx.createdAt);
+      if (!isToday) {
+        setReprintDeniedAlert({
+          open: true,
+          trxNumber: trx.transactionNumber,
+        });
+        return;
+      }
+    }
+    onViewReceipt(trx);
+  };
 
   const filteredTransactions = transactions.filter((trx) => {
     if (statusFilter !== 'ALL' && trx.status !== statusFilter) return false;
@@ -201,7 +249,7 @@ export function PosTransactionHistory({
                         type="button"
                         variant="secondary"
                         size="sm"
-                        onClick={() => onViewReceipt(trx)}
+                        onClick={() => handleReceiptClick(trx)}
                         className="h-7 px-2.5 text-xs gap-1"
                       >
                         <Printer className="h-3 w-3" />
@@ -228,6 +276,47 @@ export function PosTransactionHistory({
           </div>
         )}
       </CardContent>
+
+      {/* Dialog Peringatan Akses Cetak Ulang Kasir */}
+      {reprintDeniedAlert?.open && (
+        <Dialog
+          open={reprintDeniedAlert.open}
+          onOpenChange={(open) =>
+            setReprintDeniedAlert(open ? reprintDeniedAlert : null)
+          }
+        >
+          <DialogClose onClose={() => setReprintDeniedAlert(null)} />
+          <DialogHeader>
+            <div className="flex items-center gap-2 text-warning-text">
+              <ShieldAlert className="h-5 w-5 text-warning-icon" />
+              <DialogTitle>Batas Akses Cetak Ulang Struk</DialogTitle>
+            </div>
+            <DialogDescription>
+              Transaksi {reprintDeniedAlert.trxNumber} tercatat pada hari sebelumnya
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="py-3 text-xs text-slate-600 space-y-2">
+            <p>
+              Sebagai <strong>Kasir</strong>, Anda hanya dapat mencetak ulang struk untuk transaksi yang berlangsung pada <strong>hari ini</strong> (Asia/Jakarta).
+            </p>
+            <p className="text-[11px] text-muted">
+              Untuk mencetak ulang struk transaksi tanggal sebelumnya, silakan hubungi <strong>Manager</strong> atau <strong>Owner</strong> klinik.
+            </p>
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => setReprintDeniedAlert(null)}
+            >
+              Mengerti
+            </Button>
+          </DialogFooter>
+        </Dialog>
+      )}
     </Card>
   );
 }

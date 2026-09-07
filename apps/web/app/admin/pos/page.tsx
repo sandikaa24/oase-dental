@@ -57,6 +57,7 @@ export default function PosPage() {
   const [paymentError, setPaymentError] = useState<string | null>(null);
 
   const [receiptModalOpen, setReceiptModalOpen] = useState(false);
+  const [isReceiptReprint, setIsReceiptReprint] = useState(false);
   const [completedTransaction, setCompletedTransaction] = useState<PosTransaction | null>(null);
 
   // Cancel Modal (Owner only)
@@ -267,6 +268,7 @@ export default function PosPage() {
 
       if (payRes.success && payRes.data) {
         setIsPaymentModalOpen(false);
+        setIsReceiptReprint(false);
         setCompletedTransaction(payRes.data);
         setReceiptModalOpen(true);
 
@@ -322,6 +324,7 @@ export default function PosPage() {
 
   // View Receipt from History
   const handleViewReceipt = (trx: PosTransaction) => {
+    setIsReceiptReprint(true);
     setCompletedTransaction(trx);
     setReceiptModalOpen(true);
   };
@@ -494,6 +497,7 @@ export default function PosPage() {
         transaction={completedTransaction}
         cashierName={user?.name || user?.email?.split('@')[0]}
         onNewTransaction={handleClearCart}
+        isReprint={isReceiptReprint}
       />
 
       {/* Cancel Transaction Modal (Owner only) */}

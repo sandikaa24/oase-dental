@@ -40,10 +40,13 @@ export interface PosTransaction {
   status: 'DRAFT' | 'PAID' | 'CANCELLED';
   branchId: string;
   cashierId: string | null;
+  cashierName?: string | null;
   patientName: string | null;
   patientPhone: string | null;
   subtotal: string;
   total: string;
+  paidTotal?: string;
+  change?: string;
   createdAt: string;
   paidAt: string | null;
   cancelledAt: string | null;
@@ -53,6 +56,8 @@ export interface PosTransaction {
     id: string;
     code: string;
     name: string;
+    address?: string;
+    phone?: string | null;
   };
   items?: PosTransactionItem[];
   payments?: PosPayment[];

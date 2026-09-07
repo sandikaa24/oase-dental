@@ -11,6 +11,14 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import {
+  PRODUCT_CATEGORIES,
+  PRODUCT_UNITS,
+  getSkuPrefixByCategory,
+  type ProductCategory,
+  type ProductUnit,
+} from '@oase/shared';
+import { formatThousand, sanitizeDigits } from '@/lib/format/currency';
 import { StockItem } from './stock-types';
 
 interface ProductModalProps {
@@ -25,14 +33,14 @@ interface FormState {
   sku: string;
   unit: string;
   category: string;
-  costPrice: string;
+  costPrice: string; // Menyimpan raw digits integer/sen
 }
 
 const INITIAL_FORM: FormState = {
   name: '',
   sku: '',
-  unit: '',
-  category: '',
+  unit: 'pcs',
+  category: 'BHP',
   costPrice: '',
 };
 
@@ -46,8 +54,42 @@ export function ProductModal({
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [globalError, setGlobalError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isGeneratingSku, setIsGeneratingSku] = useState(false);
 
   const isEdit = !!productToEdit;
+
+  /**
+   * Mengambil SKU berikutnya berdasarkan max(seq produk existing dengan prefix sama) + 1.
+   * BINDING: Task B1.6 (BUKAN count+1).
+   */
+  const fetchNextSku = useCallback(async (categoryName: string): Promise<string> => {
+    const prefix = getSkuPrefixByCategory(categoryName);
+    try {
+      const res = await fetch(`/api/v1/products?limit=100&category=${encodeURIComponent(categoryName)}`);
+      if (!res.ok) throw new Error('Gagal mengambil daftar produk untuk SKU');
+      const data = await res.json();
+      const items: Array<{ sku?: string | null }> = data?.data || [];
+
+      let maxSeq = 0;
+      const regex = new RegExp(`^${prefix}-(\\d+)`, 'i');
+      items.forEach((item) => {
+        if (!item.sku) return;
+        const match = item.sku.match(regex);
+        if (match && match[1]) {
+          const seq = parseInt(match[1], 10);
+          if (!isNaN(seq) && seq > maxSeq) {
+            maxSeq = seq;
+          }
+        }
+      });
+
+      const nextSeq = maxSeq + 1;
+      return `${prefix}-${String(nextSeq).padStart(4, '0')}`;
+    } catch {
+      // Fallback awal jika fetch gagal
+      return `${prefix}-0001`;
+    }
+  }, []);
 
   useEffect(() => {
     if (open) {
@@ -55,22 +97,40 @@ export function ProductModal({
         setForm({
           name: productToEdit.name || '',
           sku: productToEdit.sku || '',
-          unit: productToEdit.unit || '',
-          category: productToEdit.category || '',
+          unit: productToEdit.unit || 'pcs',
+          category: productToEdit.category || 'BHP',
           costPrice:
             productToEdit.costPrice !== null && productToEdit.costPrice !== undefined
-              ? String(productToEdit.costPrice)
+              ? sanitizeDigits(String(productToEdit.costPrice))
               : '',
         });
+        setErrors({});
+        setGlobalError(null);
       } else {
+        // Form baru: set default kategori dan generate SKU pertama
         setForm(INITIAL_FORM);
+        setErrors({});
+        setGlobalError(null);
+        setIsGeneratingSku(true);
+        fetchNextSku(INITIAL_FORM.category).then((nextSku) => {
+          setForm((prev) => ({ ...prev, sku: nextSku }));
+          setIsGeneratingSku(false);
+        });
       }
-      setErrors({});
-      setGlobalError(null);
     }
-  }, [open, productToEdit]);
+  }, [open, productToEdit, fetchNextSku]);
 
-  // Handler stabil untuk mencegah input loss focus
+  // Handler perubahan kategori: jika mode create dan SKU belum diedit manual / sesuai prefix lama, update auto SKU
+  const handleCategoryChange = async (newCategory: string) => {
+    handleChange('category', newCategory);
+    if (!isEdit) {
+      setIsGeneratingSku(true);
+      const nextSku = await fetchNextSku(newCategory);
+      setForm((prev) => ({ ...prev, sku: nextSku }));
+      setIsGeneratingSku(false);
+    }
+  };
+
   const handleChange = useCallback((field: keyof FormState, value: string) => {
     setForm((prev) => ({ ...prev, [field]: value }));
     setErrors((prev) => {
@@ -84,20 +144,65 @@ export function ProductModal({
     setGlobalError(null);
   }, []);
 
+  // Handler input uang live format Rupiah
+  const handleCostPriceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = sanitizeDigits(e.target.value);
+    handleChange('costPrice', raw);
+  };
+
+  const executeSubmit = async (skuToUse: string): Promise<boolean> => {
+    const url = isEdit
+      ? `/api/v1/products/${productToEdit.productId}`
+      : '/api/v1/products';
+    const method = isEdit ? 'PUT' : 'POST';
+
+    const costNum = form.costPrice.trim() ? parseInt(form.costPrice.trim(), 10) : null;
+
+    const payload = {
+      name: form.name.trim(),
+      sku: skuToUse.trim() || null,
+      unit: form.unit.trim(),
+      category: form.category.trim(),
+      costPrice: costNum,
+    };
+
+    const res = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      // Bila error 409 karena duplikasi SKU, lempar sinyal agar bisa di-retry dengan seq+1
+      if (res.status === 409 && (data.code === 'DUPLICATE_PRODUCT_SKU' || String(data.message).toLowerCase().includes('sku'))) {
+        const err = new Error(data.message || 'Kode SKU produk sudah digunakan');
+        (err as unknown as { isSkuDupe: boolean }).isSkuDupe = true;
+        throw err;
+      }
+
+      if (data.details && Array.isArray(data.details)) {
+        const detailErrors: Record<string, string> = {};
+        data.details.forEach((d: { path: string; message: string }) => {
+          detailErrors[d.path] = d.message;
+        });
+        setErrors(detailErrors);
+      }
+      throw new Error(data.message || 'Gagal menyimpan produk');
+    }
+
+    return true;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Client-side validation
+    // Validasi client-side
     const newErrors: Record<string, string> = {};
     if (!form.name.trim()) newErrors.name = 'Nama produk wajib diisi';
     if (!form.unit.trim()) newErrors.unit = 'Satuan wajib diisi';
     if (!form.category.trim()) newErrors.category = 'Kategori wajib diisi';
-    if (form.costPrice.trim()) {
-      const num = parseFloat(form.costPrice.trim());
-      if (isNaN(num) || num < 0) {
-        newErrors.costPrice = 'Harga pokok harus berupa angka >= 0';
-      }
-    }
 
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
@@ -108,36 +213,22 @@ export function ProductModal({
     setGlobalError(null);
 
     try {
-      const url = isEdit
-        ? `/api/v1/products/${productToEdit.productId}`
-        : '/api/v1/products';
-      const method = isEdit ? 'PUT' : 'POST';
+      try {
+        await executeSubmit(form.sku);
+      } catch (firstErr: unknown) {
+        // Mitigasi B1.6: bila 409 duplikat SKU -> retry dengan seq+1
+        if (firstErr && typeof firstErr === 'object' && (firstErr as { isSkuDupe?: boolean }).isSkuDupe) {
+          const prefix = getSkuPrefixByCategory(form.category);
+          const match = form.sku.match(new RegExp(`^${prefix}-(\\d+)`, 'i'));
+          const currentSeq = match && match[1] ? parseInt(match[1], 10) : 0;
+          const retrySku = `${prefix}-${String(currentSeq + 1).padStart(4, '0')}`;
+          setForm((prev) => ({ ...prev, sku: retrySku }));
 
-      const payload = {
-        name: form.name.trim(),
-        sku: form.sku.trim() || null,
-        unit: form.unit.trim(),
-        category: form.category.trim(),
-        costPrice: form.costPrice.trim() ? parseFloat(form.costPrice.trim()) : null,
-      };
-
-      const res = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        if (data.details && Array.isArray(data.details)) {
-          const detailErrors: Record<string, string> = {};
-          data.details.forEach((d: { path: string; message: string }) => {
-            detailErrors[d.path] = d.message;
-          });
-          setErrors(detailErrors);
+          // Retry otomatis percobaan kedua dengan seq + 1
+          await executeSubmit(retrySku);
+        } else {
+          throw firstErr;
         }
-        throw new Error(data.message || 'Gagal menyimpan produk');
       }
 
       onOpenChange(false);
@@ -173,13 +264,13 @@ export function ProductModal({
         {/* Nama Produk */}
         <div>
           <label htmlFor="product-name" className="block text-xs font-semibold text-foreground mb-1">
-            Nama Produk <span className="text-red-500">*</span>
+            Nama Produk <span className="text-danger-text">*</span>
           </label>
           <Input
             id="product-name"
             value={form.name}
             onChange={(e) => handleChange('name', e.target.value)}
-            placeholder="Contoh: Amoxicillin 500mg, Sarung Tangan Latex M"
+            placeholder="Contoh: Komposit Resin A2, Sarung Tangan Latex M, Etching Gel 37%"
             error={errors.name}
             disabled={isSubmitting}
             autoComplete="off"
@@ -187,73 +278,99 @@ export function ProductModal({
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {/* SKU / Kode Produk */}
+          {/* Kategori (Dropdown dari daftar tetap terpusat) */}
           <div>
-            <label htmlFor="product-sku" className="block text-xs font-semibold text-foreground mb-1">
-              Kode / SKU
+            <label htmlFor="product-category" className="block text-xs font-semibold text-foreground mb-1">
+              Kategori <span className="text-danger-text">*</span>
             </label>
-            <Input
-              id="product-sku"
-              value={form.sku}
-              onChange={(e) => handleChange('sku', e.target.value)}
-              placeholder="Contoh: BHP-GLV-001"
-              error={errors.sku}
+            <select
+              id="product-category"
+              value={form.category}
+              onChange={(e) => handleCategoryChange(e.target.value)}
               disabled={isSubmitting}
-              autoComplete="off"
-            />
+              className="flex h-10 w-full rounded-md border border-slate-300 bg-surface px-3 py-2 text-sm text-foreground shadow-xs focus-visible:outline-hidden focus-visible:border-accent focus-visible:ring-2 focus-visible:ring-primary-soft disabled:opacity-50"
+            >
+              {PRODUCT_CATEGORIES.map((cat: ProductCategory) => (
+                <option key={cat} value={cat}>
+                  {cat}
+                </option>
+              ))}
+            </select>
+            {errors.category && (
+              <p className="mt-1 text-xs text-danger-text">{errors.category}</p>
+            )}
           </div>
 
-          {/* Satuan */}
+          {/* Satuan (Dropdown dari daftar tetap terpusat) */}
           <div>
             <label htmlFor="product-unit" className="block text-xs font-semibold text-foreground mb-1">
-              Satuan <span className="text-red-500">*</span>
+              Satuan <span className="text-danger-text">*</span>
             </label>
-            <Input
+            <select
               id="product-unit"
               value={form.unit}
               onChange={(e) => handleChange('unit', e.target.value)}
-              placeholder="box, strip, botol, ampul, pcs"
-              error={errors.unit}
               disabled={isSubmitting}
-              autoComplete="off"
-            />
+              className="flex h-10 w-full rounded-md border border-slate-300 bg-surface px-3 py-2 text-sm text-foreground shadow-xs focus-visible:outline-hidden focus-visible:border-accent focus-visible:ring-2 focus-visible:ring-primary-soft disabled:opacity-50"
+            >
+              {PRODUCT_UNITS.map((unit: ProductUnit) => (
+                <option key={unit} value={unit}>
+                  {unit}
+                </option>
+              ))}
+            </select>
+            {errors.unit && (
+              <p className="mt-1 text-xs text-danger-text">{errors.unit}</p>
+            )}
           </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {/* Kategori */}
+          {/* SKU / Kode Produk (Auto-generate dari max seq + 1, masih editable) */}
           <div>
-            <label htmlFor="product-category" className="block text-xs font-semibold text-foreground mb-1">
-              Kategori <span className="text-red-500">*</span>
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label htmlFor="product-sku" className="block text-xs font-semibold text-foreground">
+                Kode / SKU
+              </label>
+              {isGeneratingSku && (
+                <span className="text-[11px] text-muted italic animate-pulse">
+                  Menghitung SKU...
+                </span>
+              )}
+            </div>
             <Input
-              id="product-category"
-              value={form.category}
-              onChange={(e) => handleChange('category', e.target.value)}
-              placeholder="BHP, Bahan Tindakan, Alat Operasional, ATK, dll."
-              error={errors.category}
-              disabled={isSubmitting}
+              id="product-sku"
+              value={form.sku}
+              onChange={(e) => handleChange('sku', e.target.value)}
+              placeholder="Contoh: BHP-0001, BTD-0001"
+              error={errors.sku}
+              disabled={isSubmitting || isGeneratingSku}
               autoComplete="off"
             />
           </div>
 
-          {/* Harga Pokok */}
+          {/* Harga Pokok (Input terformat Rupiah live) */}
           <div>
             <label htmlFor="product-costPrice" className="block text-xs font-semibold text-foreground mb-1">
-              Harga Pokok (Rp)
+              Harga Pokok
             </label>
-            <Input
-              id="product-costPrice"
-              type="number"
-              min="0"
-              step="any"
-              value={form.costPrice}
-              onChange={(e) => handleChange('costPrice', e.target.value)}
-              placeholder="0"
-              error={errors.costPrice}
-              disabled={isSubmitting}
-              autoComplete="off"
-            />
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-xs font-semibold text-muted">
+                Rp
+              </div>
+              <Input
+                id="product-costPrice"
+                type="text"
+                inputMode="numeric"
+                value={formatThousand(form.costPrice)}
+                onChange={handleCostPriceChange}
+                placeholder="0"
+                error={errors.costPrice}
+                disabled={isSubmitting}
+                autoComplete="off"
+                className="pl-9 font-mono"
+              />
+            </div>
           </div>
         </div>
 
@@ -266,7 +383,7 @@ export function ProductModal({
           >
             Batal
           </Button>
-          <Button type="submit" variant="primary" disabled={isSubmitting}>
+          <Button type="submit" variant="primary" disabled={isSubmitting || isGeneratingSku}>
             {isSubmitting ? 'Menyimpan...' : isEdit ? 'Simpan Perubahan' : 'Tambah Produk'}
           </Button>
         </DialogFooter>

@@ -528,7 +528,7 @@ model PortalPage {
 model Product {
   id        String   @id @default(uuid())
   name      String
-  sku       String?
+  sku       String?  @unique
   unit      String
   category  String
   costPrice Decimal? @db.Decimal(12, 2)

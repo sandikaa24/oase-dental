@@ -1,3 +1,4 @@
+import { getSkuPrefixByCategory } from '@oase/shared';
 import { prisma } from '../prisma';
 import {
   NotFoundError,
@@ -15,6 +16,39 @@ export interface UserContext {
   role: string;
   activeBranchId: string | null;
   employeeId: string | null;
+}
+
+/**
+ * Mendapatkan SKU berikutnya berdasarkan max(sequence produk existing dengan prefix sama) + 1.
+ * BINDING: Task B1.6 (BUKAN count+1, pagar terakhir DB unique constraint).
+ */
+export async function getNextProductSku(category: string): Promise<string> {
+  const prefix = getSkuPrefixByCategory(category);
+  const items = await prisma.product.findMany({
+    where: {
+      sku: {
+        startsWith: `${prefix}-`,
+        mode: 'insensitive',
+      },
+    },
+    select: { sku: true },
+  });
+
+  let maxSeq = 0;
+  const regex = new RegExp(`^${prefix}-(\\d+)`, 'i');
+  for (const item of items) {
+    if (!item.sku) continue;
+    const match = item.sku.match(regex);
+    if (match && match[1]) {
+      const seq = parseInt(match[1], 10);
+      if (!isNaN(seq) && seq > maxSeq) {
+        maxSeq = seq;
+      }
+    }
+  }
+
+  const nextSeq = maxSeq + 1;
+  return `${prefix}-${String(nextSeq).padStart(4, '0')}`;
 }
 
 /**
@@ -72,42 +106,95 @@ export async function listProducts(params: {
 
 export async function createProduct(input: CreateProductInput, actorId: string, ip: string | null) {
   // Cek keunikan (name, isActive)
-  const existing = await prisma.product.findFirst({
+  const existingName = await prisma.product.findFirst({
     where: {
       name: { equals: input.name.trim(), mode: 'insensitive' },
       isActive: input.isActive ?? true,
     },
   });
 
-  if (existing) {
+  if (existingName) {
     throw new ConflictError('Nama produk sudah digunakan untuk status item yang sama', 'DUPLICATE_PRODUCT_NAME');
   }
 
-  return prisma.$transaction(async (tx) => {
-    const product = await tx.product.create({
-      data: {
-        name: input.name.trim(),
-        sku: input.sku ? input.sku.trim() : null,
-        unit: input.unit.trim(),
-        category: input.category.trim(),
-        costPrice: input.costPrice !== null && input.costPrice !== undefined ? new Prisma.Decimal(input.costPrice) : null,
-        isActive: input.isActive ?? true,
+  let requestedSku = input.sku?.trim() || null;
+  const isAutoSku = !requestedSku;
+
+  // Jika SKU kosong, auto-generate dari max(sequence) + 1
+  if (isAutoSku) {
+    requestedSku = await getNextProductSku(input.category);
+  } else {
+    // Jika diisi manual oleh user, pastikan belum dipakai
+    const existingSku = await prisma.product.findFirst({
+      where: {
+        sku: { equals: requestedSku, mode: 'insensitive' },
       },
     });
+    if (existingSku) {
+      throw new ConflictError('Kode SKU produk sudah digunakan', 'DUPLICATE_PRODUCT_SKU');
+    }
+  }
 
-    await tx.auditLog.create({
-      data: {
-        actorId,
-        action: 'CREATE',
-        entity: 'Product',
-        entityId: product.id,
-        after: product as unknown as Prisma.InputJsonValue,
-        ip,
-      },
-    });
+  // Pagar Terakhir: Unique Constraint DB dengan retry otomatis bila terjadi duplikasi sequence
+  const maxRetries = 5;
+  let attempt = 0;
+  let currentSku = requestedSku;
 
-    return product;
-  });
+  while (attempt < maxRetries) {
+    try {
+      return await prisma.$transaction(async (tx) => {
+        const product = await tx.product.create({
+          data: {
+            name: input.name.trim(),
+            sku: currentSku,
+            unit: input.unit.trim(),
+            category: input.category.trim(),
+            costPrice: input.costPrice !== null && input.costPrice !== undefined ? new Prisma.Decimal(input.costPrice) : null,
+            isActive: input.isActive ?? true,
+          },
+        });
+
+        await tx.auditLog.create({
+          data: {
+            actorId,
+            action: 'CREATE',
+            entity: 'Product',
+            entityId: product.id,
+            after: product as unknown as Prisma.InputJsonValue,
+            ip,
+          },
+        });
+
+        return product;
+      });
+    } catch (err: unknown) {
+      // Tangani Prisma Unique constraint error (P2002)
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        const target = (err.meta?.target as string[]) || [];
+        const isSkuConflict = target.includes('sku') || String(err.message).includes('products_sku_key');
+
+        if (isSkuConflict) {
+          // Bila user menginput manual SKU yang bentrok dan bukan auto-gen, lempar ConflictError 409
+          if (!isAutoSku && attempt === 0) {
+            throw new ConflictError('Kode SKU produk sudah digunakan', 'DUPLICATE_PRODUCT_SKU');
+          }
+          // Bila SKU auto-generated (atau retry diminta): increment seq + 1 dan coba lagi
+          attempt++;
+          if (attempt >= maxRetries) {
+            throw new ConflictError('Gagal mengalokasikan SKU unik setelah beberapa percobaan', 'DUPLICATE_PRODUCT_SKU');
+          }
+          const prefix = getSkuPrefixByCategory(input.category);
+          const match = currentSku?.match(new RegExp(`^${prefix}-(\\d+)`, 'i'));
+          const currentNum = match && match[1] ? parseInt(match[1], 10) : 0;
+          currentSku = `${prefix}-${String(currentNum + 1).padStart(4, '0')}`;
+          continue;
+        }
+      }
+      throw err;
+    }
+  }
+
+  throw new ConflictError('Gagal menyimpan produk', 'CREATE_PRODUCT_FAILED');
 }
 
 export async function getProductById(id: string) {
@@ -146,6 +233,21 @@ export async function updateProduct(id: string, input: UpdateProductInput, actor
     });
     if (duplicate) {
       throw new ConflictError('Nama produk sudah digunakan untuk status item yang sama', 'DUPLICATE_PRODUCT_NAME');
+    }
+  }
+
+  if (input.sku !== undefined && input.sku !== null && input.sku.trim()) {
+    const newSku = input.sku.trim();
+    if (newSku !== existing.sku) {
+      const duplicateSku = await prisma.product.findFirst({
+        where: {
+          id: { not: id },
+          sku: { equals: newSku, mode: 'insensitive' },
+        },
+      });
+      if (duplicateSku) {
+        throw new ConflictError('Kode SKU produk sudah digunakan', 'DUPLICATE_PRODUCT_SKU');
+      }
     }
   }
 

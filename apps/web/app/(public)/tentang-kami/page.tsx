@@ -8,7 +8,7 @@ import {
   Calendar,
   MessageCircle,
 } from 'lucide-react';
-import { CLINIC_DOCTORS } from '@/lib/public-content';
+import { getPublicDoctors } from '@/lib/services/portal-content.service';
 import { getPublicBranches, buildWhatsAppUrl } from '@/lib/services/public.service';
 
 export const revalidate = 3600;
@@ -20,7 +20,10 @@ export const metadata: Metadata = {
 };
 
 export default async function TentangKamiPage() {
-  const branches = await getPublicBranches();
+  const [branches, doctors] = await Promise.all([
+    getPublicBranches(),
+    getPublicDoctors(),
+  ]);
   const defaultBranch = branches[0];
   const waUrl = buildWhatsAppUrl(defaultBranch?.phone, defaultBranch?.name);
 
@@ -149,9 +152,9 @@ export default async function TentangKamiPage() {
             </p>
           </div>
 
-          {CLINIC_DOCTORS.length > 0 ? (
+          {doctors.length > 0 ? (
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-              {CLINIC_DOCTORS.map((doc) => (
+              {doctors.map((doc) => (
                 <div
                   key={doc.id}
                   className="rounded-2xl border border-border bg-card p-6 shadow-sm space-y-4"

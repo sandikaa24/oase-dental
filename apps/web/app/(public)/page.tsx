@@ -15,15 +15,17 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { getPublicServices, getPublicBranches, buildWhatsAppUrl } from '@/lib/services/public.service';
-import { CLINIC_PILLARS, CLINIC_DOCTORS, PATIENT_TESTIMONIALS } from '@/lib/public-content';
+import { getPublicDoctors } from '@/lib/services/portal-content.service';
+import { CLINIC_PILLARS, PATIENT_TESTIMONIALS } from '@/lib/public-content';
 import { formatRupiah } from '@/lib/formatters';
 
 export const revalidate = 3600; // ISR cache 1 jam
 
 export default async function HomePage() {
-  const [services, branches] = await Promise.all([
+  const [services, branches, doctors] = await Promise.all([
     getPublicServices(),
     getPublicBranches(),
+    getPublicDoctors(),
   ]);
 
   const defaultBranch = branches[0];
@@ -249,9 +251,9 @@ export default async function HomePage() {
           </p>
         </div>
 
-        {CLINIC_DOCTORS.length > 0 ? (
+        {doctors.length > 0 ? (
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {CLINIC_DOCTORS.map((doc) => (
+            {doctors.map((doc) => (
               <div
                 key={doc.id}
                 className="rounded-2xl border border-border bg-card p-6 shadow-sm space-y-4"

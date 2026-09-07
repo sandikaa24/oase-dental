@@ -126,6 +126,89 @@ export async function getPublicPortalPage(slug: string) {
 }
 
 /**
+ * Helper konversi teks nama menjadi slug URL ramah SEO.
+ */
+export function slugify(text: string): string {
+  return text
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-');
+}
+
+/**
+ * Mengambil detail layanan publik berdasarkan slug atau ID.
+ */
+export async function getPublicServiceBySlug(slug: string) {
+  try {
+    const services = await prisma.service.findMany({
+      where: {
+        active: true,
+        showOnPortal: true,
+        deletedAt: null,
+      },
+      select: {
+        id: true,
+        name: true,
+        nameEn: true,
+        description: true,
+        descriptionEn: true,
+        price: true,
+        category: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+    });
+
+    const found = services.find((s) => slugify(s.name) === slug.toLowerCase() || s.id === slug);
+    if (!found) return null;
+
+    return {
+      id: found.id,
+      name: found.name,
+      nameEn: found.nameEn,
+      description: found.description,
+      descriptionEn: found.descriptionEn,
+      price: found.price.toString(),
+      category: found.category,
+      slug: slugify(found.name),
+    };
+  } catch (error) {
+    console.error(`Gagal mengambil detail layanan publik [${slug}]:`, error);
+    return null;
+  }
+}
+
+/**
+ * Mengambil daftar FAQ yang relevan dengan layanan tertentu atau FAQ umum.
+ */
+export async function getFaqsForService(serviceId?: string) {
+  try {
+    const allFaqs = await prisma.portalContent.findMany({
+      where: {
+        type: 'FAQ',
+        published: true,
+      },
+      orderBy: { sortOrder: 'asc' },
+    });
+
+    if (!serviceId) return allFaqs;
+
+    return allFaqs.filter((faq) => {
+      const meta = (faq.metadata || {}) as Record<string, unknown>;
+      return meta.serviceId === serviceId || !meta.serviceId;
+    });
+  } catch (error) {
+    console.error('Gagal mengambil data FAQ:', error);
+    return [];
+  }
+}
+
+/**
  * Helper pembuat URL WhatsApp Reservasi dengan pre-filled message yang ramah & terstruktur.
  */
 export function buildWhatsAppUrl(branchPhone: string | null | undefined, branchName?: string, serviceName?: string): string {

@@ -54,6 +54,21 @@ export function PublicFooter({ branches = [] }: PublicFooterProps) {
                 </Link>
               </li>
               <li>
+                <Link href="/edukasi" className="text-muted-foreground hover:text-primary transition-colors">
+                  Edukasi & Panduan Pasien
+                </Link>
+              </li>
+              <li>
+                <Link href="/teknologi" className="text-muted-foreground hover:text-primary transition-colors">
+                  Teknologi & Sterilisasi
+                </Link>
+              </li>
+              <li>
+                <Link href="/galeri" className="text-muted-foreground hover:text-primary transition-colors">
+                  Galeri Before / After
+                </Link>
+              </li>
+              <li>
                 <Link href="/cabang" className="text-muted-foreground hover:text-primary transition-colors">
                   Lokasi Cabang & Jam Praktik
                 </Link>

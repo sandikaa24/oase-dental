@@ -17,7 +17,10 @@ export function PublicHeader({ primaryBranchPhone }: PublicHeaderProps) {
   const navLinks = [
     { href: '/', label: 'Beranda' },
     { href: '/layanan', label: 'Layanan & Biaya' },
-    { href: '/cabang', label: 'Lokasi Cabang' },
+    { href: '/edukasi', label: 'Edukasi' },
+    { href: '/teknologi', label: 'Teknologi' },
+    { href: '/galeri', label: 'Galeri' },
+    { href: '/cabang', label: 'Cabang' },
     { href: '/tentang-kami', label: 'Tentang Kami' },
   ];
 

@@ -49,6 +49,7 @@ const testSuites = [
   'task-b3-thermal-receipt-test.mjs',
   'task-c1-public-web-test.mjs',
   'task-employee-position-test.mjs',
+  'phase8-portal-cms-test.mjs',
 ];
 
 console.log('======================================================================');

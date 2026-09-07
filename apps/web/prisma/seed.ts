@@ -200,6 +200,77 @@ async function main() {
       },
     });
 
+    // 5b. Seed Konten Portal Demo Berlabel (Fase 8 CMS)
+    const demoPortalContents = [
+      {
+        type: 'PATIENT_GUIDE',
+        title: 'Panduan Perawatan Setelah Tambal Gigi',
+        slug: 'panduan-setelah-tambal-gigi',
+        body: 'Hindari mengunyah makanan keras selama 24 jam pertama setelah penambalan gigi komposit. Bila timbul rasa ngilu berlebih atau ganjalan saat menggigit, segera hubungi klinik untuk penyesuaian oklusi.',
+        sortOrder: 1,
+        published: true,
+        isDemoContent: true,
+      },
+      {
+        type: 'ARTICLE',
+        title: 'Mengenal Karang Gigi dan Dampaknya pada Kesehatan Gusi',
+        slug: 'mengenal-karang-gigi-dan-dampaknya',
+        body: 'Karang gigi (calculus) terbentuk dari plak gigi yang mengalami mineralisasi. Pembersihan karang gigi (scaling) secara rutin tiap 6 bulan mencegah peradangan gusi (gingivitis) dan periodontitis.',
+        sortOrder: 2,
+        published: true,
+        isDemoContent: true,
+      },
+      {
+        type: 'TECHNOLOGY',
+        title: 'Sterilisasi Autoklaf Class B Standar Rumah Sakit',
+        slug: 'sterilisasi-autoklaf-class-b',
+        body: 'Proses sterilisasi instrumen logam menggunakan uap panas bertekanan tinggi dengan siklus fraksinasi vakum untuk memastikan eliminasi seluruh spora mikroorganisme secara tervalidasi.',
+        sortOrder: 1,
+        published: true,
+        isDemoContent: true,
+      },
+      {
+        type: 'FACILITY',
+        title: 'Dental Unit Ergonomis dengan Pencahayaan Presisi',
+        slug: 'dental-unit-ergonomis',
+        body: 'Kursi perawatan modern dengan sandaran punggung ergonomis dan sistem suplai air steril mandiri untuk kenyamanan dan keamanan higienis selama tindakan.',
+        sortOrder: 2,
+        published: true,
+        isDemoContent: true,
+      },
+      {
+        type: 'FAQ',
+        title: 'Apakah prosedur pembersihan karang gigi (scaling) terasa sakit?',
+        slug: 'faq-scaling-sakit',
+        body: 'Sebagian besar pasien hanya merasakan sedikit getaran dan rasa ngilu ringan pada area gigi yang dekat dengan garis gusi. Dokter kami dapat mengaplikasikan anestesi topikal bila Anda memiliki gigi yang sangat sensitif.',
+        sortOrder: 1,
+        published: true,
+        isDemoContent: true,
+      },
+    ];
+
+    for (const c of demoPortalContents) {
+      await tx.portalContent.upsert({
+        where: { slug: c.slug },
+        update: {
+          title: c.title,
+          body: c.body,
+          sortOrder: c.sortOrder,
+          published: c.published,
+          isDemoContent: c.isDemoContent,
+        },
+        create: {
+          type: c.type as any,
+          title: c.title,
+          slug: c.slug,
+          body: c.body,
+          sortOrder: c.sortOrder,
+          published: c.published,
+          isDemoContent: c.isDemoContent,
+        },
+      });
+    }
+
     // 6. Seed Produk & Stok Cabang (Task B1: Manajemen Stok)
     const now = new Date();
     const plus6Months = new Date(now.getFullYear(), now.getMonth() + 6, now.getDate());

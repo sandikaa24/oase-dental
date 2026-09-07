@@ -42,7 +42,6 @@ export const PATCH = withErrorHandler(async (req: NextRequest, { params }: Route
   const forwarded = req.headers.get('x-forwarded-for');
   const ip = forwarded ? forwarded.split(',')[0]?.trim() || '127.0.0.1' : '127.0.0.1';
   const updated = await updatePortalContent(params.id, input, auth.userId, ip);
-
   return ok(updated);
 });
 

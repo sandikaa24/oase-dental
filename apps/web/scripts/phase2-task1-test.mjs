@@ -122,7 +122,7 @@ async function run() {
     'POST',
     {
       name: 'Manager Absensi ' + rnd,
-      position: 'Manager Klinik',
+      position: 'Manajer Operasional',
       phone: '0813' + rnd,
       branchIds: [jkt.id],
     },

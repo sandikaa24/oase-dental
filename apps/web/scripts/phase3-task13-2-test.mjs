@@ -132,7 +132,7 @@ async function main() {
   const branchId = branchesRes.data?.data?.[0]?.id;
   check('3a. Cabang aktif tersedia', !!branchId);
 
-  async function createEmpHelper(name, pos = 'Staf') {
+  async function createEmpHelper(name, pos = 'Admin') {
     const res = await req('/api/v1/employees', 'POST', {
       name: `${name} ${Date.now().toString().slice(-4)}`,
       phone: '0812999999',
@@ -143,8 +143,8 @@ async function main() {
   }
 
   const empCashier = await createEmpHelper('Karyawan Kasir', 'Kasir');
-  const empManager = await createEmpHelper('Karyawan Manager', 'Manager');
-  const empStaff = await createEmpHelper('Karyawan Dokter', 'Dokter');
+  const empManager = await createEmpHelper('Karyawan Manager', 'Manajer Operasional');
+  const empStaff = await createEmpHelper('Karyawan Dokter', 'Dokter Gigi');
   check('3b. Data 3 karyawan baru dibuat untuk penugasan akun', !!(empCashier && empManager && empStaff));
 
   // ─── 4. Normalisasi Username Lowercase & Duplikasi ───────────────────────────

@@ -1,6 +1,7 @@
 import { prisma } from '../prisma';
 import { Prisma } from '@prisma/client';
 import { NotFoundError, ValidationError } from '../errors';
+import { EMPLOYEE_POSITIONS, isAllowedEmployeePosition } from '@oase/shared';
 
 
 // ─── Tipe select publik Employee (tanpa field sensitif) ───────────────────────
@@ -185,6 +186,17 @@ export async function updateEmployee(
 
   if (!existing) {
     throw new NotFoundError('Karyawan tidak ditemukan');
+  }
+
+  // Validasi posisi: harus dalam whitelist resmi atau mempertahankan nilai legacy existing
+  if (input.position !== undefined) {
+    const isAllowed = isAllowedEmployeePosition(input.position);
+    const isKeepingLegacy = existing.position === input.position;
+    if (!isAllowed && !isKeepingLegacy) {
+      throw new ValidationError(
+        `Posisi/jabatan "${input.position}" tidak valid. Pilih dari daftar yang tersedia: ${EMPLOYEE_POSITIONS.join(', ')}`
+      );
+    }
   }
 
   // Jika branchIds disertakan, validasi semua exist dan aktif

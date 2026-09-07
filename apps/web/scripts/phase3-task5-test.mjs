@@ -70,7 +70,7 @@ async function runSuite() {
     headers: { 'Content-Type': 'application/json', Cookie: ownerAuth.cookies },
     body: JSON.stringify({
       name: `Manager MD ${rnd}`,
-      position: 'Manager Cabang',
+      position: 'Manajer Operasional',
       phone: `0817${rnd}`,
       branchIds: [branchId],
     }),
@@ -99,7 +99,7 @@ async function runSuite() {
     headers: { 'Content-Type': 'application/json', Cookie: ownerAuth.cookies },
     body: JSON.stringify({
       name: `Kasir MD ${rnd}`,
-      position: 'Kasir Cabang',
+      position: 'Kasir',
       phone: `0818${rnd}`,
       branchIds: [branchId],
     }),

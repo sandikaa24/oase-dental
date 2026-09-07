@@ -1,9 +1,18 @@
 import { z } from 'zod';
+import { EMPLOYEE_POSITIONS, isAllowedEmployeePosition } from '@oase/shared';
 
 export const createEmployeeSchema = z.object({
   name: z.string().min(1, 'Nama wajib diisi'),
   phone: z.string().optional(),
-  position: z.string().min(1, 'Posisi/jabatan wajib diisi'),
+  position: z
+    .string()
+    .min(1, 'Posisi/jabatan wajib diisi')
+    .refine(
+      (val) => isAllowedEmployeePosition(val),
+      {
+        message: `Posisi/jabatan tidak valid. Pilih dari daftar yang tersedia: ${EMPLOYEE_POSITIONS.join(', ')}`,
+      }
+    ),
   branchIds: z
     .array(z.string().uuid('branchId harus berupa UUID valid'))
     .min(1, 'Minimal 1 cabang wajib dipilih'),

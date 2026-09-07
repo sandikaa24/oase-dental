@@ -107,7 +107,7 @@ async function main() {
     'POST',
     {
       name: `Manager Att ${rndSeed}`,
-      position: 'Manager Cabang',
+      position: 'Manajer Operasional',
       phone: `0817${rndSeed}`,
       branchIds: [jkt.id],
     },
@@ -259,7 +259,7 @@ async function main() {
     'POST',
     {
       name: 'Staf Bandung ' + rnd,
-      position: 'Perawat',
+      position: 'Asisten Dokter Gigi',
       phone: '0813' + rnd,
       branchIds: [bdg.id],
     },

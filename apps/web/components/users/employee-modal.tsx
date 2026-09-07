@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ErrorBanner } from '@/components/ui/placeholder';
 import { UserCheck, X, Check, Building2 } from 'lucide-react';
+import { EMPLOYEE_POSITIONS, isAllowedEmployeePosition } from '@oase/shared';
 
 interface EmployeeModalProps {
   open: boolean;
@@ -158,15 +159,27 @@ export function EmployeeModal({
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-700">Jabatan / Posisi *</label>
-              <Input
-                type="text"
+              <label htmlFor="employee-position-select" className="text-xs font-semibold text-slate-700">
+                Jabatan / Posisi *
+              </label>
+              <select
+                id="employee-position-select"
                 required
-                placeholder="Dokter Gigi / Perawat / Kasir"
                 value={position}
                 onChange={(e) => setPosition(e.target.value)}
-                className="text-xs"
-              />
+                className="w-full h-9 px-3 rounded-md border border-border bg-white text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none transition-colors"
+              >
+                {EMPLOYEE_POSITIONS.map((pos) => (
+                  <option key={pos} value={pos}>
+                    {pos}
+                  </option>
+                ))}
+                {isEditing && employee?.position && !isAllowedEmployeePosition(employee.position) && (
+                  <option value={employee.position}>
+                    {employee.position} (lama)
+                  </option>
+                )}
+              </select>
             </div>
             <div className="space-y-1">
               <label className="text-xs font-semibold text-slate-700">No. Telepon / HP</label>

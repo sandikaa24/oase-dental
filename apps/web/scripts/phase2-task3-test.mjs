@@ -115,7 +115,7 @@ async function run() {
     'POST',
     {
       name: 'Manager Inv ' + rnd,
-      position: 'Manager Cabang',
+      position: 'Manajer Operasional',
       phone: '0813' + rnd,
       branchIds: [jkt.id, bdg.id],
     },

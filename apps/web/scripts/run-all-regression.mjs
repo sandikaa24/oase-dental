@@ -48,6 +48,7 @@ const testSuites = [
   'task-b2-profit-loss-test.mjs',
   'task-b3-thermal-receipt-test.mjs',
   'task-c1-public-web-test.mjs',
+  'task-employee-position-test.mjs',
 ];
 
 console.log('======================================================================');
@@ -65,8 +66,8 @@ console.log('===================================================================
  * 6. Numbered test steps untuk suite awal tanpa tag eksplisit
  */
 function countResults(suite, stdout) {
-  // 1. Explicit summary: "HASIL TEST SUITE: X PASSED, Y FAILED"
-  let m = stdout.match(/HASIL TEST SUITE.*:\s*(\d+)\s*PASS(?:ED)?,\s*(\d+)\s*FAIL(?:ED)?/i);
+  // 1. Explicit summary: "HASIL TEST SUITE: X PASSED, Y FAILED" atau "HASIL AKHIR: X PASSED, Y FAILED"
+  let m = stdout.match(/HASIL (?:TEST SUITE|AKHIR).*:\s*(\d+)\s*PASS(?:ED)?,\s*(\d+)\s*FAIL(?:ED)?/i);
   if (m) return { pass: parseInt(m[1], 10), fail: parseInt(m[2], 10) };
 
   // 2. Summary: "HASIL: X PASS | Y FAIL"

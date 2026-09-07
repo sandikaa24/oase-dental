@@ -84,7 +84,7 @@ async function run() {
   const rnd = String(Math.floor(Math.random() * 100000));
   const e1 = await req('/employees', 'POST', {
     name: 'Karyawan Test ' + rnd,
-    position: 'Asisten Dokter',
+    position: 'Asisten Dokter Gigi',
     phone: '081200099' + rnd.slice(-3),
     branchIds: [jkt.id],
   }, owner);

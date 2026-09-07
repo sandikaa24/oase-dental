@@ -159,7 +159,7 @@ async function run() {
     {
       name: `Karyawan Closing ${empRnd}`,
       phone: '08129990002',
-      position: 'Staf Kebersihan',
+      position: 'Admin',
       branchIds: [branchId],
     },
     ownerCookie

@@ -145,7 +145,7 @@ async function run() {
     {
       name: `Karyawan POS ${empRnd}`,
       phone: '08129990001',
-      position: 'Staf Kebersihan',
+      position: 'Admin',
       branchIds: [jktBranch?.id],
     },
     ownerCookie

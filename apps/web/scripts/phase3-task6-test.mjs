@@ -157,12 +157,12 @@ async function runSuite() {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', Cookie: ownerAuth.cookies },
     body: JSON.stringify({
-      position: 'Kepala Dokter Gigi',
+      position: 'Dokter Gigi',
       phone: '081122339999',
     }),
   });
   body = await res.json();
-  assert(res.status === 200 && body.data?.position === 'Kepala Dokter Gigi', 'EMP-1.2: OWNER berhasil mengupdate data karyawan (200 OK)');
+  assert(res.status === 200 && body.data?.position === 'Dokter Gigi', 'EMP-1.2: OWNER berhasil mengupdate data karyawan (200 OK)');
 
   // 3. Toggle Status Karyawan
   res = await fetch(`${BASE_URL}/api/v1/employees/${employeeId}/status`, {
@@ -311,7 +311,7 @@ async function runSuite() {
     headers: { 'Content-Type': 'application/json', Cookie: ownerAuth.cookies },
     body: JSON.stringify({
       name: `Budi Kasir E2E ${rnd}`,
-      position: 'Kasir Cabang',
+      position: 'Kasir',
       branchIds: [e2eBranchId],
     }),
   });

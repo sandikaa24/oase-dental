@@ -482,7 +482,7 @@ export async function recordStockMutation(input: StockMutationInput, actor: User
     // Verifikasi produk aktif
     const product = await tx.product.findUnique({
       where: { id: input.productId },
-      select: { id: true, name: true, isActive: true },
+      select: { id: true, name: true, isActive: true, costPrice: true },
     });
     if (!product || !product.isActive) {
       throw new NotFoundError('Produk tidak ditemukan atau tidak aktif');
@@ -555,7 +555,7 @@ export async function recordStockMutation(input: StockMutationInput, actor: User
       data: stockUpdateData,
     });
 
-    // Catat riwayat StockMovement
+    // Catat riwayat StockMovement (termasuk snapshot costPrice untuk laporan laba rugi B2)
     const movement = await tx.stockMovement.create({
       data: {
         productId: input.productId,
@@ -564,6 +564,7 @@ export async function recordStockMutation(input: StockMutationInput, actor: User
         qty: input.qty,
         qtyBefore,
         qtyAfter,
+        costPrice: product.costPrice,
         note: input.note ? input.note.trim() : null,
         userId: actor.userId,
       },

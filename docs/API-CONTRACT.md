@@ -485,11 +485,85 @@ Variance negatif = defisit (kurang); positif = surplus (lebih); nol = tepat.
 | GET | /reports/sales/summary | OWNER | Konsolidasi semua cabang per periode |
 | GET | /reports/expenses | OWNER, MANAGER | Per branch + kategori |
 | GET | /reports/gross-profit | OWNER | `?dateFrom&dateTo` — penjualan − HPP WAC − pengeluaran |
+| GET | /reports/profit-loss | OWNER, MANAGER | `?dateFrom&dateTo&branchId(OWNER)&page&limit` — Laporan Laba Rugi Mendalam (B2) |
 | GET | /reports/inventory | OWNER, MANAGER | Stok + nilai WAC + low stock |
 | GET | /reports/attendance | OWNER, MANAGER | Rekap per karyawan per bulan |
 | GET | /reports/:any/export | sama dengan report asal | TUNDA (Q10: Export CSV menyusul di tugas frontend) |
 
-\* Catatan Keputusan Q5 & Q9: CASHIER dan MANAGER tidak memiliki akses ke endpoint `/reports/sales`, `/reports/gross-profit`, dan `/reports/products`. Seluruh data ringkasan omset & transaksi hari ini untuk kasir disediakan melalui endpoint `/dashboard/cashier`. Modul laporan penjualan ditujukan eksklusif untuk OWNER. MANAGER hanya bisa akses operasional (`/reports/inventory`, `/reports/expenses`, `/reports/attendance`) pada cabang aktifnya.
+\* Catatan Keputusan Q5 & Q9 & B2: CASHIER tidak memiliki akses ke endpoint `/reports/sales`, `/reports/gross-profit`, `/reports/profit-loss`, dan `/reports/products`. Modul laporan laba rugi mendalam `/reports/profit-loss` dapat diakses oleh OWNER (bebas cabang/konsolidasi) dan MANAGER (terkunci cabang aktifnya).
+
+**GET /reports/profit-loss** — Response 200:
+```json
+{
+  "success": true,
+  "data": {
+    "period": { "dateFrom": "2026-09-01", "dateTo": "2026-09-07" },
+    "branchId": "uuid-or-null",
+    "summary": {
+      "totalRevenue": "15000000.00",
+      "totalCOGS": "4500000.00",
+      "grossProfit": "10500000.00",
+      "grossProfitMargin": "70.0",
+      "totalExpense": "3000000.00",
+      "netProfit": "7500000.00",
+      "netProfitMargin": "50.0",
+      "status": "SURPLUS",
+      "transactionCount": 15,
+      "aov": "1000000.00",
+      "uncostedMovementCount": 0
+    },
+    "revenueBreakdown": {
+      "byPaymentMethod": { "CASH": "5000000.00", "DEBIT": "4000000.00", "QRIS_TRANSFER": "6000000.00" }
+    },
+    "cogsBreakdown": {
+      "byCategory": { "BHP": "2500000.00", "Bahan Tindakan": "2000000.00" }
+    },
+    "expenseBreakdown": {
+      "byCategory": { "GAJI": "2000000.00", "UTILITAS": "1000000.00" }
+    },
+    "branchComparisons": [
+      {
+        "branchId": "uuid-1",
+        "branchCode": "JKT",
+        "branchName": "OASE Klinik Gigi — Pusat",
+        "revenue": "10000000.00",
+        "cogs": "3000000.00",
+        "expense": "2000000.00",
+        "grossProfit": "7000000.00",
+        "netProfit": "5000000.00",
+        "netProfitMargin": "50.0",
+        "status": "SURPLUS"
+      }
+    ],
+    "stockMovementDrilldown": {
+      "data": [
+        {
+          "id": "uuid-sm",
+          "createdAt": "2026-09-07T10:00:00.000Z",
+          "productId": "uuid-prod",
+          "productName": "Masker Medis",
+          "sku": "BHP-0001",
+          "category": "BHP",
+          "unit": "box",
+          "type": "OUT",
+          "qty": 2,
+          "qtyBefore": 10,
+          "qtyAfter": 8,
+          "qtyDelta": -2,
+          "costPrice": "35000.00",
+          "costPriceSnapshot": "35000.00",
+          "costImpact": "70000.00",
+          "note": "Pemakaian klinik",
+          "branchCode": "JKT",
+          "branchName": "OASE Klinik Gigi — Pusat",
+          "creatorName": "Manager JKT"
+        }
+      ],
+      "meta": { "page": 1, "limit": 20, "total": 1, "totalPages": 1 }
+    }
+  }
+}
+```
 
 **Keputusan Desain HPP & Nilai Persediaan (BINDING)**:
 - **Metode**: Weighted Average Cost (WAC).

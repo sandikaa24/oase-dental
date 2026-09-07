@@ -23,3 +23,6 @@ export const auditLogQuerySchema = baseReportQuerySchema.extend({
   entity: z.string().optional(),
   actorId: z.string().uuid().optional(),
 });
+
+export const profitLossQuerySchema = baseReportQuerySchema;
+

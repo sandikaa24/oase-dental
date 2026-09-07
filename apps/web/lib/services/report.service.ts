@@ -426,3 +426,337 @@ export async function getOwnerDashboard() {
 
   return { summary, trending, sevenDayTrend: trending };
 }
+
+/**
+ * Helper rentang tanggal inklusif batas akhir hari (dateTo 23:59:59.999Z / WIB).
+ * Mendukung boundary test transaksi, mutasi stok, dan expense.
+ */
+export function getDateRangeInclusive(dateFrom?: string, dateTo?: string) {
+  const defaultTo = new Date();
+  defaultTo.setUTCHours(23, 59, 59, 999);
+  const defaultFrom = subDays(defaultTo, 30);
+  defaultFrom.setUTCHours(0, 0, 0, 0);
+
+  const from = dateFrom ? new Date(`${dateFrom}T00:00:00.000Z`) : defaultFrom;
+  const to = dateTo ? new Date(`${dateTo}T23:59:59.999Z`) : defaultTo;
+
+  const fromDateOnly = dateFrom ? new Date(`${dateFrom}T00:00:00.000Z`) : new Date(format(defaultFrom, 'yyyy-MM-dd'));
+  const toDateOnly = dateTo ? new Date(`${dateTo}T00:00:00.000Z`) : new Date(format(defaultTo, 'yyyy-MM-dd'));
+
+  return { from, to, fromDateOnly, toDateOnly };
+}
+
+// 7. Laporan Laba Rugi Mendalam (TASK B2)
+export async function getProfitLossReport(
+  branchId: string | undefined,
+  dateFrom: string | undefined,
+  dateTo: string | undefined,
+  page: number = 1,
+  limit: number = 20
+) {
+  const { from, to, fromDateOnly, toDateOnly } = getDateRangeInclusive(dateFrom, dateTo);
+
+  // a. PENDAPATAN (REVENUE) - Basis Kas murni
+  const txWhere: Prisma.TransactionWhereInput = {
+    status: 'PAID',
+    OR: [
+      { paidAt: { gte: from, lte: to } },
+      { paidAt: null, transactionDate: { gte: from, lte: to } },
+    ],
+    ...(branchId && { branchId }),
+  };
+
+  const [salesAggregate, totalPaidTx] = await Promise.all([
+    prisma.transaction.aggregate({
+      where: txWhere,
+      _sum: { total: true },
+    }),
+    prisma.transaction.count({ where: txWhere }),
+  ]);
+
+  const totalRevenue = Number(salesAggregate._sum.total || 0);
+  const transactionCount = totalPaidTx;
+  const aov = transactionCount > 0 ? totalRevenue / transactionCount : 0;
+
+  // Breakdown metode pembayaran
+  const paymentBreakdownAgg = await prisma.transactionPayment.groupBy({
+    by: ['method'],
+    where: {
+      transaction: txWhere,
+    },
+    _sum: { amount: true },
+  });
+
+  const paymentBreakdown: Record<string, string> = {
+    CASH: '0.00',
+    DEBIT: '0.00',
+    QRIS_TRANSFER: '0.00',
+  };
+  paymentBreakdownAgg.forEach((p) => {
+    paymentBreakdown[p.method] = Number(p._sum.amount || 0).toFixed(2);
+  });
+
+  // b. BEBAN PERSEDIAAN (COGS) - Pemakaian Stok Manual (OUT & ADJUSTMENT)
+  // Agregasi langsung di database engine PostgreSQL via prisma.$queryRaw
+  interface CategoryCogsRaw {
+    category: string;
+    total_cogs: Prisma.Decimal;
+  }
+
+  const cogsByCategoryRaw = await prisma.$queryRaw<CategoryCogsRaw[]>`
+    SELECT
+      p.category,
+      COALESCE(SUM(
+        CASE
+          WHEN sm.type = 'OUT' THEN sm.qty * COALESCE(sm."costPrice", p."costPrice", 0)
+          WHEN sm.type = 'ADJUSTMENT' AND (sm."qtyAfter" - sm."qtyBefore") < 0 
+            THEN (sm."qtyBefore" - sm."qtyAfter") * COALESCE(sm."costPrice", p."costPrice", 0)
+          WHEN sm.type = 'ADJUSTMENT' AND (sm."qtyAfter" - sm."qtyBefore") > 0 
+            THEN -1 * (sm."qtyAfter" - sm."qtyBefore") * COALESCE(sm."costPrice", p."costPrice", 0)
+          ELSE 0
+        END
+      ), 0) as total_cogs
+    FROM stock_movements sm
+    JOIN products p ON sm."productId" = p.id
+    WHERE sm."createdAt" >= ${from} AND sm."createdAt" <= ${to}
+      AND (${branchId ?? null}::text IS NULL OR sm."branchId" = ${branchId})
+    GROUP BY p.category
+  `;
+
+  let totalCOGS = 0;
+  const cogsBreakdownByCategory: Record<string, string> = {};
+  cogsByCategoryRaw.forEach((row) => {
+    const val = Number(row.total_cogs);
+    totalCOGS += val;
+    cogsBreakdownByCategory[row.category] = val.toFixed(2);
+  });
+
+  // Hitung jumlah mutasi tanpa costPrice (untuk alert/audit)
+  const uncostedCountRaw = await prisma.$queryRaw<Array<{ count: bigint }>>`
+    SELECT COUNT(*)::bigint as count
+    FROM stock_movements sm
+    JOIN products p ON sm."productId" = p.id
+    WHERE sm."createdAt" >= ${from} AND sm."createdAt" <= ${to}
+      AND (${branchId ?? null}::text IS NULL OR sm."branchId" = ${branchId})
+      AND sm.type IN ('OUT', 'ADJUSTMENT')
+      AND sm."costPrice" IS NULL AND p."costPrice" IS NULL
+  `;
+  const uncostedCount = Number(uncostedCountRaw[0]?.count || 0);
+
+  // c. BEBAN OPERASIONAL (OPEX)
+  const expenseWhere: Prisma.ExpenseWhereInput = {
+    expenseDate: { gte: fromDateOnly, lte: toDateOnly },
+    ...(branchId && { branchId }),
+  };
+
+  const [expenseAggregate, expenseCategoryAgg] = await Promise.all([
+    prisma.expense.aggregate({
+      where: expenseWhere,
+      _sum: { amount: true },
+    }),
+    prisma.expense.groupBy({
+      by: ['category'],
+      where: expenseWhere,
+      _sum: { amount: true },
+    }),
+  ]);
+
+  const totalExpense = Number(expenseAggregate._sum.amount || 0);
+  const expenseBreakdown: Record<string, string> = {};
+  expenseCategoryAgg.forEach((e) => {
+    expenseBreakdown[e.category] = Number(e._sum.amount || 0).toFixed(2);
+  });
+
+  // d. LABA KOTOR & LABA BERSIH
+  const grossProfit = totalRevenue - totalCOGS;
+  const grossProfitMargin = totalRevenue > 0 ? ((grossProfit / totalRevenue) * 100).toFixed(1) : '0.0';
+  const netProfit = grossProfit - totalExpense;
+  const netProfitMargin = totalRevenue > 0 ? ((netProfit / totalRevenue) * 100).toFixed(1) : '0.0';
+  const status: 'SURPLUS' | 'DEFISIT' = netProfit >= 0 ? 'SURPLUS' : 'DEFISIT';
+
+  // e. KOMPARASI ANTAR CABANG (Bila Konsolidasi / OWNER tanpa filter cabang spesifik)
+  interface BranchComparisonItem {
+    branchId: string;
+    branchCode: string;
+    branchName: string;
+    revenue: string;
+    cogs: string;
+    expense: string;
+    grossProfit: string;
+    netProfit: string;
+    netProfitMargin: string;
+    status: 'SURPLUS' | 'DEFISIT';
+  }
+
+  let branchComparisons: BranchComparisonItem[] = [];
+  if (!branchId) {
+    const branches = await prisma.branch.findMany({
+      where: { active: true },
+      select: { id: true, code: true, name: true },
+      orderBy: { code: 'asc' },
+    });
+
+    const cogsByBranch = await prisma.$queryRaw<Array<{ branchId: string; total_cogs: Prisma.Decimal }>>`
+      SELECT
+        sm."branchId",
+        COALESCE(SUM(
+          CASE
+            WHEN sm.type = 'OUT' THEN sm.qty * COALESCE(sm."costPrice", p."costPrice", 0)
+            WHEN sm.type = 'ADJUSTMENT' AND (sm."qtyAfter" - sm."qtyBefore") < 0 
+              THEN (sm."qtyBefore" - sm."qtyAfter") * COALESCE(sm."costPrice", p."costPrice", 0)
+            WHEN sm.type = 'ADJUSTMENT' AND (sm."qtyAfter" - sm."qtyBefore") > 0 
+              THEN -1 * (sm."qtyAfter" - sm."qtyBefore") * COALESCE(sm."costPrice", p."costPrice", 0)
+            ELSE 0
+          END
+        ), 0) as total_cogs
+      FROM stock_movements sm
+      JOIN products p ON sm."productId" = p.id
+      WHERE sm."createdAt" >= ${from} AND sm."createdAt" <= ${to}
+      GROUP BY sm."branchId"
+    `;
+    const cogsBranchMap = new Map(cogsByBranch.map((c) => [c.branchId, Number(c.total_cogs)]));
+
+    const revByBranch = await prisma.transaction.groupBy({
+      by: ['branchId'],
+      where: {
+        status: 'PAID',
+        OR: [
+          { paidAt: { gte: from, lte: to } },
+          { paidAt: null, transactionDate: { gte: from, lte: to } },
+        ],
+      },
+      _sum: { total: true },
+    });
+    const revBranchMap = new Map(revByBranch.map((r) => [r.branchId, Number(r._sum.total || 0)]));
+
+    const expByBranch = await prisma.expense.groupBy({
+      by: ['branchId'],
+      where: {
+        expenseDate: { gte: fromDateOnly, lte: toDateOnly },
+      },
+      _sum: { amount: true },
+    });
+    const expBranchMap = new Map(expByBranch.map((e) => [e.branchId, Number(e._sum.amount || 0)]));
+
+    branchComparisons = branches.map((b) => {
+      const bRev = revBranchMap.get(b.id) || 0;
+      const bCogs = cogsBranchMap.get(b.id) || 0;
+      const bExp = expBranchMap.get(b.id) || 0;
+      const bGross = bRev - bCogs;
+      const bNet = bGross - bExp;
+      const bMargin = bRev > 0 ? ((bNet / bRev) * 100).toFixed(1) : '0.0';
+
+      return {
+        branchId: b.id,
+        branchCode: b.code,
+        branchName: b.name,
+        revenue: bRev.toFixed(2),
+        cogs: bCogs.toFixed(2),
+        expense: bExp.toFixed(2),
+        grossProfit: bGross.toFixed(2),
+        netProfit: bNet.toFixed(2),
+        netProfitMargin: bMargin,
+        status: bNet >= 0 ? 'SURPLUS' : 'DEFISIT',
+      };
+    });
+  }
+
+  // f. DRILL-DOWN: Rincian Mutasi Stok yang Berdampak pada HPP (Paginated)
+  const movementWhere: Prisma.StockMovementWhereInput = {
+    type: { in: ['OUT', 'ADJUSTMENT'] },
+    createdAt: { gte: from, lte: to },
+    ...(branchId && { branchId }),
+  };
+
+  const skip = (page - 1) * limit;
+  const [movements, totalMovements] = await Promise.all([
+    prisma.stockMovement.findMany({
+      where: movementWhere,
+      include: {
+        product: { select: { id: true, name: true, sku: true, unit: true, category: true, costPrice: true } },
+        branch: { select: { id: true, code: true, name: true } },
+        user: { select: { id: true, email: true, employee: { select: { name: true } } } },
+      },
+      orderBy: { createdAt: 'desc' },
+      skip,
+      take: limit,
+    }),
+    prisma.stockMovement.count({ where: movementWhere }),
+  ]);
+
+  const drilldownItems = movements.map((m) => {
+    const costPrice = m.costPrice !== null ? Number(m.costPrice) : (m.product.costPrice !== null ? Number(m.product.costPrice) : 0);
+    let qtyDelta = 0;
+    let costImpact = 0;
+
+    if (m.type === 'OUT') {
+      qtyDelta = -m.qty;
+      costImpact = m.qty * costPrice;
+    } else if (m.type === 'ADJUSTMENT') {
+      qtyDelta = m.qtyAfter - m.qtyBefore;
+      costImpact = -qtyDelta * costPrice;
+    }
+
+    return {
+      id: m.id,
+      createdAt: m.createdAt.toISOString(),
+      productId: m.productId,
+      productName: m.product.name,
+      sku: m.product.sku,
+      category: m.product.category,
+      unit: m.product.unit,
+      type: m.type,
+      qty: m.qty,
+      qtyBefore: m.qtyBefore,
+      qtyAfter: m.qtyAfter,
+      qtyDelta,
+      costPrice: costPrice.toFixed(2),
+      costPriceSnapshot: m.costPrice !== null ? Number(m.costPrice).toFixed(2) : null,
+      costImpact: costImpact.toFixed(2),
+      note: m.note,
+      branchCode: m.branch.code,
+      branchName: m.branch.name,
+      creatorName: m.user.employee?.name || m.user.email,
+    };
+  });
+
+  return {
+    period: {
+      dateFrom: dateFrom || format(from, 'yyyy-MM-dd'),
+      dateTo: dateTo || format(to, 'yyyy-MM-dd'),
+    },
+    branchId: branchId || null,
+    summary: {
+      totalRevenue: totalRevenue.toFixed(2),
+      totalCOGS: totalCOGS.toFixed(2),
+      grossProfit: grossProfit.toFixed(2),
+      grossProfitMargin,
+      totalExpense: totalExpense.toFixed(2),
+      netProfit: netProfit.toFixed(2),
+      netProfitMargin,
+      status,
+      transactionCount,
+      aov: aov.toFixed(2),
+      uncostedMovementCount: uncostedCount,
+    },
+    revenueBreakdown: {
+      byPaymentMethod: paymentBreakdown,
+    },
+    cogsBreakdown: {
+      byCategory: cogsBreakdownByCategory,
+    },
+    expenseBreakdown: {
+      byCategory: expenseBreakdown,
+    },
+    branchComparisons,
+    stockMovementDrilldown: {
+      data: drilldownItems,
+      meta: {
+        page,
+        limit,
+        total: totalMovements,
+        totalPages: Math.ceil(totalMovements / limit) || 1,
+      },
+    },
+  };
+}

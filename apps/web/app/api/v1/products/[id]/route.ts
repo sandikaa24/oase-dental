@@ -14,11 +14,11 @@ interface RouteContext {
 /**
  * GET /api/v1/products/:id
  * Detail produk
- * Role: [OWNER, MANAGER, CASHIER]
+ * Role: [OWNER, MANAGER]
  */
 export const GET = withErrorHandler(async (_req: NextRequest, { params }: RouteContext) => {
   const auth = await requireAuth();
-  requireRole(auth, 'OWNER', 'MANAGER', 'CASHIER');
+  requireRole(auth, 'OWNER', 'MANAGER');
 
   const product = await getProductById(params.id);
   return ok(product);

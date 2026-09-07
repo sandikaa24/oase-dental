@@ -10,11 +10,11 @@ export const dynamic = 'force-dynamic';
 /**
  * GET /api/v1/stock/movements
  * Riwayat mutasi per produk / cabang
- * Role: [OWNER, MANAGER, CASHIER]
+ * Role: [OWNER, MANAGER]
  */
 export const GET = withErrorHandler(async (req: NextRequest) => {
   const auth = await requireAuth();
-  requireRole(auth, 'OWNER', 'MANAGER', 'CASHIER');
+  requireRole(auth, 'OWNER', 'MANAGER');
 
   const { searchParams } = new URL(req.url);
   const query = stockMovementsQuerySchema.parse(

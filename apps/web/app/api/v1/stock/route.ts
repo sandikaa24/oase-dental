@@ -10,11 +10,11 @@ export const dynamic = 'force-dynamic';
 /**
  * GET /api/v1/stock
  * Daftar stok per cabang dengan indikator kadaluarsa & stok rendah
- * Role: [OWNER, MANAGER, CASHIER] (CASHIER read-only)
+ * Role: [OWNER, MANAGER]
  */
 export const GET = withErrorHandler(async (req: NextRequest) => {
   const auth = await requireAuth();
-  requireRole(auth, 'OWNER', 'MANAGER', 'CASHIER');
+  requireRole(auth, 'OWNER', 'MANAGER');
 
   const { searchParams } = new URL(req.url);
   const query = stockListQuerySchema.parse(

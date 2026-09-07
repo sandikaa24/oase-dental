@@ -10,11 +10,11 @@ export const dynamic = 'force-dynamic';
 /**
  * GET /api/v1/products
  * Daftar produk (master item independen)
- * Role: [OWNER, MANAGER, CASHIER]
+ * Role: [OWNER, MANAGER]
  */
 export const GET = withErrorHandler(async (req: NextRequest) => {
   const auth = await requireAuth();
-  requireRole(auth, 'OWNER', 'MANAGER', 'CASHIER');
+  requireRole(auth, 'OWNER', 'MANAGER');
 
   const { searchParams } = new URL(req.url);
   const search = searchParams.get('search') || undefined;

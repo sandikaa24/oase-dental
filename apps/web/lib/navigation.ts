@@ -40,6 +40,7 @@ export const NAV_ITEMS: NavItem[] = [
     label: 'Stok',
     href: '/admin/stock',
     iconName: 'Boxes',
+    requiredPermission: [Permission.STOCK_IN, Permission.STOCK_OPNAME_MANAGE],
     group: 'operations',
   },
   {

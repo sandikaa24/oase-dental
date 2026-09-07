@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth-context';
 import { fetchApi } from '@/lib/api-client';
@@ -23,8 +24,16 @@ import {
 } from 'lucide-react';
 
 export default function StockManagementPage() {
+  const router = useRouter();
   const { user } = useAuth();
   const queryClient = useQueryClient();
+
+  // Fallback client guard untuk CASHIER
+  useEffect(() => {
+    if (user && user.role === 'CASHIER') {
+      router.replace('/admin');
+    }
+  }, [user, router]);
 
   const isOwner = user?.role === 'OWNER';
   const canMutate = user?.role === 'OWNER' || user?.role === 'MANAGER';
@@ -77,7 +86,7 @@ export default function StockManagementPage() {
 
       return fetchApi<StockListResponse>(url);
     },
-    enabled: !!user,
+    enabled: !!user && user.role !== 'CASHIER',
   });
 
   const stockData = useMemo(() => data?.data?.items || [], [data?.data?.items]);
@@ -122,6 +131,10 @@ export default function StockManagementPage() {
   const handleRefresh = () => {
     queryClient.invalidateQueries({ queryKey: ['stock-list'] });
   };
+
+  if (user?.role === 'CASHIER') {
+    return null;
+  }
 
   return (
     <div className="space-y-6">

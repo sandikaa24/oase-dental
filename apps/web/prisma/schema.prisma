@@ -571,6 +571,7 @@ model StockMovement {
   qty       Int
   qtyBefore Int
   qtyAfter  Int
+  costPrice Decimal?          @db.Decimal(12, 2)
   note      String?
   userId    String
   user      User              @relation(fields: [userId], references: [id])

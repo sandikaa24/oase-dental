@@ -193,19 +193,19 @@ export function PortalContentModal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/60 p-4">
-      <div className="relative w-full max-w-2xl rounded-xl border border-border bg-card shadow-2xl transition-all my-8">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200 overflow-y-auto">
+      <div className="relative w-full max-w-2xl rounded-xl border border-border bg-surface shadow-2xl transition-all my-8 animate-in zoom-in-95 duration-200 overflow-hidden">
         {/* Header Modal */}
-        <div className="flex items-center justify-between border-b border-border px-6 py-4">
+        <div className="flex items-center justify-between border-b border-border bg-surface px-6 py-4">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary-soft text-primary">
               <Globe className="h-5 w-5" />
             </div>
             <div>
               <h2 className="text-lg font-semibold text-foreground">
                 {isEditing ? 'Edit Konten Portal' : 'Tambah Konten Portal'}
               </h2>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-muted">
                 Tipe: <span className="font-semibold text-primary">{type}</span>
               </p>
             </div>
@@ -213,14 +213,14 @@ export function PortalContentModal({
           <button
             type="button"
             onClick={() => onOpenChange(false)}
-            className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+            className="rounded-md p-1.5 text-muted hover:bg-slate-100 hover:text-foreground transition-colors"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
+        <form onSubmit={handleSubmit} className="p-6 space-y-4 max-h-[75vh] overflow-y-auto bg-surface">
           {error && <ErrorBanner message={error} />}
 
           {/* Tipe Konten Selector (hanya jika create baru) */}
@@ -230,7 +230,7 @@ export function PortalContentModal({
               <select
                 value={type}
                 onChange={(e) => setType(e.target.value as PortalContentType)}
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                className="w-full rounded-md border border-slate-300 bg-surface px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
               >
                 <option value="ARTICLE">Artikel / Blog</option>
                 <option value="PATIENT_GUIDE">Panduan Pasien (Patient Guide)</option>
@@ -246,11 +246,11 @@ export function PortalContentModal({
 
           {/* Alert Peringatan Khusus Dokter */}
           {type === 'DOCTOR' && (
-            <div className="rounded-lg border border-warning/30 bg-warning/10 p-3 text-xs text-warning-foreground flex items-start gap-2.5">
-              <AlertTriangle className="h-4 w-4 text-warning shrink-0 mt-0.5" />
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 flex items-start gap-2.5">
+              <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
               <div>
                 <p className="font-semibold">Standar Kepatuhan Profil Dokter</p>
-                <p className="mt-0.5 text-muted-foreground">
+                <p className="mt-0.5 text-amber-800">
                   Gunakan data asli terverifikasi (nama, gelar resmi, STR). Konten demo dilarang
                   menyerupai atau memalsukan identitas dokter nyata.
                 </p>
@@ -260,11 +260,11 @@ export function PortalContentModal({
 
           {/* Alert Peringatan Khusus Before / After */}
           {type === 'BEFORE_AFTER' && (
-            <div className="rounded-lg border border-primary/30 bg-primary/10 p-3 text-xs text-primary flex items-start gap-2.5">
-              <ShieldAlert className="h-4 w-4 shrink-0 mt-0.5" />
+            <div className="rounded-lg border border-teal-200 bg-teal-50 p-3 text-xs text-teal-900 flex items-start gap-2.5">
+              <ShieldAlert className="h-4 w-4 text-teal-600 shrink-0 mt-0.5" />
               <div>
                 <p className="font-semibold">Informed Consent Pasien Wajib</p>
-                <p className="mt-0.5 text-muted-foreground">
+                <p className="mt-0.5 text-teal-800">
                   Dokumentasi kasus sebelum dan sesudah tindakan medis hanya dapat dipublikasikan jika
                   pasien telah memberikan persetujuan tertulis resmi.
                 </p>
@@ -276,7 +276,7 @@ export function PortalContentModal({
           <div className="space-y-1.5">
             <label className="text-xs font-semibold text-foreground">
               {type === 'DOCTOR' ? 'Nama Dokter (Judul)' : 'Judul Konten'}{' '}
-              <span className="text-destructive">*</span>
+              <span className="text-danger-solid">*</span>
             </label>
             <Input
               value={title}
@@ -289,7 +289,7 @@ export function PortalContentModal({
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
               <label className="text-xs font-semibold text-foreground">
-                Slug URL <span className="text-destructive">*</span>
+                Slug URL <span className="text-danger-solid">*</span>
               </label>
               <button
                 type="button"
@@ -305,14 +305,14 @@ export function PortalContentModal({
               placeholder="contoh-slug-url"
               required
             />
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-[11px] text-muted">
               Akan diakses melalui URL: /layanan/..., /edukasi/..., dll.
             </p>
           </div>
 
           {/* Bidang Khusus Tipe DOCTOR */}
           {type === 'DOCTOR' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 rounded-lg border border-border bg-muted/20 p-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 rounded-lg border border-border bg-slate-50/70 p-3">
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-foreground">Gelar Depan / Belakang</label>
                 <Input
@@ -358,7 +358,7 @@ export function PortalContentModal({
               <select
                 value={faqServiceId}
                 onChange={(e) => setFaqServiceId(e.target.value)}
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                className="w-full rounded-md border border-slate-300 bg-surface px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
               >
                 <option value="">-- FAQ Umum Klinik --</option>
                 {services.map((s) => (
@@ -367,7 +367,7 @@ export function PortalContentModal({
                   </option>
                 ))}
               </select>
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-[11px] text-muted">
                 Bila ditautkan, FAQ ini akan otomatis muncul pada halaman detail layanan tersebut.
               </p>
             </div>
@@ -375,19 +375,19 @@ export function PortalContentModal({
 
           {/* Bidang Khusus Tipe BEFORE_AFTER */}
           {type === 'BEFORE_AFTER' && (
-            <div className="rounded-lg border border-border bg-muted/30 p-3.5 space-y-2">
+            <div className="rounded-lg border border-border bg-slate-50/70 p-3.5 space-y-2">
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
                   checked={patientConsent}
                   onChange={(e) => setPatientConsent(e.target.checked)}
-                  className="h-4 w-4 rounded border-input text-primary focus:ring-primary"
+                  className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
                 />
                 <span className="text-xs font-semibold text-foreground">
                   Pasien telah menandatangani Informed Consent publikasi dokumentasi
                 </span>
               </label>
-              <p className="text-[11px] text-muted-foreground pl-6">
+              <p className="text-[11px] text-muted pl-6">
                 Sistem menolak publikasi kasus ini ke galeri publik bila persetujuan pasien belum dicentang.
               </p>
             </div>
@@ -407,7 +407,7 @@ export function PortalContentModal({
               onChange={(e) => setImageUrl(e.target.value)}
               placeholder="https://... atau /images/..."
             />
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-[11px] text-muted">
               Dapat menggunakan URL gambar eksternal atau gambar publik.
             </p>
           </div>
@@ -422,7 +422,7 @@ export function PortalContentModal({
               onChange={(e) => setBody(e.target.value)}
               rows={4}
               placeholder="Tuliskan deskripsi lengkap / markdown di sini..."
-              className="w-full rounded-md border border-input bg-background p-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+              className="w-full rounded-md border border-slate-300 bg-surface p-3 text-sm text-foreground placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary"
             />
           </div>
 
@@ -444,7 +444,7 @@ export function PortalContentModal({
                   type="checkbox"
                   checked={published}
                   onChange={(e) => setPublished(e.target.checked)}
-                  className="h-4 w-4 rounded border-input text-primary focus:ring-primary"
+                  className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
                 />
                 <span className="text-xs font-medium text-foreground">Publikasikan (Live)</span>
               </label>
@@ -456,15 +456,15 @@ export function PortalContentModal({
                   type="checkbox"
                   checked={isDemoContent}
                   onChange={(e) => setIsDemoContent(e.target.checked)}
-                  className="h-4 w-4 rounded border-input text-primary focus:ring-primary"
+                  className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
                 />
-                <span className="text-xs font-medium text-warning">Tandai Konten Demo</span>
+                <span className="text-xs font-medium text-amber-700">Tandai Konten Demo</span>
               </label>
             </div>
           </div>
 
           {/* Footer Buttons */}
-          <div className="flex items-center justify-end gap-3 pt-4 border-t border-border">
+          <div className="flex items-center justify-end gap-3 pt-4 border-t border-border bg-surface">
             <Button
               type="button"
               variant="outline"

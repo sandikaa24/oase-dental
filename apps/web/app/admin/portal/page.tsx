@@ -51,6 +51,7 @@ export default function PortalManagementPage() {
   const [selectedItem, setSelectedItem] = useState<PortalContentItem | null>(null);
 
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState<PortalContentItem | null>(null);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   // Ambil data layanan master untuk relasi FAQ
@@ -293,10 +294,10 @@ export default function PortalManagementPage() {
       </div>
 
       {/* Tabel Konten Portal */}
-      <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
+      <div className="rounded-xl border border-border bg-surface shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
-            <thead className="border-b border-border bg-muted/40 text-muted-foreground font-medium">
+            <thead className="border-b border-border bg-slate-50 text-muted font-medium">
               <tr>
                 <th className="px-4 py-3">Tipe</th>
                 <th className="px-4 py-3">Judul & Slug</th>
@@ -432,12 +433,8 @@ export default function PortalManagementPage() {
                           <Button
                             variant="outline"
                             size="sm"
-                            className="h-7 w-7 p-0 text-destructive hover:bg-destructive/10"
-                            onClick={() => {
-                              if (confirm(`Yakin ingin menghapus konten "${item.title}"?`)) {
-                                deleteMutation.mutate(item.id);
-                              }
-                            }}
+                            className="h-7 w-7 p-0 text-danger-solid hover:bg-danger-bg transition-colors"
+                            onClick={() => setItemToDelete(item)}
                           >
                             <Trash2 className="h-3.5 w-3.5" />
                           </Button>
@@ -465,19 +462,60 @@ export default function PortalManagementPage() {
         services={servicesData || []}
       />
 
+      {/* Dialog Konfirmasi Hapus Konten Tunggal */}
+      {itemToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="w-full max-w-md rounded-xl border border-border bg-surface p-6 shadow-2xl space-y-4 animate-in zoom-in-95 duration-200">
+            <div className="flex items-center gap-3 text-danger-solid">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-danger-bg text-danger-icon">
+                <Trash2 className="h-5 w-5" />
+              </div>
+              <h3 className="text-base font-semibold text-foreground">
+                Hapus Konten Portal?
+              </h3>
+            </div>
+            <p className="text-xs text-muted leading-relaxed">
+              Apakah Anda yakin ingin menghapus konten <strong>&quot;{itemToDelete.title}&quot;</strong>?
+              Tindakan ini tidak dapat dikembalikan.
+            </p>
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setItemToDelete(null)}
+                disabled={deleteMutation.isPending}
+              >
+                Batal
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => {
+                  deleteMutation.mutate(itemToDelete.id);
+                  setItemToDelete(null);
+                }}
+                disabled={deleteMutation.isPending}
+              >
+                {deleteMutation.isPending ? 'Menghapus...' : 'Ya, Hapus'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Dialog Konfirmasi Hapus Semua Demo */}
       {confirmBulkDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="w-full max-w-md rounded-xl border border-border bg-card p-6 shadow-2xl space-y-4">
-            <div className="flex items-center gap-3 text-destructive">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-destructive/10">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="w-full max-w-md rounded-xl border border-border bg-surface p-6 shadow-2xl space-y-4 animate-in zoom-in-95 duration-200">
+            <div className="flex items-center gap-3 text-danger-solid">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-danger-bg text-danger-icon">
                 <Trash2 className="h-5 w-5" />
               </div>
               <h3 className="text-base font-semibold text-foreground">
                 Hapus Semua Konten Demo?
               </h3>
             </div>
-            <p className="text-xs text-muted-foreground leading-relaxed">
+            <p className="text-xs text-muted leading-relaxed">
               Tindakan ini akan menghapus <strong>semua konten bertanda demo</strong>
               {currentType ? ` untuk kategori ${currentType}` : ''} secara permanen dari database.
               Data yang terhapus tidak dapat dikembalikan.

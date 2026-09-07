@@ -17,6 +17,10 @@ const config: Config = {
         accent: '#14B8A6',
         background: '#F8FAFC',
         surface: '#FFFFFF',
+        card: {
+          DEFAULT: '#FFFFFF',
+          foreground: '#0F172A',
+        },
         foreground: '#0F172A',
         muted: '#64748B',
         border: '#E2E8F0',

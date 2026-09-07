@@ -168,6 +168,30 @@ async function main() {
   const rDelete = await req(`/api/v1/products/${productId}`, 'DELETE', null, ownerCookie);
   check('2h. Soft delete produk -> 200 (isActive: false)', rDelete.status === 200 && rDelete.data?.data?.isActive === false);
 
+  // 2i. Auto-generate SKU saat sku tidak diberikan
+  const rAutoSku = await req('/api/v1/products', 'POST', {
+    name: `Auto SKU Product ${uniqueSuffix}`,
+    unit: 'box',
+    category: 'BHP',
+  }, ownerCookie);
+  const autoSkuVal = rAutoSku.data?.data?.sku;
+  check('2i. Auto-generate SKU berbasis prefix kategori (BHP-XXXX) -> 201', rAutoSku.status === 201 && /^BHP-\d{4}$/.test(autoSkuVal));
+
+  // 2j. Duplikasi SKU manual ditolak -> 409
+  const rDupSku = await req('/api/v1/products', 'POST', {
+    name: `Dup SKU Product ${uniqueSuffix}`,
+    sku: autoSkuVal,
+    unit: 'pcs',
+    category: 'BHP',
+  }, ownerCookie);
+  check('2j. Duplikasi SKU manual ditolak -> 409 DUPLICATE_PRODUCT_SKU', rDupSku.status === 409 && rDupSku.data?.code === 'DUPLICATE_PRODUCT_SKU');
+
+  // 2k. Update SKU ke SKU yang sudah ada ditolak -> 409
+  const rDupUpdate = await req(`/api/v1/products/${productId}`, 'PUT', {
+    sku: autoSkuVal,
+  }, ownerCookie);
+  check('2k. Update produk ke SKU milik produk lain ditolak -> 409', rDupUpdate.status === 409 && rDupUpdate.data?.code === 'DUPLICATE_PRODUCT_SKU');
+
   // Aktifkan kembali produk untuk pengujian mutasi stok berikutnya
   await req(`/api/v1/products/${productId}`, 'PUT', { isActive: true }, ownerCookie);
 
@@ -191,9 +215,13 @@ async function main() {
   const rCashierDelete = await req(`/api/v1/products/${productId}`, 'DELETE', null, cashierCookie);
   check('3c. CASHIER delete produk ditolak -> 403', rCashierDelete.status === 403);
 
-  // CASHIER boleh melihat produk (read-only)
+  // CASHIER dilarang melihat list produk (semua endpoint master produk 403 untuk CASHIER)
   const rCashierList = await req('/api/v1/products', 'GET', null, cashierCookie);
-  check('3d. CASHIER melihat list produk diizinkan -> 200', rCashierList.status === 200);
+  check('3d. CASHIER melihat list produk ditolak -> 403 Forbidden', rCashierList.status === 403);
+
+  // 3e. Regresi POS: CASHIER tetap dapat melihat katalog penjualan via /api/v1/pos/catalog
+  const rCashierPos = await req('/api/v1/pos/catalog', 'GET', null, cashierCookie);
+  check('3e. Regresi POS: CASHIER tetap dapat mengakses /api/v1/pos/catalog -> 200', rCashierPos.status === 200 && Array.isArray(rCashierPos.data?.data));
 
   // ─── 4. Query Stok Cabang & Indikator Expired / Stok Rendah ───────────────────
   console.log('\n--- 4. Query Stok Cabang & Indikator ---');
@@ -201,9 +229,9 @@ async function main() {
   const rStockJkt = await req(`/api/v1/stock?branchId=${branchJkt.id}`, 'GET', null, ownerCookie);
   check('4a. OWNER query stok cabang JKT -> 200', rStockJkt.status === 200 && Array.isArray(rStockJkt.data?.data?.items));
 
-  // CASHIER query stok cabang
+  // CASHIER query stok cabang dilarang (stok tersembunyi total -> 403)
   const rCashierStock = await req('/api/v1/stock', 'GET', null, cashierCookie);
-  check('4b. CASHIER query stok cabang -> 200', rCashierStock.status === 200);
+  check('4b. CASHIER query stok cabang ditolak -> 403 Forbidden', rCashierStock.status === 403);
 
   // Filter lowStock
   const rStockLow = await req(`/api/v1/stock?branchId=${branchJkt.id}&lowStock=true`, 'GET', null, ownerCookie);
@@ -341,9 +369,9 @@ async function main() {
   const inMovements = rMovIn.data?.data || [];
   check('8b. Filter riwayat type=IN -> 200 (semua tipe IN)', rMovIn.status === 200 && inMovements.every(m => m.type === 'IN'));
 
-  // 8c. CASHIER boleh melihat riwayat mutasi
+  // 8c. CASHIER dilarang melihat riwayat mutasi (stok tersembunyi total -> 403)
   const rCashierMov = await req(`/api/v1/stock/movements?productId=${productId}`, 'GET', null, cashierCookie);
-  check('8c. CASHIER dapat melihat riwayat mutasi -> 200', rCashierMov.status === 200);
+  check('8c. CASHIER melihat riwayat mutasi ditolak -> 403 Forbidden', rCashierMov.status === 403);
 
   // ─────────────────────────────────────────────────────────────────────────────
   console.log('\n======================================================================');

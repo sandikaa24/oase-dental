@@ -155,9 +155,8 @@ Body: `{ name, sku, unit, minStock, isStockTracked }`. Soft delete jika sudah ad
 | Method | Path | Permission | Deskripsi |
 |---|---|---|---|
 | GET | /pos/catalog | POS_CREATE (OWNER, CASHIER), MANAGER | Katalog master layanan medis aktif |
-| GET | /transactions | OWNER, CASHIER | List branch aktif, filter `status`, `date`, `dateFrom/To`, `cashierId`, search `transactionNumber` |
-| POST | /transactions | OWNER, CASHIER | Create DRAFT (murni layanan) |
-| GET | /transactions/:id | OWNER, CASHIER | Detail + items + payments |
+| GET | /transactions | OWNER, CASHIER | List transaksi branch aktif (OWNER: semua/filter `?branchId=`) |
+| GET | /transactions/:id | OWNER, CASHIER | Detail + items + payments + struk data |
 | PATCH | /transactions/:id | OWNER, CASHIER | Edit DRAFT saja (items layanan, patient info) |
 | DELETE | /transactions/:id | OWNER, CASHIER | Buang DRAFT |
 | POST | /transactions/:id/pay | OWNER, CASHIER | Bayar → PAID (atomik, tanpa mutasi stok) |
@@ -218,7 +217,46 @@ Rules (semua dalam SATU `$transaction`):
 - Update `NumberSequence` → `transactionNumber = TRX-YYYYMMDD-00001`.
 - Set status `PAID`, `paidAt`, `cashierId`.
 - Tolak jika periode sudah closing → 409 `CLOSING_PERIOD_LOCKED`.
-- Response 201: data transaksi lengkap (untuk struk).
+- Response 200/201: data transaksi lengkap (untuk struk thermal):
+```json
+{
+  "success": true,
+  "data": {
+    "id": "uuid",
+    "transactionNumber": "TRX-20260907-00001",
+    "status": "PAID",
+    "branchId": "uuid",
+    "cashierId": "uuid",
+    "cashierName": "Siti Rahma",
+    "patientName": "Sulastri",
+    "patientPhone": "081234567890",
+    "subtotal": "150000.00",
+    "total": "150000.00",
+    "paidTotal": "150000.00",
+    "change": "0.00",
+    "paidAt": "2026-09-07T07:25:00.000Z",
+    "branch": {
+      "id": "uuid",
+      "code": "TBT",
+      "name": "Cabang Tebet Barat",
+      "address": "Jl. Tebet Barat Dalam Raya No. 12",
+      "phone": "0812-3456-7890"
+    },
+    "items": [
+      {
+        "id": "uuid",
+        "name": "Pembersihan Karang Gigi",
+        "price": "150000.00",
+        "quantity": 1,
+        "lineTotal": "150000.00"
+      }
+    ],
+    "payments": [
+      { "id": "uuid", "method": "CASH", "amount": "150000.00" }
+    ]
+  }
+}
+```
 
 **POST /transactions/:id/cancel** `[OWNER]`
 ```json

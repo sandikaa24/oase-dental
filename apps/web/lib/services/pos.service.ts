@@ -33,9 +33,10 @@ export function serializeTransaction<
       amount: Prisma.Decimal;
     }>;
   }
->(trx: T) {
+>(trx: T, cashierName?: string | null) {
   return {
     ...trx,
+    cashierName: cashierName ?? (trx as unknown as { cashierName?: string | null }).cashierName ?? null,
     subtotal: trx.subtotal.toString(),
     total: trx.total.toString(),
     items: trx.items?.map((item) => ({
@@ -57,11 +58,66 @@ const transactionInclude = {
       id: true,
       code: true,
       name: true,
+      address: true,
+      phone: true,
     },
   },
   items: true,
   payments: true,
 } as const;
+
+/**
+ * Resolusi nama kasir dari User -> Employee.name, dengan fallback username atau email.
+ */
+export async function getCashierName(cashierId: string | null | undefined): Promise<string | null> {
+  if (!cashierId) return null;
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: cashierId },
+      select: {
+        username: true,
+        email: true,
+        employee: {
+          select: { name: true },
+        },
+      },
+    });
+    if (!user) return null;
+    return user.employee?.name || user.username || user.email.split('@')[0] || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Batch resolusi nama kasir untuk efisiensi list transaksi
+ */
+export async function getCashierNamesBatch(cashierIds: (string | null | undefined)[]): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  const uniqueIds = [...new Set(cashierIds.filter((id): id is string => Boolean(id)))];
+  if (uniqueIds.length === 0) return map;
+
+  try {
+    const users = await prisma.user.findMany({
+      where: { id: { in: uniqueIds } },
+      select: {
+        id: true,
+        username: true,
+        email: true,
+        employee: {
+          select: { name: true },
+        },
+      },
+    });
+    for (const u of users) {
+      const name = u.employee?.name || u.username || u.email.split('@')[0];
+      if (name) map.set(u.id, name);
+    }
+  } catch {
+    // non-blocking
+  }
+  return map;
+}
 
 /**
  * POST /transactions
@@ -162,7 +218,8 @@ export async function createTransaction(
     return trx;
   });
 
-  return serializeTransaction(transaction);
+  const cashierName = await getCashierName(cashierId);
+  return serializeTransaction(transaction, cashierName);
 }
 
 /**
@@ -244,8 +301,10 @@ export async function listTransactions(
     prisma.transaction.count({ where }),
   ]);
 
+  const cashierMap = await getCashierNamesBatch(data.map((t) => t.cashierId));
+
   return {
-    data: data.map(serializeTransaction),
+    data: data.map((t) => serializeTransaction(t, cashierMap.get(t.cashierId) ?? null)),
     total,
     page: params.page,
     limit: params.limit,
@@ -276,7 +335,8 @@ export async function getTransactionById(
     throw new ForbiddenError('Akses ditolak untuk transaksi cabang lain');
   }
 
-  return serializeTransaction(transaction);
+  const cashierName = await getCashierName(transaction.cashierId);
+  return serializeTransaction(transaction, cashierName);
 }
 
 /**
@@ -388,7 +448,8 @@ export async function updateTransaction(
     return res;
   });
 
-  return serializeTransaction(updated);
+  const cashierName = await getCashierName(existing.cashierId);
+  return serializeTransaction(updated, cashierName);
 }
 
 /**
@@ -598,8 +659,11 @@ export async function payTransaction(
     return updated;
   });
 
+  const cashierName = await getCashierName(cashierId);
+
   return {
-    ...serializeTransaction(paidTransaction),
+    ...serializeTransaction(paidTransaction, cashierName),
+    cashierName,
     paidTotal: paidTotal.toString(),
     change: change.toString(),
   };
@@ -678,7 +742,8 @@ export async function cancelTransaction(
     return res;
   });
 
-  return serializeTransaction(cancelled);
+  const cashierName = await getCashierName(existing.cashierId);
+  return serializeTransaction(cancelled, cashierName);
 }
 
 /**

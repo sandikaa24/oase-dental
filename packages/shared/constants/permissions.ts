@@ -68,7 +68,8 @@ export const PERMISSION_MATRIX: Record<UserRole, readonly Permission[]> = {
     Permission.ATTENDANCE_SELF,
     Permission.ATTENDANCE_VIEW_ALL,
     Permission.LEAVE_REQUEST,
-    Permission.LEAVE_DECIDE
+    Permission.LEAVE_DECIDE,
+    Permission.PORTAL_CONTENT_MANAGE
   ],
   CASHIER: [
     Permission.POS_CREATE,

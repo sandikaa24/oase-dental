@@ -45,6 +45,7 @@ const testSuites = [
   'phase3-task10-test.mjs',
   'phase3-task13-2-test.mjs',
   'phase3-task-b1-stock-test.mjs',
+  'task-b2-profit-loss-test.mjs',
 ];
 
 console.log('======================================================================');
@@ -63,7 +64,7 @@ console.log('===================================================================
  */
 function countResults(suite, stdout) {
   // 1. Explicit summary: "HASIL TEST SUITE: X PASSED, Y FAILED"
-  let m = stdout.match(/HASIL TEST SUITE:\s*(\d+)\s*PASSED,\s*(\d+)\s*FAILED/i);
+  let m = stdout.match(/HASIL TEST SUITE.*:\s*(\d+)\s*PASS(?:ED)?,\s*(\d+)\s*FAIL(?:ED)?/i);
   if (m) return { pass: parseInt(m[1], 10), fail: parseInt(m[2], 10) };
 
   // 2. Summary: "HASIL: X PASS | Y FAIL"

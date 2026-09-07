@@ -21,15 +21,34 @@ export async function getAuditLogs(
   };
 
   const total = await prisma.auditLog.count({ where });
-  const data = await prisma.auditLog.findMany({
+  const rawData = await prisma.auditLog.findMany({
     where,
     include: {
-      actor: { select: { email: true, employee: { select: { name: true } } } }
+      actor: {
+        select: {
+          id: true,
+          email: true,
+          role: true,
+          employee: { select: { name: true } },
+        },
+      },
     },
     orderBy: { createdAt: 'desc' },
     skip: (page - 1) * limit,
     take: limit,
   });
+
+  const data = rawData.map((log) => ({
+    ...log,
+    actor: log.actor
+      ? {
+          id: log.actor.id,
+          email: log.actor.email,
+          role: log.actor.role,
+          name: log.actor.employee?.name || log.actor.email,
+        }
+      : null,
+  }));
 
   return {
     data,

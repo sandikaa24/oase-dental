@@ -42,13 +42,13 @@ export function Badge({
   );
 }
 
-export interface RoleBadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
-  role: UserRole | string;
+export interface RoleBadgeProps extends Omit<React.HTMLAttributes<HTMLSpanElement>, 'role'> {
+  role?: UserRole | string | null;
   size?: 'sm' | 'md';
 }
 
 export function RoleBadge({ role, size = 'md', className, ...props }: RoleBadgeProps) {
-  const normalizedRole = role.toUpperCase();
+  const normalizedRole = (role ?? '').trim().toUpperCase();
 
   const roleStyles: Record<string, string> = {
     OWNER: 'bg-role-owner-bg text-role-owner-text border border-purple-200',
@@ -57,12 +57,15 @@ export function RoleBadge({ role, size = 'md', className, ...props }: RoleBadgeP
     EMPLOYEE: 'bg-role-employee-bg text-role-employee-text border border-slate-200',
   };
 
-  const currentStyle = roleStyles[normalizedRole] || 'bg-slate-100 text-slate-700 border border-slate-200';
+  const currentStyle =
+    roleStyles[normalizedRole] || 'bg-slate-100 text-slate-700 border border-slate-200';
 
   const sizes = {
     sm: 'px-2 py-0.5 text-xs font-semibold rounded-full',
     md: 'px-2.5 py-0.5 text-xs font-semibold rounded-full',
   };
+
+  const displayRole = normalizedRole || '-';
 
   return (
     <span
@@ -74,7 +77,7 @@ export function RoleBadge({ role, size = 'md', className, ...props }: RoleBadgeP
       )}
       {...props}
     >
-      {normalizedRole}
+      {displayRole}
     </span>
   );
 }

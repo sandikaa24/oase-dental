@@ -133,8 +133,14 @@ for (const suite of testSuites) {
     const durationMs = Date.now() - start;
     const duration = (durationMs / 1000).toFixed(1);
     const counts = countResults(suite, output);
-    console.log(`[PASS] (${duration}s) — ${counts.pass} test`);
-    results.push({ suite, status: 'PASS', duration, durationMs, pass: counts.pass, fail: counts.fail });
+    if (counts.fail > 0) {
+      console.log(`[FAIL] (${duration}s) — ${counts.pass} pass, ${counts.fail} fail`);
+      results.push({ suite, status: 'FAIL', duration, durationMs, pass: counts.pass, fail: counts.fail });
+      allPassed = false;
+    } else {
+      console.log(`[PASS] (${duration}s) — ${counts.pass} test`);
+      results.push({ suite, status: 'PASS', duration, durationMs, pass: counts.pass, fail: 0 });
+    }
   } catch (err) {
     const durationMs = Date.now() - start;
     const duration = (durationMs / 1000).toFixed(1);
@@ -186,9 +192,9 @@ console.log(divider);
 const suitePassCount = results.filter(r => r.status === 'PASS').length;
 console.log(`\nSuite: ${suitePassCount}/${testSuites.length} BERHASIL | Test: ${totalPass} PASS, ${totalFail} FAIL (${totalTests} total) | Waktu: ${totalDuration}s`);
 
-if (!allPassed) {
-  console.error('\nAda suite yang gagal!');
+if (!allPassed || totalFail > 0 || suitePassCount < testSuites.length) {
+  console.error(`\n❌ REGRESI GAGAL: ${totalFail} test gagal di ${testSuites.length - suitePassCount} suite!`);
   process.exit(1);
 } else {
-  console.log('\nSEMUA SUITE 100% HIJAU!');
+  console.log(`\n✅ SEMUA SUITE 100% HIJAU! (${totalPass}/${totalTests} PASS, 0 GAGAL)`);
 }

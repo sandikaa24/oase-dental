@@ -26,9 +26,11 @@ function extractCookie(res) {
   const fullHeader = setCookies.join('; ');
   const token = fullHeader.match(/access_token=([^;]+)/);
   const refresh = fullHeader.match(/refresh_token=([^;]+)/);
+  const branchContext = fullHeader.match(/oase_branch_context=([^;]+)/);
   const cookieList = [];
   if (token) cookieList.push(`access_token=${token[1]}`);
   if (refresh) cookieList.push(`refresh_token=${refresh[1]}`);
+  if (branchContext) cookieList.push(`oase_branch_context=${branchContext[1]}`);
   return cookieList.join('; ');
 }
 
@@ -92,6 +94,13 @@ async function runSuite() {
 
   const managerAuth = await login(mgrEmail, 'Password123');
   assert(managerAuth.status === 200, 'Login MANAGER berhasil', `Email: ${mgrEmail}`);
+  // Amandemen D4: Manager konfirmasi cabang via /select-branch agar aksi inventaris memiliki branchContext
+  const mgrSelectRes = await fetch(`${BASE_URL}/api/v1/auth/select-branch`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: managerAuth.cookies },
+    body: JSON.stringify({ branchId }),
+  });
+  managerAuth.cookies = extractCookie(mgrSelectRes) || managerAuth.cookies;
 
   // Buat Cashier dinamis dengan 1 branch
   const cashierEmpRes = await fetch(`${BASE_URL}/api/v1/employees`, {
@@ -121,6 +130,13 @@ async function runSuite() {
 
   const cashierAuth = await login(cashierEmail, 'Password123');
   assert(cashierAuth.status === 200, 'Login CASHIER berhasil', `Email: ${cashierEmail}`);
+  // Amandemen D4: Cashier konfirmasi cabang via /select-branch agar transaksi POS memiliki branchContext
+  const cashierSelectRes = await fetch(`${BASE_URL}/api/v1/auth/select-branch`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: cashierAuth.cookies },
+    body: JSON.stringify({ branchId }),
+  });
+  cashierAuth.cookies = extractCookie(cashierSelectRes) || cashierAuth.cookies;
 
   // --- SECTION 1: MASTER KATEGORI ---
   console.log('\n--- MD-1: Master Kategori (CRUD & Unique Guard) ---');
@@ -430,6 +446,9 @@ async function runSuite() {
   console.log('\n======================================================================');
   console.log(`HASIL TEST SUITE: ${passedCount} PASSED, ${failedCount} FAILED (TOTAL: ${passedCount + failedCount})`);
   console.log('======================================================================');
+  if (failedCount > 0) {
+    process.exit(1);
+  }
 }
 
 runSuite().catch((err) => {

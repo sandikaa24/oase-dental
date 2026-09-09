@@ -26,9 +26,11 @@ function extractCookie(res) {
   const fullHeader = setCookies.join('; ');
   const token = fullHeader.match(/access_token=([^;]+)/);
   const refresh = fullHeader.match(/refresh_token=([^;]+)/);
+  const branchContext = fullHeader.match(/oase_branch_context=([^;]+)/);
   const cookieList = [];
   if (token) cookieList.push(`access_token=${token[1]}`);
   if (refresh) cookieList.push(`refresh_token=${refresh[1]}`);
+  if (branchContext) cookieList.push(`oase_branch_context=${branchContext[1]}`);
   return cookieList.join('; ');
 }
 
@@ -333,12 +335,25 @@ async function runSuite() {
   });
   assert(res.status === 201, 'E2E-1.4: Pembuatan Akun User CASHIER berhasil');
 
-  // 5. Login Kasir Baru -> activeBranchId otomatis = e2eBranchId
+  // 5. Amandemen D4: Login Kasir baru mengembalikan activeBranchId null (tidak auto-context)
   const e2eCashierAuth = await login(e2eCashierEmail, 'PasswordKasir123');
   assert(
-    e2eCashierAuth.status === 200 && e2eCashierAuth.body.data?.user?.activeBranchId === e2eBranchId,
-    'E2E-1.5: Login Kasir baru berhasil dan activeBranchId otomatis terpasang ke cabang baru',
+    e2eCashierAuth.status === 200 && e2eCashierAuth.body.data?.user?.activeBranchId === null,
+    'E2E-1.5: Amandemen D4: Login Kasir baru berhasil tanpa auto-context (activeBranchId null, wajib konfirmasi cabang)',
     `ActiveBranchId: ${e2eCashierAuth.body.data?.user?.activeBranchId}`
+  );
+
+  // Amandemen D4: Kasir konfirmasi cabang via /select-branch
+  const e2eSelectRes = await fetch(`${BASE_URL}/api/v1/auth/select-branch`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: e2eCashierAuth.cookies },
+    body: JSON.stringify({ branchId: e2eBranchId }),
+  });
+  const e2eSelectBody = await e2eSelectRes.json();
+  assert(
+    e2eSelectRes.status === 200 && e2eSelectBody.data?.user?.activeBranchId === e2eBranchId,
+    'E2E-1.5b: Konfirmasi cabang via /select-branch berhasil mengaktifkan branchContext ke cabang baru',
+    `ActiveBranchId: ${e2eSelectBody.data?.user?.activeBranchId}`
   );
 
   // 6. OWNER Melakukan Stock-In Bahan di Cabang Baru via branchId eksplisit
@@ -416,6 +431,9 @@ async function runSuite() {
   console.log('\n======================================================================');
   console.log(`HASIL TEST SUITE: ${passedCount} PASSED, ${failedCount} FAILED (TOTAL: ${passedCount + failedCount})`);
   console.log('======================================================================');
+  if (failedCount > 0) {
+    process.exit(1);
+  }
 }
 
 runSuite().catch((err) => {

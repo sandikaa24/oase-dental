@@ -38,9 +38,11 @@ function extractCookie(res) {
   const fullHeader = setCookies.join('; ');
   const token = fullHeader.match(/access_token=([^;]+)/);
   const refresh = fullHeader.match(/refresh_token=([^;]+)/);
+  const branchContext = fullHeader.match(/oase_branch_context=([^;]+)/);
   const cookieList = [];
   if (token) cookieList.push(`access_token=${token[1]}`);
   if (refresh) cookieList.push(`refresh_token=${refresh[1]}`);
+  if (branchContext) cookieList.push(`oase_branch_context=${branchContext[1]}`);
   return cookieList.join('; ');
 }
 
@@ -99,7 +101,13 @@ async function runSuite() {
   });
   const mgrAuth = await login(mgrEmail, 'PasswordManager123');
   assert(mgrAuth.status === 200, 'Login MANAGER berhasil');
-  const mgrCookies = mgrAuth.cookies;
+  // Amandemen D4: Semua role wajib konfirmasi cabang sebelum memanggil endpoint operasional inventaris
+  const mgrSelectRes = await fetch(`${BASE_URL}/api/v1/auth/select-branch`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: mgrAuth.cookies },
+    body: JSON.stringify({ branchId }),
+  });
+  const mgrCookies = extractCookie(mgrSelectRes) || mgrAuth.cookies;
 
   const cashierEmpRes = await fetch(`${BASE_URL}/api/v1/employees`, {
     method: 'POST',
@@ -125,7 +133,13 @@ async function runSuite() {
   });
   const cashierAuth = await login(cashierEmail, 'PasswordKasir123');
   assert(cashierAuth.status === 200, 'Login CASHIER berhasil');
-  const cashierCookies = cashierAuth.cookies;
+  // Amandemen D4: Cashier wajib konfirmasi cabang via /select-branch
+  const cashierSelectRes = await fetch(`${BASE_URL}/api/v1/auth/select-branch`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: cashierAuth.cookies },
+    body: JSON.stringify({ branchId }),
+  });
+  const cashierCookies = extractCookie(cashierSelectRes) || cashierAuth.cookies;
 
   // Setup / Ambil Master Bahan Medis
   const matListRes = await fetch(`${BASE_URL}/api/v1/materials`, {
@@ -602,6 +616,9 @@ async function runSuite() {
   console.log('\n======================================================================');
   console.log(`HASIL TEST SUITE: ${passedCount} PASSED, ${failedCount} FAILED (TOTAL: ${passedCount + failedCount})`);
   console.log('======================================================================');
+  if (failedCount > 0) {
+    process.exit(1);
+  }
 }
 
 runSuite().catch((err) => {

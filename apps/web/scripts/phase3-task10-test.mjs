@@ -13,7 +13,10 @@ async function login(email, password) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password }),
   });
-  if (!res.ok) throw new Error(`Login failed for ${email}`);
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(`Login failed for ${email}: ${res.status} ${txt}`);
+  }
   const cookie = res.headers.get('set-cookie');
   return cookie;
 }
@@ -37,8 +40,12 @@ async function run() {
   await prisma.user.updateMany({ data: { passwordHash: hash } });
 
   const owner = await prisma.user.findFirst({ where: { role: 'OWNER', active: true } });
-  const manager = await prisma.user.findFirst({ where: { role: 'MANAGER', active: true } });
-  const cashier = await prisma.user.findFirst({ where: { role: 'CASHIER', active: true } });
+  const manager = await prisma.user.findFirst({
+    where: { role: 'MANAGER', active: true, employee: { active: true } },
+  });
+  const cashier = await prisma.user.findFirst({
+    where: { role: 'CASHIER', active: true, employee: { active: true } },
+  });
 
   const ownerCookie = await login(owner.email, '1234');
   const managerCookie = manager ? await login(manager.email, '1234') : null;

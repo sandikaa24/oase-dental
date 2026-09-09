@@ -1,8 +1,14 @@
 /**
  * Probe Live Production/Staging on Vercel: https://oase-dental.vercel.app/api/v1
+ * Membaca kredensial dari environment variable (tanpa kredensial hardcoded).
  */
 
-const API_BASE = 'https://oase-dental.vercel.app/api/v1';
+const API_BASE = process.env.PROBE_API_BASE || 'https://oase-dental.vercel.app/api/v1';
+
+const OWNER_EMAIL = process.env.PROBE_OWNER_EMAIL || process.env.SEED_OWNER_EMAIL;
+const OWNER_PASSWORD = process.env.PROBE_OWNER_PASSWORD || process.env.SEED_OWNER_PASSWORD;
+const CASHIER_EMAIL = process.env.PROBE_CASHIER_EMAIL;
+const CASHIER_PASSWORD = process.env.PROBE_CASHIER_PASSWORD;
 
 function parseCookies(res) {
   const cookieStrings = [];
@@ -23,7 +29,11 @@ function parseCookies(res) {
     if (eqIdx !== -1) {
       const name = firstPart.substring(0, eqIdx).trim();
       const val = firstPart.substring(eqIdx + 1).trim();
-      map[name] = val;
+      map[name] = {
+        name,
+        value: val,
+        raw: str,
+      };
     }
   }
   return map;
@@ -32,7 +42,7 @@ function parseCookies(res) {
 function buildCookieHeader(cookieMap) {
   return Object.entries(cookieMap)
     .filter(([_, v]) => v !== undefined && v !== null && v !== '')
-    .map(([k, v]) => `${k}=${v}`)
+    .map(([k, v]) => `${k}=${typeof v === 'object' ? v.value : v}`)
     .join('; ');
 }
 
@@ -61,78 +71,120 @@ async function req(path, method = 'GET', body = null, cookieMap = null) {
 
 async function run() {
   console.log('======================================================================');
-  console.log('PROBE LIVE: https://oase-dental.vercel.app/api/v1');
+  console.log(`PROBE LIVE: ${API_BASE}`);
   console.log('======================================================================\n');
 
-  // Probe 1: POST /auth/login OWNER tanpa remembered -> 200, context null
-  console.log('1. Probe POST /auth/login OWNER tanpa remembered:');
-  const r1 = await req('/auth/login', 'POST', {
-    email: 'qa.owner@oase.id',
-    password: '1234',
+  if (!OWNER_EMAIL || !OWNER_PASSWORD || !CASHIER_EMAIL || !CASHIER_PASSWORD) {
+    console.error('❌ Error: Kredensial tidak ditemukan di environment variable.');
+    console.error('Wajib diset: PROBE_OWNER_EMAIL, PROBE_OWNER_PASSWORD, PROBE_CASHIER_EMAIL, PROBE_CASHIER_PASSWORD.');
+    process.exit(1);
+  }
+
+  // ─── 1. Login Kasir Aktif ──────────────────────────────────────────────────
+  console.log('1. Probe Login Kasir Aktif:');
+  const rCashierLogin = await req('/auth/login', 'POST', {
+    identifier: CASHIER_EMAIL,
+    password: CASHIER_PASSWORD,
   });
-  console.log('   Status:', r1.status);
-  console.log('   Role:', r1.data?.data?.user?.role);
-  console.log('   branchContext:', r1.data?.data?.user?.branchContext);
-  console.log('   activeBranchId:', r1.data?.data?.user?.activeBranchId);
-  const p1Success = r1.status === 200 && r1.data?.data?.user?.role === 'OWNER' && r1.data?.data?.user?.branchContext === null;
+  console.log('   Status:', rCashierLogin.status);
+  console.log('   Role:', rCashierLogin.data?.data?.user?.role);
+  const cashierId = rCashierLogin.data?.data?.user?.id;
+  console.log('   Cashier ID:', cashierId);
+  const p1Success = rCashierLogin.status === 200 && rCashierLogin.data?.data?.user?.role === 'CASHIER';
   console.log('   Result:', p1Success ? '✅ PASS' : '❌ FAIL');
 
-  // Probe 2: POST /auth/select-branch ALL -> 200, cookie context=ALL
-  console.log('\n2. Probe POST /auth/select-branch ALL:');
-  const ownerCookies = {
-    access_token: r1.cookies['access_token'],
+  const cashierOldCookies = {
+    access_token: rCashierLogin.cookies['access_token']?.value,
+    refresh_token: rCashierLogin.cookies['refresh_token']?.value,
   };
-  const r2 = await req('/auth/select-branch', 'POST', {
-    branchId: 'ALL',
-  }, ownerCookies);
-  console.log('   Status:', r2.status);
-  console.log('   branchContext:', r2.data?.data?.user?.branchContext);
-  console.log('   oase_branch_context cookie:', r2.cookies['oase_branch_context']);
-  const p2Success = r2.status === 200 && r2.data?.data?.user?.branchContext === 'ALL' && r2.cookies['oase_branch_context'] === 'ALL';
-  console.log('   Result:', p2Success ? '✅ PASS' : '❌ FAIL');
 
-  // Probe 3: POST /api/v1/transactions dengan context ALL -> 400 BRANCH_CONTEXT_REQUIRED
-  console.log('\n3. Probe POST /api/v1/transactions dengan context ALL:');
-  const ownerAllCookies = {
-    ...ownerCookies,
-    oase_branch_context: 'ALL',
-  };
-  const r3 = await req('/transactions', 'POST', {
-    items: [],
-    paymentMethod: 'CASH',
-  }, ownerAllCookies);
-  console.log('   Status:', r3.status);
-  console.log('   Code:', r3.data?.code);
-  console.log('   Message:', r3.data?.message);
-  const p3Success = r3.status === 400 && r3.data?.code === 'BRANCH_CONTEXT_REQUIRED';
-  console.log('   Result:', p3Success ? '✅ PASS' : '❌ FAIL');
-
-  // Probe 4: POST /auth/select-branch ALL dengan token CASHIER -> 403 FORBIDDEN
-  console.log('\n4. Probe POST /auth/select-branch ALL dengan token CASHIER:');
-  const rCashierLogin = await req('/auth/login', 'POST', {
-    email: 'rina@oase.id',
-    password: '123456',
+  // ─── 2. Login Owner untuk Administrasi ─────────────────────────────────────
+  console.log('\n2. Login Owner untuk Operasi Administrasi:');
+  const rOwnerLogin = await req('/auth/login', 'POST', {
+    identifier: OWNER_EMAIL,
+    password: OWNER_PASSWORD,
   });
-  console.log('   Login CASHIER status:', rCashierLogin.status);
-  const cashierCookies = {
-    access_token: rCashierLogin.cookies['access_token'],
+  console.log('   Status:', rOwnerLogin.status);
+  const ownerCookies = {
+    access_token: rOwnerLogin.cookies['access_token']?.value,
   };
-  const r4 = await req('/auth/select-branch', 'POST', {
-    branchId: 'ALL',
-  }, cashierCookies);
-  console.log('   Status:', r4.status);
-  console.log('   Code:', r4.data?.code);
-  console.log('   Message:', r4.data?.message);
-  const p4Success = r4.status === 403 && r4.data?.code === 'FORBIDDEN';
-  console.log('   Result:', p4Success ? '✅ PASS' : '❌ FAIL');
+
+  let p2Success = false;
+  let p3Success = false;
+  let p4Success = false;
+
+  try {
+    // ─── 3. Nonaktifkan Kasir via Owner ──────────────────────────────────────
+    console.log('\n3. Owner Menonaktifkan Kasir:');
+    const rDeactivate = await req(`/users/${cashierId}/status`, 'PATCH', {
+      active: false,
+    }, ownerCookies);
+    console.log('   Status:', rDeactivate.status);
+    console.log('   active:', rDeactivate.data?.data?.active);
+    const deactivatedOk = rDeactivate.status === 200 && rDeactivate.data?.data?.active === false;
+    console.log('   Result:', deactivatedOk ? '✅ Berhasil Dinonaktifkan' : '❌ Gagal Dinonaktifkan');
+
+    // ─── 4. Request Berikutnya dengan Token Lama (GET /users) ─────────────────
+    console.log('\n4. Request Berikutnya dengan Token Lama Kasir (GET /users):');
+    const rOldTokenReq = await req('/users', 'GET', null, cashierOldCookies);
+    console.log('   Status:', rOldTokenReq.status);
+    console.log('   Code:', rOldTokenReq.data?.code);
+    console.log('   Message:', rOldTokenReq.data?.message);
+    p2Success = rOldTokenReq.status === 401 && rOldTokenReq.data?.code === 'ACCOUNT_DISABLED';
+    console.log('   Result:', p2Success ? '✅ PASS' : '❌ FAIL');
+
+    // ─── 5. Login Ulang Kasir Nonaktif (Kredensial Benar) ─────────────────────
+    console.log('\n5. Login Ulang Kasir Nonaktif (Kredensial Benar):');
+    const rLoginDisabled = await req('/auth/login', 'POST', {
+      identifier: CASHIER_EMAIL,
+      password: CASHIER_PASSWORD,
+    }, {
+      oase_remembered_branch: 'some-branch',
+    });
+    console.log('   Status:', rLoginDisabled.status);
+    console.log('   Code:', rLoginDisabled.data?.code);
+    console.log('   Message:', rLoginDisabled.data?.message);
+    console.log('   Cleared remembered_branch:', rLoginDisabled.cookies['oase_remembered_branch']?.value === '');
+    p3Success =
+      rLoginDisabled.status === 401 &&
+      rLoginDisabled.data?.code === 'ACCOUNT_DISABLED' &&
+      rLoginDisabled.cookies['oase_remembered_branch']?.value === '';
+    console.log('   Result:', p3Success ? '✅ PASS' : '❌ FAIL');
+
+  } finally {
+    // ─── 6. Aktifkan Kembali Kasir (PASTIKAN SELALU JALAN) ───────────────────
+    console.log('\n6. Owner Mengaktifkan Kembali Kasir (Rollback / Restore):');
+    const rReactivate = await req(`/users/${cashierId}/status`, 'PATCH', {
+      active: true,
+    }, ownerCookies);
+    console.log('   Status:', rReactivate.status);
+    console.log('   active:', rReactivate.data?.data?.active);
+    const reactivatedOk = rReactivate.status === 200 && rReactivate.data?.data?.active === true;
+    console.log('   Result:', reactivatedOk ? '✅ Berhasil Diaktifkan Kembali' : '❌ Gagal Mengaktifkan Kembali');
+
+    // ─── 7. Login Normal Kasir Setelah Diaktifkan Kembali ─────────────────────
+    console.log('\n7. Login Normal Kasir Setelah Diaktifkan Kembali:');
+    const rLoginRestored = await req('/auth/login', 'POST', {
+      identifier: CASHIER_EMAIL,
+      password: CASHIER_PASSWORD,
+    });
+    console.log('   Status:', rLoginRestored.status);
+    console.log('   Role:', rLoginRestored.data?.data?.user?.role);
+    p4Success = rLoginRestored.status === 200 && rLoginRestored.data?.data?.user?.role === 'CASHIER';
+    console.log('   Result:', p4Success ? '✅ PASS' : '❌ FAIL');
+  }
 
   console.log('\n======================================================================');
-  console.log('SUMMARY PROBE LIVE:');
-  console.log(`- Probe 1 (OWNER Login context null): ${p1Success ? 'PASSED' : 'FAILED'}`);
-  console.log(`- Probe 2 (OWNER Select ALL context=ALL): ${p2Success ? 'PASSED' : 'FAILED'}`);
-  console.log(`- Probe 3 (Transactions context ALL -> 400): ${p3Success ? 'PASSED' : 'FAILED'}`);
-  console.log(`- Probe 4 (CASHIER Select ALL -> 403): ${p4Success ? 'PASSED' : 'FAILED'}`);
+  console.log('SUMMARY PROBE LIVE AUDIT SESI NONAKTIF:');
+  console.log(`- Probe 1 (Login Kasir Aktif -> 200): ${p1Success ? 'PASSED' : 'FAILED'}`);
+  console.log(`- Probe 2 (Token Lama Kasir Nonaktif -> 401 ACCOUNT_DISABLED): ${p2Success ? 'PASSED' : 'FAILED'}`);
+  console.log(`- Probe 3 (Login Kasir Nonaktif -> 401 ACCOUNT_DISABLED + Clear Cookie): ${p3Success ? 'PASSED' : 'FAILED'}`);
+  console.log(`- Probe 4 (Kasir Diaktifkan Kembali -> Login 200 Normal): ${p4Success ? 'PASSED' : 'FAILED'}`);
   console.log('======================================================================');
+
+  if (!p1Success || !p2Success || !p3Success || !p4Success) {
+    process.exit(1);
+  }
 }
 
 run();

@@ -13,6 +13,7 @@ import {
   ForbiddenError,
   NotFoundError,
   UnauthorizedError,
+  AccountDisabledError,
 } from '../errors';
 import {
   getPermissions,
@@ -148,7 +149,8 @@ export async function login(input: {
 
   const passwordValid = user ? await verifyPassword(input.password, user.passwordHash) : false;
 
-  if (!user || !passwordValid || !user.active) {
+  // Kredensial salah (user tidak ditemukan atau password tidak cocok) -> pesan samar 401 UNAUTHORIZED
+  if (!user || !passwordValid) {
     // Audit tanpa PII: simpan id bila user dikenal, tidak menyimpan email/password.
     await prisma.auditLog.create({
       data: {
@@ -157,12 +159,28 @@ export async function login(input: {
         entity: 'User',
         entityId: user?.id ?? null,
         ip: input.ip,
-        note: 'Login gagal',
+        note: 'Login gagal: kredensial salah',
       },
     });
 
     // Pesan sengaja generik agar tidak membocorkan email mana yang terdaftar.
     throw new UnauthorizedError('Email atau password salah');
+  }
+
+  // Kredensial BENAR, tapi akun nonaktif (Amandemen A2) -> pesan jelas 401 ACCOUNT_DISABLED
+  if (!user.active) {
+    await prisma.auditLog.create({
+      data: {
+        actorId: user.id,
+        action: 'LOGIN_FAILED',
+        entity: 'User',
+        entityId: user.id,
+        ip: input.ip,
+        note: 'Login gagal: akun dinonaktifkan',
+      },
+    });
+
+    throw new AccountDisabledError('Akun telah dinonaktifkan. Hubungi administrator.');
   }
 
   const role = user.role as UserRole;
@@ -171,8 +189,19 @@ export async function login(input: {
     throw new ForbiddenError('Akun non-OWNER belum terhubung ke data karyawan');
   }
 
+  // Kredensial BENAR, tapi karyawan nonaktif (Amandemen A2) -> pesan jelas 401 ACCOUNT_DISABLED
   if (role !== 'OWNER' && user.employee && !user.employee.active) {
-    throw new ForbiddenError('Data karyawan sudah tidak aktif');
+    await prisma.auditLog.create({
+      data: {
+        actorId: user.id,
+        action: 'LOGIN_FAILED',
+        entity: 'User',
+        entityId: user.id,
+        ip: input.ip,
+        note: 'Login gagal: data karyawan dinonaktifkan',
+      },
+    });
+    throw new AccountDisabledError('Data karyawan telah dinonaktifkan. Hubungi administrator.');
   }
 
   const branches = await getAssignedBranches(user.id);
@@ -310,19 +339,33 @@ export async function refreshSession(
 
   const stored = await prisma.refreshToken.findUnique({
     where: { tokenHash: hashRefreshToken(rawRefreshToken) },
+    include: {
+      user: {
+        include: { employee: { select: { name: true, active: true } } },
+      },
+    },
   });
 
-  if (!stored || stored.revokedAt || stored.expiresAt.getTime() <= Date.now()) {
+  if (!stored) {
     throw new UnauthorizedError('Refresh token sudah tidak berlaku');
   }
 
-  const user = await prisma.user.findUnique({
-    where: { id: payload.userId },
-    include: { employee: { select: { name: true } } },
-  });
+  const user = stored.user;
 
-  if (!user || !user.active) {
-    throw new UnauthorizedError('Akun tidak aktif atau tidak ditemukan');
+  if (!user) {
+    throw new UnauthorizedError('Akun tidak ditemukan');
+  }
+
+  if (!user.active) {
+    throw new AccountDisabledError('Akun telah dinonaktifkan. Hubungi administrator.');
+  }
+
+  if (user.role !== 'OWNER' && user.employee && !user.employee.active) {
+    throw new AccountDisabledError('Data karyawan telah dinonaktifkan. Hubungi administrator.');
+  }
+
+  if (stored.revokedAt || stored.expiresAt.getTime() <= Date.now()) {
+    throw new UnauthorizedError('Refresh token sudah tidak berlaku');
   }
 
   const role = user.role as UserRole;

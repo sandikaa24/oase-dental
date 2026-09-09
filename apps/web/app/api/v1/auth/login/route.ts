@@ -1,14 +1,16 @@
 import type { NextRequest } from 'next/server';
 import { withErrorHandler } from '@/lib/error-handler';
 import { getClientIp } from '@/lib/middleware';
-import { ok } from '@/lib/response';
+import { ok, fail } from '@/lib/response';
 import {
   setAuthCookies,
+  clearAuthCookies,
   setBranchContextCookie,
   clearBranchContextCookie,
   clearRememberedBranchCookie,
 } from '@/lib/cookies';
 import { REMEMBERED_BRANCH_COOKIE } from '@/lib/auth';
+import { AccountDisabledError } from '@/lib/errors';
 import { loginSchema } from '@/lib/validations/auth.schema';
 import { login } from '@/lib/services/auth.service';
 import {
@@ -63,6 +65,13 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
     return res;
   } catch (error) {
     recordLoginFailure(rateLimitKey);
+    if (error instanceof AccountDisabledError) {
+      const res = fail(error);
+      clearAuthCookies(res);
+      clearBranchContextCookie(res);
+      clearRememberedBranchCookie(res);
+      return res;
+    }
     throw error;
   }
 });

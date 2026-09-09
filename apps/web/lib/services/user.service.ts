@@ -327,6 +327,14 @@ export async function setUserStatus(
       select: userPublicSelect,
     });
 
+    if (!active) {
+      // Sesi langsung mati: revoke semua refresh token aktif milik user ini
+      await tx.refreshToken.updateMany({
+        where: { userId: id, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+    }
+
     await tx.auditLog.create({
       data: {
         actorId,

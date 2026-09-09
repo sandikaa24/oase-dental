@@ -313,6 +313,20 @@ export async function setEmployeeStatus(
       data: { active },
     });
 
+    if (!active) {
+      // Sesi langsung mati: cari akun user tertaut dan revoke semua refresh token-nya
+      const linkedUser = await tx.user.findFirst({
+        where: { employeeId: id },
+        select: { id: true },
+      });
+      if (linkedUser) {
+        await tx.refreshToken.updateMany({
+          where: { userId: linkedUser.id, revokedAt: null },
+          data: { revokedAt: new Date() },
+        });
+      }
+    }
+
     await tx.auditLog.create({
       data: {
         actorId,

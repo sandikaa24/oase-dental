@@ -32,6 +32,12 @@ export class UnauthorizedError extends AppError {
   }
 }
 
+export class AccountDisabledError extends AppError {
+  constructor(message: string = 'Akun telah dinonaktifkan. Hubungi administrator.') {
+    super(message, 401, 'ACCOUNT_DISABLED');
+  }
+}
+
 export class ForbiddenError extends AppError {
   constructor(message: string = 'Akses ditolak') {
     super(message, 403, 'FORBIDDEN');

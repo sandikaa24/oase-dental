@@ -6,8 +6,14 @@ import {
   verifyAccessToken,
   type AccessTokenPayload,
 } from './auth';
-import { ForbiddenError, UnauthorizedError, BranchContextRequiredError } from './errors';
+import {
+  ForbiddenError,
+  UnauthorizedError,
+  AccountDisabledError,
+  BranchContextRequiredError,
+} from './errors';
 import { hasPermission, type Permission, type UserRole } from '@oase/shared';
+import { prisma } from './prisma';
 
 
 /**
@@ -25,7 +31,9 @@ export interface AuthContext {
 
 /**
  * Ambil & verifikasi access token dari httpOnly cookie.
+ * Amandemen A1: Cek user.active dan employee.active ke database per request (findUnique ber-include).
  * Throw UnauthorizedError jika cookie tidak ada atau token invalid/expired.
+ * Throw AccountDisabledError (401 ACCOUNT_DISABLED) jika akun atau karyawan nonaktif.
  */
 export async function requireAuth(): Promise<AuthContext> {
   const store = cookies();
@@ -43,10 +51,38 @@ export async function requireAuth(): Promise<AuthContext> {
     throw new UnauthorizedError('Token tidak valid atau kedaluwarsa');
   }
 
+  // Amandemen A1: Jaga performa dengan single findUnique ber-include
+  const user = await prisma.user.findUnique({
+    where: { id: payload.userId },
+    select: {
+      id: true,
+      active: true,
+      role: true,
+      employee: {
+        select: {
+          id: true,
+          active: true,
+        },
+      },
+    },
+  });
+
+  if (!user) {
+    throw new UnauthorizedError('Akun tidak ditemukan');
+  }
+
+  if (!user.active) {
+    throw new AccountDisabledError('Akun telah dinonaktifkan. Hubungi administrator.');
+  }
+
+  if (user.role !== 'OWNER' && user.employee && !user.employee.active) {
+    throw new AccountDisabledError('Data karyawan telah dinonaktifkan. Hubungi administrator.');
+  }
+
   return {
     userId: payload.userId,
     email: payload.email,
-    role: payload.role as UserRole,
+    role: (user.role as UserRole) || (payload.role as UserRole),
     branchId: payload.branchId,
     employeeId: payload.employeeId,
     branchCount: payload.branchCount,

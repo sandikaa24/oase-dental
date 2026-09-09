@@ -51,6 +51,7 @@ const testSuites = [
   'task-employee-position-test.mjs',
   'phase8-portal-cms-test.mjs',
   'task-branch-guard-test.mjs',
+  'task-account-disabled-audit-test.mjs',
 ];
 
 console.log('======================================================================');

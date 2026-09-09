@@ -1,9 +1,15 @@
 import type { NextRequest } from 'next/server';
 import { withErrorHandler } from '@/lib/error-handler';
-import { ok } from '@/lib/response';
-import { setAuthCookies, setBranchContextCookie } from '@/lib/cookies';
+import { ok, fail } from '@/lib/response';
+import {
+  setAuthCookies,
+  clearAuthCookies,
+  setBranchContextCookie,
+  clearBranchContextCookie,
+  clearRememberedBranchCookie,
+} from '@/lib/cookies';
 import { REFRESH_TOKEN_COOKIE, BRANCH_CONTEXT_COOKIE } from '@/lib/auth';
-import { UnauthorizedError } from '@/lib/errors';
+import { UnauthorizedError, AccountDisabledError } from '@/lib/errors';
 import { refreshSession } from '@/lib/services/auth.service';
 
 /**
@@ -21,17 +27,28 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
 
   const currentBranchContext = req.cookies.get(BRANCH_CONTEXT_COOKIE)?.value ?? null;
 
-  const { user, tokens, branchContext } = await refreshSession(
-    rawRefreshToken,
-    currentBranchContext,
-  );
+  try {
+    const { user, tokens, branchContext } = await refreshSession(
+      rawRefreshToken,
+      currentBranchContext,
+    );
 
-  const res = ok({ user, branchContext });
-  setAuthCookies(res, tokens);
+    const res = ok({ user, branchContext });
+    setAuthCookies(res, tokens);
 
-  if (branchContext) {
-    setBranchContextCookie(res, branchContext);
+    if (branchContext) {
+      setBranchContextCookie(res, branchContext);
+    }
+
+    return res;
+  } catch (error) {
+    if (error instanceof AccountDisabledError) {
+      const res = fail(error);
+      clearAuthCookies(res);
+      clearBranchContextCookie(res);
+      clearRememberedBranchCookie(res);
+      return res;
+    }
+    throw error;
   }
-
-  return res;
 });

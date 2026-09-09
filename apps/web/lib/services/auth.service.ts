@@ -17,7 +17,6 @@ import {
 } from '../errors';
 import {
   getPermissions,
-  isMultiBranchUser,
   type Permission,
   type UserRole,
 } from '@oase/shared';
@@ -210,44 +209,13 @@ export async function login(input: {
     throw new ForbiddenError('Akun belum punya penempatan cabang aktif');
   }
 
-  let activeBranchId: string | null = null;
-  let branchContext: string | null = null;
-  let rememberedApplied = false;
-
-  const isMultiBranch = isMultiBranchUser({ role, branches });
-
-  if (!isMultiBranch) {
-    // User terikat 1 cabang (CASHIER dll.): login langsung masuk, TANPA langkah pilih cabang.
-    activeBranchId = branches[0]?.id ?? null;
-    branchContext = activeBranchId;
-  } else {
-    // User multi-cabang: re-validasi server-side terhadap assignment aktif saat login (Amandemen A2)
-    if (input.rememberedBranch) {
-      if (role === 'OWNER') {
-        if (input.rememberedBranch === 'ALL') {
-          activeBranchId = null;
-          branchContext = 'ALL';
-          rememberedApplied = true;
-        } else {
-          const branch = await prisma.branch.findUnique({
-            where: { id: input.rememberedBranch },
-          });
-          if (branch && branch.active) {
-            activeBranchId = branch.id;
-            branchContext = branch.id;
-            rememberedApplied = true;
-          }
-        }
-      } else {
-        const found = branches.find((b) => b.id === input.rememberedBranch);
-        if (found) {
-          activeBranchId = found.id;
-          branchContext = found.id;
-          rememberedApplied = true;
-        }
-      }
-    }
-  }
+  // AMANDEMEN D4 — Interstisial Universal Selalu-Tampil (Tafsir A):
+  // SEMUA role (termasuk staff 1-cabang): login tanpa konteks cabang valid -> WAJIB ke /select-branch.
+  // Tidak ada auto-context dari penugasan tunggal.
+  // Cookie remembered_branch dinonaktifkan pada alur login: server MENGABAIKAN cookie tersebut (tidak auto-apply).
+  const activeBranchId: string | null = null;
+  const branchContext: string | null = null;
+  const rememberedApplied = false;
 
   const tokens = await issueSession({
     userId: user.id,

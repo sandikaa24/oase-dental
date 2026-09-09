@@ -33,23 +33,15 @@ export default function SelectBranchPage() {
   const { user, isLoading: authLoading, selectBranch, logout } = useAuth();
 
   const [selectedBranchId, setSelectedBranchId] = useState<string>('');
-  const [remember, setRemember] = useState<boolean>(false);
   const [branches, setBranches] = useState<BranchItem[]>([]);
   const [isLoadingBranches, setIsLoadingBranches] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Guard: Pengalihan bila sesi belum siap atau user single-branch
+  // Guard: Pengalihan bila belum terautentikasi
   useEffect(() => {
-    if (!authLoading) {
-      if (!user) {
-        router.replace('/login');
-        return;
-      }
-      if (!isMultiBranchUser(user)) {
-        // User terikat 1 cabang langsung masuk tanpa langkah pilih cabang
-        router.replace('/admin');
-      }
+    if (!authLoading && !user) {
+      router.replace('/login');
     }
   }, [user, authLoading, router]);
 
@@ -72,7 +64,12 @@ export default function SelectBranchPage() {
           setIsLoadingBranches(false);
         });
     } else {
-      setBranches(user.branches || []);
+      const assigned = user.branches || [];
+      setBranches(assigned);
+      // Amandemen D4: Untuk staff 1-cabang, otomatis pilih cabang penugasan tunggal agar siap 1-klik
+      if (assigned.length === 1 && assigned[0]) {
+        setSelectedBranchId(assigned[0].id);
+      }
     }
   }, [user]);
 
@@ -87,7 +84,8 @@ export default function SelectBranchPage() {
     setIsSubmitting(true);
 
     try {
-      await selectBranch(selectedBranchId, remember);
+      // Amandemen D4: Remember dimatikan pada alur login (false)
+      await selectBranch(selectedBranchId, false);
       router.replace('/admin');
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Gagal menyimpan pilihan cabang');
@@ -113,6 +111,8 @@ export default function SelectBranchPage() {
   }
 
   const isOwner = user.role === 'OWNER';
+  const isMulti = isMultiBranchUser(user);
+  const singleBranch = !isMulti && branches.length === 1 ? branches[0] : null;
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-background px-4 py-8">
@@ -123,10 +123,12 @@ export default function SelectBranchPage() {
             <Sparkles className="h-6 w-6" />
           </div>
           <h1 className="text-2xl font-bold tracking-tight text-foreground">
-            Pilih Cabang Kerja
+            {isMulti ? 'Pilih Cabang Kerja' : 'Konfirmasi Cabang Kerja'}
           </h1>
           <p className="text-xs text-muted mt-1 max-w-sm">
-            Tentukan konteks cabang operasional Anda untuk sesi ini. Anda dapat beralih cabang kapan saja melalui switcher.
+            {isMulti
+              ? 'Tentukan konteks cabang operasional Anda untuk sesi ini. Anda dapat beralih cabang kapan saja melalui switcher.'
+              : 'Konfirmasikan penugasan cabang kerja Anda untuk memulai aktivitas operasional klinik.'}
           </p>
         </div>
 
@@ -149,12 +151,14 @@ export default function SelectBranchPage() {
         <Card className="shadow-xs border-border">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-semibold">
-              Konteks Cabang Tersedia
+              {isMulti ? 'Konteks Cabang Tersedia' : 'Penugasan Cabang Anda'}
             </CardTitle>
             <CardDescription className="text-xs">
               {isOwner
                 ? 'Sebagai OWNER, Anda dapat mengelola cabang tertentu atau memilih akses pusat'
-                : 'Pilih cabang penempatan tugas Anda untuk memulai aktivitas operasional'}
+                : isMulti
+                ? 'Pilih salah satu cabang penugasan tugas Anda untuk memulai aktivitas operasional'
+                : 'Mulai kerja di cabang yang telah ditugaskan untuk akun Anda'}
             </CardDescription>
           </CardHeader>
 
@@ -172,7 +176,8 @@ export default function SelectBranchPage() {
                   <Skeleton className="h-16 w-full rounded-lg" />
                   <Skeleton className="h-16 w-full rounded-lg" />
                 </div>
-              ) : (
+              ) : isMulti ? (
+                /* TAMPILAN A: Multi-Cabang & OWNER (Daftar Kartu Radio) */
                 <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
                   {/* Pilihan Khusus OWNER: Semua Cabang (Pusat) */}
                   {isOwner && (
@@ -258,27 +263,43 @@ export default function SelectBranchPage() {
                     );
                   })}
                 </div>
+              ) : singleBranch ? (
+                /* TAMPILAN B: 1-Cabang Terdaftar (Kartu Konfirmasi Tunggal 1-Klik) */
+                <div className="p-4 rounded-lg border border-primary/30 bg-primary-soft/30 space-y-3">
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary text-white shrink-0">
+                      <Building2 className="h-5 w-5" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-xs text-muted">Penugasan Terdaftar</span>
+                        <span className="text-[10px] font-mono px-1.5 py-0.5 bg-slate-100 text-slate-700 rounded font-semibold">
+                          {singleBranch.code}
+                        </span>
+                      </div>
+                      <h3 className="text-sm font-bold text-foreground mt-0.5">
+                        Mulai kerja di: {singleBranch.name}
+                      </h3>
+                      {singleBranch.address && (
+                        <p className="text-xs text-muted mt-1 flex items-center gap-1">
+                          <MapPin className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                          <span className="truncate">{singleBranch.address}</span>
+                        </p>
+                      )}
+                    </div>
+                    <CheckCircle2 className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+                  </div>
+                  <p className="text-[11px] text-muted border-t border-border/60 pt-2">
+                    Sesi kerja Anda akan tercatat di cabang ini untuk operasional kasir, presensi, dan pencatatan transaksi.
+                  </p>
+                </div>
+              ) : (
+                <div className="p-4 rounded-lg border border-border bg-slate-50 text-center">
+                  <p className="text-xs text-muted">
+                    Tidak ada cabang aktif yang ditugaskan ke akun Anda. Hubungi administrator.
+                  </p>
+                </div>
               )}
-
-              {/* Checkbox Ingat Pilihan Saya */}
-              <div className="pt-2 border-t border-border">
-                <label
-                  htmlFor="remember-device"
-                  className="flex items-center gap-2.5 cursor-pointer select-none text-xs text-slate-700"
-                >
-                  <input
-                    id="remember-device"
-                    type="checkbox"
-                    checked={remember}
-                    onChange={(e) => setRemember(e.target.checked)}
-                    className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
-                  />
-                  <span>Ingat pilihan saya di perangkat ini</span>
-                </label>
-                <p className="text-[11px] text-muted ml-6.5 mt-0.5">
-                  Login berikutnya di perangkat ini akan langsung masuk ke cabang ini tanpa interstisial.
-                </p>
-              </div>
 
               {/* Action Buttons */}
               <div className="space-y-2 pt-2">
@@ -290,7 +311,11 @@ export default function SelectBranchPage() {
                   isLoading={isSubmitting}
                   disabled={!selectedBranchId || isSubmitting}
                 >
-                  Lanjutkan ke Dashboard
+                  {isMulti
+                    ? 'Lanjutkan ke Dashboard'
+                    : singleBranch
+                    ? `Mulai Kerja di ${singleBranch.name}`
+                    : 'Konfirmasi Cabang'}
                 </Button>
 
                 <button

@@ -9,7 +9,6 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { ErrorBanner } from '@/components/ui/placeholder';
 import { Sparkles } from 'lucide-react';
 
-import { isMultiBranchUser } from '@/lib/auth';
 import type { UserSession } from '@/lib/auth-context';
 
 export default function LoginPage() {
@@ -21,19 +20,12 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Amandemen A3: Gunakan fungsi isMultiBranchUser bersama
+  // Amandemen D4: SEMUA user tanpa konteks cabang valid dialihkan ke /select-branch
   const handlePostLoginRedirect = useCallback((userSession: UserSession) => {
-    const isMulti = isMultiBranchUser(userSession);
-    if (!isMulti) {
-      // User terikat 1 cabang (CASHIER dll.): login langsung masuk, TANPA langkah pilih cabang
+    if (userSession.branchContext || userSession.activeBranchId) {
       router.replace('/admin');
     } else {
-      // User multi-cabang (OWNER / MANAGER > 1): jika sudah ada context (misal dari remembered branch) masuk ke dashboard, jika tidak ke /select-branch
-      if (userSession.branchContext || userSession.activeBranchId) {
-        router.replace('/admin');
-      } else {
-        router.replace('/select-branch');
-      }
+      router.replace('/select-branch');
     }
   }, [router]);
 

@@ -43,10 +43,10 @@ Permission ditulis sebagai: `[OWNER]`, `[OWNER, MANAGER]`, dst.
 // Response 200
 { "success": true, "data": { "user": { "id": "...", "email": "...", "role": "OWNER", "name": "...", "activeBranchId": null, "branchContext": null, "branches": [] } } }
 ```
-Owner: `activeBranchId = null`. Non-OWNER dengan 1 branch:
-auto-set `activeBranchId` dan cookie session `oase_branch_context`. Dengan >1 branch atau OWNER:
-wajib memilih konteks cabang via `POST /auth/select-branch` sebelum mengakses endpoint operasional.
-Jika ada `remembered_branch` (30 hari) yang valid, auto-set saat login.
+AMANDEMEN D4 (Interstisial Universal Selalu-Tampil):
+SEMUA role (termasuk non-OWNER dengan 1 branch) saat login awal: `activeBranchId = null`, `branchContext = null`.
+Tidak ada auto-context dari penugasan tunggal. Cookie `remembered_branch` dinonaktifkan pada alur login (diabaikan secara aman oleh server).
+Seluruh role WAJIB memilih/mengonfirmasi konteks cabang via `POST /auth/select-branch` sebelum mengakses endpoint operasional.
 
 **POST /auth/select-branch**
 ```json

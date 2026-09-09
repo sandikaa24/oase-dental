@@ -146,24 +146,53 @@ async function run() {
     console.log(`Info Cabang Uji: JKT=${jktBranch.id} (${jktBranch.name}), BDG=${bdgBranch.id} (${bdgBranch.name})\n`);
 
     // ─────────────────────────────────────────────────────────────────────────
-    // T1. Single-Branch User (kasir.jkt@oase.id): Auto-context, tanpa interstisial
+    // T1. Single-Branch User (kasir.jkt@oase.id): Interstisial Universal (Evolusi D4)
     // ─────────────────────────────────────────────────────────────────────────
-    console.log('--- T1: Single-Branch User (kasir.jkt@oase.id) Auto-Context ---');
+    // Komentar Evolusi Desain D4:
+    // Pada arsitektur awal (Amandemen A1/A3), user 1-cabang diberikan auto-context saat login.
+    // Pada Amandemen D4 (Interstisial Universal Selalu-Tampil - Tafsir A), SEMUA role
+    // termasuk staff 1-cabang login tanpa auto-context (activeBranchId & branchContext null).
+    // Kasir 1-cabang kini HARUS melalui konfirmasi kartu tunggal 1-klik di /select-branch
+    // sebelum context cabang aktif terbentuk dan dapat mengakses endpoint operasional.
+    console.log('--- T1: Single-Branch User (kasir.jkt@oase.id) Konfirmasi Interstisial (Evolusi D4) ---');
     const rT1Login = await apiReq('/auth/login', 'POST', {
       email: 'kasir.jkt@oase.id',
       password: '1234',
     });
     check('T1.1 Login sukses HTTP 200', rT1Login.status === 200);
-    check('T1.2 activeBranchId auto-set ke JKT', rT1Login.data?.data?.user?.activeBranchId === jktBranch.id);
-    check('T1.3 branchContext auto-set ke JKT', rT1Login.data?.data?.user?.branchContext === jktBranch.id);
-    check('T1.4 Cookie oase_branch_context diset ke JKT', rT1Login.cookies['oase_branch_context']?.value === jktBranch.id);
-    // Amandemen A2: oase_branch_context adalah session cookie (tanpa Max-Age / Expires)
-    check('T1.5 oase_branch_context adalah session cookie (tanpa Max-Age)', !rT1Login.cookies['oase_branch_context']?.hasMaxAge);
+    check('T1.2 activeBranchId null saat login awal (Evolusi D4)', rT1Login.data?.data?.user?.activeBranchId === null);
+    check('T1.3 branchContext null saat login awal (Evolusi D4)', rT1Login.data?.data?.user?.branchContext === null);
+    check('T1.4 Cookie oase_branch_context TIDAK auto-terpasang saat login', !rT1Login.cookies['oase_branch_context']?.value);
 
-    // Verifikasi GET /auth/me
-    const rT1Me = await apiReq('/auth/me', 'GET', null, rT1Login.cookies);
-    check('T1.6 GET /auth/me sukses 200', rT1Me.status === 200);
-    check('T1.7 /auth/me branchContext konsisten bernilai JKT', rT1Me.data?.data?.user?.branchContext === jktBranch.id);
+    // Guard Operasional: Akses operasional kasir 1-cabang sebelum konfirmasi ditolak
+    const t1NoContextCookies = {
+      access_token: rT1Login.cookies['access_token'],
+    };
+    const rT1OpFail = await apiReq('/cash-closings', 'POST', {
+      totalCashActual: '100000',
+    }, t1NoContextCookies);
+    check('T1.5 Endpoint operasional menolak sebelum konfirmasi cabang (HTTP 400)', rT1OpFail.status === 400);
+    check('T1.6 Error code BRANCH_CONTEXT_REQUIRED', rT1OpFail.data?.code === 'BRANCH_CONTEXT_REQUIRED');
+
+    // Konfirmasi cabang tunggal eksplisit (1-klik di UI interstisial)
+    const rT1Confirm = await apiReq('/auth/select-branch', 'POST', {
+      branchId: jktBranch.id,
+      remember: false,
+    }, t1NoContextCookies);
+    check('T1.7 Konfirmasi cabang via POST /auth/select-branch sukses HTTP 200', rT1Confirm.status === 200);
+    check('T1.8 activeBranchId terpasang ke JKT pasca-konfirmasi', rT1Confirm.data?.data?.user?.activeBranchId === jktBranch.id);
+    check('T1.9 branchContext terpasang ke JKT pasca-konfirmasi', rT1Confirm.data?.data?.user?.branchContext === jktBranch.id);
+    check('T1.10 Cookie session oase_branch_context terpasang ke JKT', rT1Confirm.cookies['oase_branch_context']?.value === jktBranch.id);
+    check('T1.11 oase_branch_context adalah session cookie (tanpa Max-Age)', !rT1Confirm.cookies['oase_branch_context']?.hasMaxAge);
+
+    // Verifikasi GET /auth/me pasca-konfirmasi
+    const t1ConfirmedCookies = {
+      ...t1NoContextCookies,
+      ...rT1Confirm.cookies,
+    };
+    const rT1Me = await apiReq('/auth/me', 'GET', null, t1ConfirmedCookies);
+    check('T1.12 GET /auth/me sukses 200 pasca-konfirmasi', rT1Me.status === 200);
+    check('T1.13 /auth/me branchContext konsisten bernilai JKT', rT1Me.data?.data?.user?.branchContext === jktBranch.id);
 
     // ─────────────────────────────────────────────────────────────────────────
     // T2. Multi-Branch User (cashier@oase.id: JKT & BDG) tanpa context
@@ -281,10 +310,10 @@ async function run() {
     check('T5.4 oase_branch_context hasil refresh tetap session cookie (tanpa Max-Age)', !rT5Refresh.cookies['oase_branch_context']?.hasMaxAge);
 
     // ─────────────────────────────────────────────────────────────────────────
-    // T6. Amandemen A2: Remembered Branch 30 Hari & Revalidasi Server-Side
+    // T6. Evolusi D4: Remembered Branch Cookie Diabaikan pada Alur Login
     // ─────────────────────────────────────────────────────────────────────────
-    console.log('\n--- T6: Remembered Branch (30 Hari) & Revalidasi Server-Side (Amandemen A2) ---');
-    // Multi-branch user memilih cabang dengan remember: true
+    console.log('\n--- T6: Remembered Branch Cookie Diabaikan pada Alur Login (Evolusi D4) ---');
+    // Multi-branch user memilih cabang dengan remember: true (kompatibilitas backward select-branch API)
     const rT6Remember = await apiReq('/auth/select-branch', 'POST', {
       branchId: bdgBranch.id,
       remember: true,
@@ -295,17 +324,18 @@ async function run() {
     check('T6.3 oase_remembered_branch memiliki Max-Age 30 hari (~2592000s)', remCookie?.maxAge >= 2591000 && remCookie?.maxAge <= 2593000);
 
     // Login kembali dengan membawa cookie oase_remembered_branch yang valid
+    // EVOLUSI D4: Server mengabaikan cookie remembered_branch (tidak auto-apply), user tetap wajib ke interstisial
     const rT6ReLogin = await apiReq('/auth/login', 'POST', {
       email: 'cashier@oase.id',
       password: '1234',
     }, { oase_remembered_branch: remCookie.value });
     check('T6.4 Re-login sukses HTTP 200', rT6ReLogin.status === 200);
-    check('T6.5 Re-login otomatis mengadopsi remembered_branch (BDG)', rT6ReLogin.data?.data?.user?.activeBranchId === bdgBranch.id);
-    check('T6.6 branchContext auto-set ke BDG', rT6ReLogin.data?.data?.user?.branchContext === bdgBranch.id);
-    check('T6.7 oase_branch_context session cookie otomatis terpasang', rT6ReLogin.cookies['oase_branch_context']?.value === bdgBranch.id);
+    check('T6.5 Login mengabaikan remembered_branch (activeBranchId tetap null, D4)', rT6ReLogin.data?.data?.user?.activeBranchId === null);
+    check('T6.6 branchContext tetap null sehingga diarahkan ke interstisial (D4)', rT6ReLogin.data?.data?.user?.branchContext === null);
+    check('T6.7 oase_branch_context session cookie TIDAK auto-terpasang (D4)', !rT6ReLogin.cookies['oase_branch_context']?.value);
 
-    // Uji Server-Side Re-validation terhadap branch yang invalid / dicabut
-    console.log('\n--- T6.b: Server-Side Revalidation Mencegah Forged / Revoked Remembered Branch ---');
+    // Uji Cookie Lama / Palsu diabaikan secara aman tanpa error
+    console.log('\n--- T6.b: Cookie Lama / Palsu Diabaikan Aman Tanpa Error (Evolusi D4) ---');
     const fakeRememberedCookie = '00000000-9999-8888-7777-666666666666';
     const rT6ForgedLogin = await apiReq('/auth/login', 'POST', {
       email: 'cashier@oase.id',
@@ -314,7 +344,7 @@ async function run() {
     check('T6.8 Login dengan remembered branch palsu tetap sukses HTTP 200', rT6ForgedLogin.status === 200);
     check('T6.9 Server menolak remembered branch palsu (activeBranchId tetap null)', rT6ForgedLogin.data?.data?.user?.activeBranchId === null);
     check('T6.10 branchContext null (wajib melalui interstisial)', rT6ForgedLogin.data?.data?.user?.branchContext === null);
-    check('T6.11 Cookie oase_remembered_branch palsu dihapus/dibersihkan oleh server', rT6ForgedLogin.cookies['oase_remembered_branch']?.maxAge === 0 || rT6ForgedLogin.cookies['oase_remembered_branch']?.value === '');
+    check('T6.11 Cookie lama/palsu diabaikan aman tanpa error (status 200)', rT6ForgedLogin.status === 200);
 
     // ─────────────────────────────────────────────────────────────────────────
     // T7. Amandemen A1: Kompatibilitas Mundur Endpoint @deprecated switch-branch

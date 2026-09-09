@@ -39,7 +39,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   const rememberedBranch = req.cookies.get(REMEMBERED_BRANCH_COOKIE)?.value ?? null;
 
   try {
-    const { user, tokens, branchContext, rememberedApplied } = await login({
+    const { user, tokens, branchContext } = await login({
       identifier: input.identifier,
       password: input.password,
       ip,
@@ -57,10 +57,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
       clearBranchContextCookie(res);
     }
 
-    if (rememberedBranch && !rememberedApplied) {
-      // Re-validasi gagal (cabang invalid/dicabut) -> bersihkan remembered_branch (Amandemen A2)
-      clearRememberedBranchCookie(res);
-    }
+    // AMANDEMEN D4: Cookie remembered_branch lama diabaikan secara aman pada alur login (tidak auto-apply)
 
     return res;
   } catch (error) {

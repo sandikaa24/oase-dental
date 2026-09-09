@@ -295,7 +295,11 @@ async function run() {
   );
 
   const bdgCashierLogin = await login(bdgEmail, 'Password123');
-  const bdgCashierCookie = bdgCashierLogin.cookie;
+  let bdgCashierCookie = bdgCashierLogin.cookie;
+  const bdgSwitch = await req('/auth/switch-branch', 'POST', { branchId: bdg.id }, bdgCashierCookie);
+  if (bdgSwitch.status === 200) {
+    bdgCashierCookie = extractAccessCookie(bdgSwitch.setCookie);
+  }
   const bdgCheckInRes = await req('/attendance/check-in', 'POST', null, bdgCashierCookie);
   assert('Check-in di cabang BDG berhasil', bdgCheckInRes.status === 201);
   const bdgAttendanceId = bdgCheckInRes.data?.data?.id;

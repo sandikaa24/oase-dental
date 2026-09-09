@@ -40,9 +40,11 @@ function extractCookie(res) {
   const fullHeader = setCookies.join('; ');
   const token = fullHeader.match(/access_token=([^;]+)/);
   const refresh = fullHeader.match(/refresh_token=([^;]+)/);
+  const branchContext = fullHeader.match(/oase_branch_context=([^;]+)/);
   const cookieList = [];
   if (token) cookieList.push(`access_token=${token[1]}`);
   if (refresh) cookieList.push(`refresh_token=${refresh[1]}`);
+  if (branchContext) cookieList.push(`oase_branch_context=${branchContext[1]}`);
   return cookieList.join('; ');
 }
 
@@ -114,23 +116,44 @@ async function runSuite() {
     assert(managerAuth.status === 200, 'SETUP-2', `Login MANAGER (${manager.email}) berhasil`);
 
     // Pastikan activeBranchId MANAGER terarah ke branch JKT
-    await fetch(`${BASE_URL}/api/v1/auth/switch-branch`, {
+    const mgrSwitchRes = await fetch(`${BASE_URL}/api/v1/auth/switch-branch`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Cookie: managerAuth.cookies },
       body: JSON.stringify({ branchId: branchJKT.id }),
     });
+    const mgrCookies = extractCookie(mgrSwitchRes);
+    if (mgrCookies) managerAuth.cookies = mgrCookies;
 
-    // Buat/ambil Cashier akun
+    // Buat/ambil Cashier akun aktif dengan employee
     let cashier = await prisma.user.findFirst({
-      where: { role: 'CASHIER' },
+      where: { role: 'CASHIER', active: true, employeeId: { not: null } },
+      include: { employee: true },
     });
-    if (cashier) {
+    if (!cashier) {
+      const emp = await prisma.employee.create({
+        data: {
+          name: 'Cashier Uji JKT',
+          position: 'Kasir',
+          branches: { create: { branchId: branchJKT.id } },
+        },
+      });
+      cashier = await prisma.user.create({
+        data: {
+          email: `csh.jkt.${Date.now()}@oase.id`,
+          passwordHash: hash,
+          role: 'CASHIER',
+          employeeId: emp.id,
+          active: true,
+        },
+        include: { employee: true },
+      });
+    } else {
       await prisma.user.update({
         where: { id: cashier.id },
-        data: { passwordHash: hash },
+        data: { passwordHash: hash, active: true },
       });
     }
-    const cashierAuth = await login(cashier ? cashier.email : 'cashier@oase.id', '1234');
+    const cashierAuth = await login(cashier.email, '1234');
     assert(cashierAuth.status === 200, 'SETUP-3', 'Login CASHIER berhasil');
 
     // Tanggal WIB hari ini dan besok (menggunakan timezone Asia/Jakarta)

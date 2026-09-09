@@ -238,6 +238,11 @@ async function run() {
   assert(!!cashier1Cookies.access_token, 'T1.2: Access token Kasir 1 berhasil terbit');
   assert(!!cashier1Cookies.refresh_token, 'T1.3: Refresh token Kasir 1 berhasil terbit');
 
+  // Amandemen D4: Kasir 1 konfirmasi cabang via /select-branch sebelum transaksi awal
+  const rSelect1 = await req('/auth/select-branch', 'POST', { branchId: branch.id }, cashier1Cookies);
+  cashier1Cookies.access_token = rSelect1.cookies['access_token']?.value || cashier1Cookies.access_token;
+  cashier1Cookies.oase_branch_context = rSelect1.cookies['oase_branch_context']?.value;
+
   // Tes transaksi sebelum dinonaktifkan -> sukses
   const rTrxBefore = await req('/transactions', 'POST', {
     items: [{ itemId: service.id, quantity: 1, itemType: 'SERVICE' }],
@@ -382,6 +387,11 @@ async function run() {
     access_token: rLoginReactivated.cookies['access_token']?.value,
     oase_branch_context: rLoginReactivated.cookies['oase_branch_context']?.value,
   };
+
+  // Amandemen D4: Kasir 1 konfirmasi cabang via /select-branch
+  const rSelectReactivated = await req('/auth/select-branch', 'POST', { branchId: branch.id }, newCashier1Cookies);
+  newCashier1Cookies.access_token = rSelectReactivated.cookies['access_token']?.value || newCashier1Cookies.access_token;
+  newCashier1Cookies.oase_branch_context = rSelectReactivated.cookies['oase_branch_context']?.value;
 
   // Buat transaksi dengan token baru -> Berhasil 201 Created
   const rTrxReactivated = await req('/transactions', 'POST', {

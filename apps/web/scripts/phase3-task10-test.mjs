@@ -21,13 +21,13 @@ async function login(email, password) {
 let assertions = 0;
 let passed = 0;
 
-function assert(condition, message) {
+function assert(condition, message, detail = '') {
   assertions++;
   if (condition) {
     passed++;
     console.log(`✅ PASS: ${message}`);
   } else {
-    console.error(`❌ FAIL: ${message}`);
+    console.error(`❌ FAIL: ${message} ${detail ? `[Detail: ${detail}]` : ''}`);
   }
 }
 
@@ -148,7 +148,7 @@ async function run() {
   const testBranch = await prisma.branch.findFirst();
   const testProd = await prisma.material.create({
     data: {
-      name: `Test Boundary Product ${Date.now()}`,
+      name: `!AAA_Test_Boundary_Product_${Date.now()}`,
       sku: `SKU-BND-${Date.now()}`,
       unit: 'pcs',
       category: 'BHP',

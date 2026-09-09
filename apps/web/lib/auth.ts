@@ -32,6 +32,7 @@ export interface AccessTokenPayload extends JWTPayload {
   role: string;
   branchId: string | null;
   employeeId: string | null;
+  branchCount?: number;
 }
 
 /**
@@ -120,3 +121,15 @@ export const ACCESS_TOKEN_COOKIE = 'access_token';
  * Cookie name untuk refresh token.
  */
 export const REFRESH_TOKEN_COOKIE = 'refresh_token';
+
+/**
+ * Cookie name untuk konteks cabang aktif (session cookie, tanpa TTL 15m).
+ */
+export const BRANCH_CONTEXT_COOKIE = 'oase_branch_context';
+
+/**
+ * Cookie name untuk preferensi cabang yang diingat (30 hari).
+ */
+export const REMEMBERED_BRANCH_COOKIE = 'oase_remembered_branch';
+
+export { isMultiBranchUser, type MultiBranchCandidate } from '@oase/shared';

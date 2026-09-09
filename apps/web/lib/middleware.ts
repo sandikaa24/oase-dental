@@ -1,8 +1,14 @@
 import { cookies } from 'next/headers';
 import type { NextRequest } from 'next/server';
-import { ACCESS_TOKEN_COOKIE, verifyAccessToken, type AccessTokenPayload } from './auth';
-import { ForbiddenError, UnauthorizedError } from './errors';
+import {
+  ACCESS_TOKEN_COOKIE,
+  BRANCH_CONTEXT_COOKIE,
+  verifyAccessToken,
+  type AccessTokenPayload,
+} from './auth';
+import { ForbiddenError, UnauthorizedError, BranchContextRequiredError } from './errors';
 import { hasPermission, type Permission, type UserRole } from '@oase/shared';
+
 
 /**
  * Context user hasil verifikasi access token.
@@ -14,6 +20,7 @@ export interface AuthContext {
   role: UserRole;
   branchId: string | null;
   employeeId: string | null;
+  branchCount?: number;
 }
 
 /**
@@ -42,6 +49,7 @@ export async function requireAuth(): Promise<AuthContext> {
     role: payload.role as UserRole,
     branchId: payload.branchId,
     employeeId: payload.employeeId,
+    branchCount: payload.branchCount,
   };
 }
 
@@ -68,6 +76,40 @@ export function requirePermission(auth: AuthContext, permission: Permission): vo
   if (!hasPermission(auth.role, permission)) {
     throw new ForbiddenError('Permission tidak mencukupi untuk aksi ini');
   }
+}
+
+/**
+ * Pastikan user memiliki konteks cabang aktif (Guard Konteks Server-side).
+ * - Multi-cabang tanpa konteks: throw BranchContextRequiredError (400 BRANCH_CONTEXT_REQUIRED)
+ * - Konteks "ALL" pada endpoint aksi fisik (POS/closing/mutasi/check-in): ditolak bila allowAllForOwner = false.
+ * - Single-cabang: otomatis valid menggunakan branch aktifnya.
+ */
+export async function requireBranchContext(
+  auth: AuthContext,
+  options: { allowAllForOwner?: boolean } = {}
+): Promise<string | null> {
+  const store = cookies();
+  const branchContext = store.get(BRANCH_CONTEXT_COOKIE)?.value ?? auth.branchId;
+
+  if (!branchContext) {
+    throw new BranchContextRequiredError(
+      'Konteks cabang belum dipilih. Silakan pilih cabang kerja terlebih dahulu.'
+    );
+  }
+
+  if (branchContext === 'ALL') {
+    if (auth.role !== 'OWNER') {
+      throw new ForbiddenError('Hanya OWNER yang dapat mengakses konteks Semua Cabang');
+    }
+    if (!options.allowAllForOwner) {
+      throw new BranchContextRequiredError(
+        'Pilih salah satu cabang fisik spesifik untuk melakukan tindakan operasional ini.'
+      );
+    }
+    return null;
+  }
+
+  return branchContext;
 }
 
 /**

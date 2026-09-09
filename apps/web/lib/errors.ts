@@ -44,6 +44,13 @@ export class BranchAccessDeniedError extends AppError {
   }
 }
 
+export class BranchContextRequiredError extends AppError {
+  constructor(message: string = 'Konteks cabang belum dipilih. Silakan pilih cabang kerja terlebih dahulu.') {
+    super(message, 400, 'BRANCH_CONTEXT_REQUIRED');
+  }
+}
+
+
 export class NotFoundError extends AppError {
   constructor(message: string = 'Data tidak ditemukan') {
     super(message, 404, 'NOT_FOUND');

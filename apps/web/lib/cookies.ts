@@ -1,17 +1,23 @@
 import type { NextResponse } from 'next/server';
-import { ACCESS_TOKEN_COOKIE, REFRESH_TOKEN_COOKIE } from './auth';
+import {
+  ACCESS_TOKEN_COOKIE,
+  REFRESH_TOKEN_COOKIE,
+  BRANCH_CONTEXT_COOKIE,
+  REMEMBERED_BRANCH_COOKIE,
+} from './auth';
 
 const ACCESS_MAX_AGE = 15 * 60; // 15 menit, sama dengan umur JWT access
 const REFRESH_MAX_AGE = 7 * 24 * 60 * 60; // 7 hari, sama dengan umur JWT refresh
+const REMEMBERED_BRANCH_MAX_AGE = 30 * 24 * 60 * 60; // 30 hari (Amandemen A2)
 
-function baseOptions() {
+function baseOptions(httpOnly = true) {
   const isSecure =
     process.env.COOKIE_SECURE !== undefined
       ? process.env.COOKIE_SECURE === 'true'
       : process.env.NODE_ENV === 'production';
 
   return {
-    httpOnly: true,
+    httpOnly,
     sameSite: 'lax' as const,
     secure: isSecure,
     path: '/',
@@ -27,12 +33,12 @@ export function setAuthCookies(
   tokens: { accessToken: string; refreshToken: string },
 ): void {
   res.cookies.set(ACCESS_TOKEN_COOKIE, tokens.accessToken, {
-    ...baseOptions(),
+    ...baseOptions(true),
     maxAge: ACCESS_MAX_AGE,
   });
 
   res.cookies.set(REFRESH_TOKEN_COOKIE, tokens.refreshToken, {
-    ...baseOptions(),
+    ...baseOptions(true),
     maxAge: REFRESH_MAX_AGE,
   });
 }
@@ -41,6 +47,40 @@ export function setAuthCookies(
  * Hapus kedua cookie auth (dipakai saat logout).
  */
 export function clearAuthCookies(res: NextResponse): void {
-  res.cookies.set(ACCESS_TOKEN_COOKIE, '', { ...baseOptions(), maxAge: 0 });
-  res.cookies.set(REFRESH_TOKEN_COOKIE, '', { ...baseOptions(), maxAge: 0 });
+  res.cookies.set(ACCESS_TOKEN_COOKIE, '', { ...baseOptions(true), maxAge: 0 });
+  res.cookies.set(REFRESH_TOKEN_COOKIE, '', { ...baseOptions(true), maxAge: 0 });
+}
+
+/**
+ * Set cookie konteks cabang aktif (session cookie — TANPA maxAge / TTL 15m, Amandemen A2).
+ * Dibaca baik oleh server middleware/guard maupun client.
+ */
+export function setBranchContextCookie(res: NextResponse, branchContext: string): void {
+  res.cookies.set(BRANCH_CONTEXT_COOKIE, branchContext, {
+    ...baseOptions(false),
+  });
+}
+
+/**
+ * Hapus cookie konteks cabang aktif.
+ */
+export function clearBranchContextCookie(res: NextResponse): void {
+  res.cookies.set(BRANCH_CONTEXT_COOKIE, '', { ...baseOptions(false), maxAge: 0 });
+}
+
+/**
+ * Set cookie cabang yang diingat pada perangkat ini (30 hari, Amandemen A2).
+ */
+export function setRememberedBranchCookie(res: NextResponse, branchContext: string): void {
+  res.cookies.set(REMEMBERED_BRANCH_COOKIE, branchContext, {
+    ...baseOptions(false),
+    maxAge: REMEMBERED_BRANCH_MAX_AGE,
+  });
+}
+
+/**
+ * Hapus cookie cabang yang diingat.
+ */
+export function clearRememberedBranchCookie(res: NextResponse): void {
+  res.cookies.set(REMEMBERED_BRANCH_COOKIE, '', { ...baseOptions(false), maxAge: 0 });
 }

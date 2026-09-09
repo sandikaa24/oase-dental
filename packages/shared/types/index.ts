@@ -96,3 +96,29 @@ export const AuditAction = {
   ATTENDANCE_CORRECTED: 'ATTENDANCE_CORRECTED'
 } as const;
 export type AuditAction = (typeof AuditAction)[keyof typeof AuditAction];
+
+/**
+ * Kandidat user untuk pengecekan multi-cabang (Amandemen A3).
+ * Mencegah hardcode OWNER/MANAGER saja:
+ * - OWNER selalu multi-cabang (akses pusat & seluruh cabang).
+ * - Non-OWNER (apapun rolenya) dianggap multi-cabang jika memiliki >1 assignment aktif.
+ */
+export interface MultiBranchCandidate {
+  role: string | UserRole;
+  branchCount?: number;
+  branches?: Array<{ id: string }> | null;
+}
+
+export function isMultiBranchUser(candidate: MultiBranchCandidate): boolean {
+  if (candidate.role === 'OWNER') return true;
+
+  if (typeof candidate.branchCount === 'number') {
+    return candidate.branchCount > 1;
+  }
+
+  if (Array.isArray(candidate.branches)) {
+    return candidate.branches.length > 1;
+  }
+
+  return false;
+}

@@ -14,8 +14,19 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
+import { isMultiBranchUser } from '@oase/shared';
+import { fetchApi } from '@/lib/api-client';
+import { Globe } from 'lucide-react';
+
 interface HeaderProps {
   onToggleMobileMenu?: () => void;
+}
+
+interface OwnerBranch {
+  id: string;
+  code: string;
+  name: string;
+  active?: boolean;
 }
 
 export function Header({ onToggleMobileMenu }: HeaderProps) {
@@ -23,6 +34,7 @@ export function Header({ onToggleMobileMenu }: HeaderProps) {
   const [isBranchMenuOpen, setIsBranchMenuOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isSwitching, setIsSwitching] = useState(false);
+  const [ownerBranches, setOwnerBranches] = useState<OwnerBranch[]>([]);
 
   const branchMenuRef = useRef<HTMLDivElement>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
@@ -47,18 +59,31 @@ export function Header({ onToggleMobileMenu }: HeaderProps) {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Resolusi cabang aktif:
-  // 1. Cari branch yang cocok dengan user.activeBranchId
-  // 2. Jika user non-OWNER hanya punya 1 branch, otomatis gunakan branch tunggal tersebut
-  // 3. Jika user multi-branch belum switch, default ke branch pertama dari assignment
-  const userBranches = user?.branches || [];
-  const hasMultipleBranches = userBranches.length > 1;
-  const activeBranch =
-    userBranches.find((b) => b.id === user?.activeBranchId) ||
-    (user?.role !== 'OWNER' && userBranches.length > 0 ? userBranches[0] : undefined);
+  const isOwner = user?.role === 'OWNER';
+  const isMultiBranch = user ? isMultiBranchUser(user) : false;
+
+  // Load cabang aktif untuk OWNER
+  useEffect(() => {
+    if (isOwner) {
+      fetchApi<OwnerBranch[]>('/api/v1/branches?active=true&limit=100')
+        .then((res) => {
+          if (res.success && res.data) {
+            setOwnerBranches(res.data.filter((b) => b.active !== false));
+          }
+        })
+        .catch(() => {});
+    }
+  }, [isOwner]);
+
+  const userBranches = isOwner ? ownerBranches : user?.branches || [];
+  const currentBranchContext = user?.branchContext ?? user?.activeBranchId;
+
+  const activeBranch = isOwner
+    ? ownerBranches.find((b) => b.id === user?.activeBranchId)
+    : userBranches.find((b) => b.id === (user?.activeBranchId || userBranches[0]?.id));
 
   const handleBranchSelect = async (branchId: string) => {
-    if (branchId === user?.activeBranchId) {
+    if (branchId === currentBranchContext) {
       setIsBranchMenuOpen(false);
       return;
     }
@@ -73,6 +98,16 @@ export function Header({ onToggleMobileMenu }: HeaderProps) {
     }
   };
 
+  const getBranchLabel = () => {
+    if (isOwner) {
+      if (currentBranchContext === 'ALL' || (!user?.activeBranchId && !user?.branchContext)) {
+        return 'Semua Cabang (Pusat)';
+      }
+      return activeBranch ? `${activeBranch.name} (${activeBranch.code})` : 'Pilih Cabang';
+    }
+    return activeBranch ? `${activeBranch.name} (${activeBranch.code})` : 'Cabang Utama';
+  };
+
   return (
     <header className="sticky top-0 z-20 flex h-16 w-full items-center justify-between border-b border-border bg-surface px-4 sm:px-6 shadow-xs">
       <div className="flex items-center gap-3">
@@ -85,9 +120,9 @@ export function Header({ onToggleMobileMenu }: HeaderProps) {
           <Menu className="h-5 w-5" />
         </button>
 
-        {/* Active Branch Indicator (§8) */}
+        {/* Active Branch Indicator & Switcher (§8) */}
         <div className="relative" ref={branchMenuRef}>
-          {hasMultipleBranches ? (
+          {isMultiBranch ? (
             <button
               type="button"
               onClick={() => setIsBranchMenuOpen(!isBranchMenuOpen)}
@@ -97,9 +132,13 @@ export function Header({ onToggleMobileMenu }: HeaderProps) {
                 'bg-branch-indicator-bg text-branch-indicator-text border-branch-indicator-border hover:bg-teal-100/70'
               )}
             >
-              <Building2 className="h-3.5 w-3.5 shrink-0" />
+              {isOwner && (currentBranchContext === 'ALL' || !activeBranch) ? (
+                <Globe className="h-3.5 w-3.5 shrink-0" />
+              ) : (
+                <Building2 className="h-3.5 w-3.5 shrink-0" />
+              )}
               <span className="truncate max-w-[140px] sm:max-w-[200px]">
-                {activeBranch ? `${activeBranch.name} (${activeBranch.code})` : 'Pilih Cabang'}
+                {getBranchLabel()}
               </span>
               <ChevronDown className="h-3.5 w-3.5 shrink-0 text-primary" />
             </button>
@@ -112,23 +151,41 @@ export function Header({ onToggleMobileMenu }: HeaderProps) {
             >
               <Building2 className="h-3.5 w-3.5 shrink-0" />
               <span className="truncate max-w-[140px] sm:max-w-[220px]">
-                {user?.role === 'OWNER'
-                  ? 'Semua Cabang (Akses Pusat)'
-                  : activeBranch
-                  ? `${activeBranch.name} (${activeBranch.code})`
-                  : 'Cabang Utama'}
+                {getBranchLabel()}
               </span>
             </div>
           )}
 
-          {/* Branch Switcher Dropdown (Hanya muncul jika multi-cabang) */}
-          {isBranchMenuOpen && hasMultipleBranches && (
-            <div className="absolute left-0 mt-2 w-56 rounded-md border border-border bg-surface py-1 shadow-md z-50 animate-in fade-in-50">
+          {/* Branch Switcher Dropdown */}
+          {isBranchMenuOpen && isMultiBranch && (
+            <div className="absolute left-0 mt-2 w-64 rounded-md border border-border bg-surface py-1 shadow-md z-50 animate-in fade-in-50">
               <div className="px-3 py-2 text-xs font-semibold text-muted border-b border-border">
                 Pilih Cabang Aktif
               </div>
+
+              {/* Pilihan Semua Cabang untuk OWNER */}
+              {isOwner && (
+                <button
+                  type="button"
+                  onClick={() => handleBranchSelect('ALL')}
+                  className={cn(
+                    'flex w-full items-center justify-between px-3 py-2 text-xs text-left transition-colors',
+                    currentBranchContext === 'ALL'
+                      ? 'bg-primary-soft text-primary font-medium'
+                      : 'text-slate-700 hover:bg-slate-50'
+                  )}
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Globe className="h-3.5 w-3.5 text-primary shrink-0" />
+                    <span className="truncate font-medium">Semua Cabang (Pusat)</span>
+                  </div>
+                  {currentBranchContext === 'ALL' && <Check className="h-3.5 w-3.5 text-primary shrink-0" />}
+                </button>
+              )}
+
+              {/* Pilihan Cabang Fisik */}
               {userBranches.map((branch) => {
-                const isSelected = branch.id === (user?.activeBranchId || activeBranch?.id);
+                const isSelected = branch.id === currentBranchContext;
                 return (
                   <button
                     key={branch.id}
@@ -141,11 +198,11 @@ export function Header({ onToggleMobileMenu }: HeaderProps) {
                         : 'text-slate-700 hover:bg-slate-50'
                     )}
                   >
-                    <div className="flex items-center gap-2">
-                      <Building className="h-3.5 w-3.5 text-slate-400" />
-                      <span>{branch.name} ({branch.code})</span>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Building className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                      <span className="truncate">{branch.name} ({branch.code})</span>
                     </div>
-                    {isSelected && <Check className="h-3.5 w-3.5 text-primary" />}
+                    {isSelected && <Check className="h-3.5 w-3.5 text-primary shrink-0" />}
                   </button>
                 );
               })}
@@ -153,6 +210,7 @@ export function Header({ onToggleMobileMenu }: HeaderProps) {
           )}
         </div>
       </div>
+
 
       {/* User Dropdown */}
       <div className="relative" ref={userMenuRef}>

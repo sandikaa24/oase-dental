@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { withErrorHandler } from '@/lib/error-handler';
-import { requireAuth, requireRole, requirePermission } from '@/lib/middleware';
+import { requireAuth, requireRole, requirePermission, requireBranchContext } from '@/lib/middleware';
 import { ok } from '@/lib/response';
 import {
   createTransactionSchema,
@@ -55,12 +55,14 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   const auth = await requireAuth();
   requirePermission(auth, 'POS_CREATE');
 
+  const effectiveBranchId = await requireBranchContext(auth, { allowAllForOwner: false });
+
   const body = await req.json();
   const input = createTransactionSchema.parse(body);
 
   const transaction = await createTransaction(
     input,
-    auth.branchId,
+    effectiveBranchId,
     auth.userId
   );
 

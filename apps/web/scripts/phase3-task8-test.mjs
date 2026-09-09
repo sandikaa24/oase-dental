@@ -45,7 +45,11 @@ function extractAccessCookie(cookieHeader) {
   if (!cookieHeader) return '';
   const parts = cookieHeader.split(', ');
   const token = parts.find((p) => p.startsWith('access_token='));
-  return token ? token.split(';')[0] : '';
+  const branchContext = parts.find((p) => p.startsWith('oase_branch_context='));
+  const c = [];
+  if (token) c.push(token.split(';')[0]);
+  if (branchContext) c.push(branchContext.split(';')[0]);
+  return c.join('; ');
 }
 
 async function req(path, method = 'GET', body = null, cookie = null) {
@@ -130,7 +134,14 @@ async function main() {
     fail('Setup OWNER', `Status ${ownerAuth.status}`);
     process.exit(1);
   }
-  const ownerCookie = ownerAuth.cookie;
+  let ownerCookie = ownerAuth.cookie;
+
+  // task-branch-guard (Amandemen A1): OWNER memilih konteks cabang (ALL) sebelum masuk admin
+  const selectOwner = await req('/auth/select-branch', 'POST', { branchId: 'ALL' }, ownerCookie);
+  if (selectOwner.setCookie) {
+    const ownerCtx = extractAccessCookie(selectOwner.setCookie);
+    if (ownerCtx) ownerCookie = `${ownerCookie}; ${ownerCtx}`;
+  }
 
   // Dapatkan cabang JKT & BDG
   const branchJkt = await prisma.branch.findUnique({ where: { code: 'JKT' } });

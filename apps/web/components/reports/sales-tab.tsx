@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { fetchApi, type ApiResponse } from '@/lib/api-client';
 import { useAuth } from '@/lib/auth-context';
@@ -41,9 +41,19 @@ export function SalesTab() {
 
   const [dateFrom, setDateFrom] = useState(thirtyDaysAgo);
   const [dateTo, setDateTo] = useState(today);
-  const [selectedBranchId, setSelectedBranchId] = useState<string>('');
+  const [selectedBranchId, setSelectedBranchId] = useState<string>(user?.activeBranchId || '');
   const [paymentMethod, setPaymentMethod] = useState<string>('');
   const [page, setPage] = useState(1);
+
+  // Sinkronisasi otomatis saat user berganti cabang di switcher (Satu Sumber Kebenaran Konteks)
+  useEffect(() => {
+    if (user?.activeBranchId) {
+      setSelectedBranchId(user.activeBranchId);
+    } else if (user?.branchContext === 'ALL') {
+      setSelectedBranchId('');
+    }
+  }, [user?.activeBranchId, user?.branchContext]);
+
 
   // Fetch branches untuk dropdown OWNER
   const { data: branchesResponse } = useQuery<ApiResponse<BranchOption[]>>({

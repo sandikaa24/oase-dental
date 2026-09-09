@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { withErrorHandler } from '@/lib/error-handler';
-import { requireAuth, requirePermission, getClientIp } from '@/lib/middleware';
+import { requireAuth, requirePermission, getClientIp, requireBranchContext } from '@/lib/middleware';
 import { ok } from '@/lib/response';
 import { closingListQuerySchema, createClosingSchema } from '@/lib/validations/closing.schema';
 import { listClosings, createClosing } from '@/lib/services/closing.service';
@@ -42,10 +42,12 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   const auth = await requireAuth();
   requirePermission(auth, 'CASH_CLOSING_CREATE');
 
+  const effectiveBranchId = await requireBranchContext(auth, { allowAllForOwner: false });
+
   const body = await req.json();
   const input = createClosingSchema.parse(body);
 
-  const closing = await createClosing(input, auth.userId, auth.branchId, getClientIp(req));
+  const closing = await createClosing(input, auth.userId, effectiveBranchId, getClientIp(req));
 
   const res = ok(closing);
   return NextResponse.json(await res.json(), { status: 201, headers: res.headers });

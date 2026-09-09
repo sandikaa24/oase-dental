@@ -50,6 +50,7 @@ const testSuites = [
   'task-c1-public-web-test.mjs',
   'task-employee-position-test.mjs',
   'phase8-portal-cms-test.mjs',
+  'task-branch-guard-test.mjs',
 ];
 
 console.log('======================================================================');

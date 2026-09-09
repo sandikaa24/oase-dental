@@ -2,16 +2,17 @@ import type { NextRequest } from 'next/server';
 import { withErrorHandler } from '@/lib/error-handler';
 import { getClientIp, requireAuth, requireRole } from '@/lib/middleware';
 import { ok } from '@/lib/response';
-import { setAuthCookies } from '@/lib/cookies';
+import { setAuthCookies, setBranchContextCookie } from '@/lib/cookies';
 import { REFRESH_TOKEN_COOKIE } from '@/lib/auth';
 import { switchBranchSchema } from '@/lib/validations/auth.schema';
 import { switchBranch } from '@/lib/services/auth.service';
 
 /**
+ * @deprecated Digantikan oleh POST /api/v1/auth/select-branch (Amandemen A1: satu pintu untuk seluruh role).
+ * Jadwal penghapusan: rilis v2.1 setelah migrasi seluruh test dan caller.
+ *
  * POST /api/v1/auth/switch-branch — semua role non-OWNER.
  * Urutan: Zod parse → auth → role check → handler → set cookie → response.
- * Branch tujuan wajib ada di assignment user (dicek di service layer).
- * Refresh token lama diambil dari cookie agar bisa direvoke oleh service (rotation).
  */
 export const POST = withErrorHandler(async (req: NextRequest) => {
   const body = await req.json();
@@ -32,6 +33,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
 
   const res = ok({ user });
   setAuthCookies(res, tokens);
+  setBranchContextCookie(res, input.branchId);
 
   return res;
 });

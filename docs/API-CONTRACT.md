@@ -27,10 +27,11 @@ Permission ditulis sebagai: `[OWNER]`, `[OWNER, MANAGER]`, dst.
 | Method | Path | Permission | Deskripsi |
 |---|---|---|---|
 | POST | /auth/login | 🔓 | Login, set cookies |
-| POST | /auth/refresh | 🔓 (refresh cookie) | Rotasi access token |
-| POST | /auth/logout | 🔓 | Revoke refresh token |
-| GET | /auth/me | semua | Profil user + role + branch aktif + daftar branch assignment |
-| POST | /auth/switch-branch | semua non-OWNER | Ganti branch aktif |
+| POST | /auth/refresh | 🔓 (refresh cookie) | Rotasi access token & segarkan branch context |
+| POST | /auth/logout | 🔓 | Revoke refresh token & bersihkan cookies |
+| GET | /auth/me | semua | Profil user + role + branch aktif + branch context + daftar branch assignment |
+| POST | /auth/select-branch | semua role | Satu pintu pemilihan/perubahan konteks cabang kerja (termasuk 'ALL' untuk OWNER) |
+| POST | /auth/switch-branch | semua non-OWNER | *(Deprecated v2.1)* Ganti branch aktif, didelegasikan ke select-branch |
 
 **POST /auth/login**
 ```json
@@ -40,14 +41,48 @@ Permission ditulis sebagai: `[OWNER]`, `[OWNER, MANAGER]`, dst.
 { "identifier": "owner", "password": "secret123" }
 
 // Response 200
-{ "success": true, "data": { "user": { "id": "...", "email": "...", "role": "OWNER", "name": "...", "activeBranchId": null, "branches": [] } } }
+{ "success": true, "data": { "user": { "id": "...", "email": "...", "role": "OWNER", "name": "...", "activeBranchId": null, "branchContext": null, "branches": [] } } }
 ```
-Owner: `activeBranchId = null` (akses semua). Non-OWNER dengan 1 branch:
-auto-set. Dengan >1 branch: `activeBranchId = null`, wajib panggil
-switch-branch sebelum akses endpoint operasional.
+Owner: `activeBranchId = null`. Non-OWNER dengan 1 branch:
+auto-set `activeBranchId` dan cookie session `oase_branch_context`. Dengan >1 branch atau OWNER:
+wajib memilih konteks cabang via `POST /auth/select-branch` sebelum mengakses endpoint operasional.
+Jika ada `remembered_branch` (30 hari) yang valid, auto-set saat login.
 
-**POST /auth/switch-branch**
+**POST /auth/select-branch**
 ```json
+// Request
+{
+  "branchId": "uuid" | "ALL", // "ALL" hanya diizinkan untuk role OWNER
+  "remember": false            // opsional boolean, jika true set cookie oase_remembered_branch (30 hari)
+}
+
+// Response 200
+{
+  "success": true,
+  "data": {
+    "user": {
+      "id": "...",
+      "email": "...",
+      "role": "OWNER",
+      "name": "...",
+      "activeBranchId": "uuid" | null,
+      "branchContext": "uuid" | "ALL",
+      "branches": [...]
+    }
+  }
+}
+// Sets cookie: oase_branch_context=<branchId|ALL> (session cookie, tanpa TTL 15m)
+// If remember=true, sets cookie: oase_remembered_branch=<branchId|ALL> (Max-Age: 30 hari)
+// Errors:
+// - 400 VALIDATION_ERROR jika format input tidak valid
+// - 403 FORBIDDEN jika non-OWNER memilih "ALL"
+// - 403 BRANCH_ACCESS_DENIED jika user memilih cabang yang bukan assignment aktifnya
+// - 404 BRANCH_NOT_FOUND jika cabang tidak ditemukan atau tidak aktif
+```
+
+**POST /auth/switch-branch** *(Deprecated v2.1)*
+```json
+// Request (backward compatibility; didelegasikan ke select-branch)
 { "branchId": "uuid" }  // → 403 BRANCH_ACCESS_DENIED jika bukan assignment user
 ```
 

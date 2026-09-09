@@ -2,7 +2,7 @@ import type { NextRequest } from 'next/server';
 import { withErrorHandler } from '@/lib/error-handler';
 import { getClientIp } from '@/lib/middleware';
 import { ok } from '@/lib/response';
-import { clearAuthCookies } from '@/lib/cookies';
+import { clearAuthCookies, clearBranchContextCookie } from '@/lib/cookies';
 import { ACCESS_TOKEN_COOKIE, REFRESH_TOKEN_COOKIE, verifyAccessToken } from '@/lib/auth';
 import { logout } from '@/lib/services/auth.service';
 
@@ -32,6 +32,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
 
   const res = ok({ message: 'Logout berhasil' });
   clearAuthCookies(res);
+  clearBranchContextCookie(res);
 
   return res;
 });

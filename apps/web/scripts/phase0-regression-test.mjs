@@ -90,12 +90,22 @@ async function run() {
   console.log(`  Status: ${r6.status}`);
   check('status 200', r6.status === 200);
 
-  // R7. POST /auth/switch-branch (OWNER) -> 403 FORBIDDEN
-  console.log('\nR7. POST /auth/switch-branch (OWNER) -> 403');
-  const r7 = await req('/auth/switch-branch', 'POST', { branchId: '00000000-0000-0000-0000-000000000001' }, ownerCookieRefreshed);
+  // R7. POST /auth/select-branch (OWNER) -> 200 (AMANDEMEN A1: Perubahan Desain)
+  // Catatan Evolusi Desain:
+  // Sebelumnya di Fase 0, aturan lama melarang OWNER melakukan switch-branch (403 FORBIDDEN)
+  // karena OWNER bersifat global tanpa activeBranchId di token.
+  // Di task-branch-guard (Amandemen A1 & A3), select-branch menjadi SATU PINTU konteks cabang
+  // untuk SEMUA role, termasuk OWNER. OWNER dapat memilih konteks cabang kerja spesifik
+  // ataupun 'ALL' (Semua Cabang / Pusat) untuk mengoperasikan dashboard/laporan secara terpusat.
+  // Endpoint switch-branch lama di-mark @deprecated (dijadwalkan hapus v2.1).
+  // Test R7 ini diupdate untuk menguji select-branch sebagai satu pintu konteks cabang.
+  console.log('\nR7. POST /auth/select-branch (OWNER) -> 200 (Satu Pintu Konteks Cabang)');
+  const r7 = await req('/auth/select-branch', 'POST', { branchId: 'ALL' }, ownerCookieRefreshed);
   console.log(`  Status: ${r7.status}`);
-  check('status 403', r7.status === 403);
-  check('code FORBIDDEN', r7.data.code === 'FORBIDDEN');
+  check('status 200', r7.status === 200);
+  check('success true', r7.data.success === true);
+  check('branchContext ALL', r7.data.data?.user?.branchContext === 'ALL');
+  check('cookie oase_branch_context=ALL', (r7.setCookie || '').includes('oase_branch_context=ALL'));
 
   // R8. POST /auth/logout (owner) -> 200
   console.log('\nR8. POST /auth/logout (owner) -> 200');

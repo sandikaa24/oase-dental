@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { Button } from '@/components/ui/button';
@@ -8,6 +8,9 @@ import { Input } from '@/components/ui/input';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { ErrorBanner } from '@/components/ui/placeholder';
 import { Sparkles } from 'lucide-react';
+
+import { isMultiBranchUser } from '@/lib/auth';
+import type { UserSession } from '@/lib/auth-context';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -18,12 +21,28 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Amandemen A3: Gunakan fungsi isMultiBranchUser bersama
+  const handlePostLoginRedirect = useCallback((userSession: UserSession) => {
+    const isMulti = isMultiBranchUser(userSession);
+    if (!isMulti) {
+      // User terikat 1 cabang (CASHIER dll.): login langsung masuk, TANPA langkah pilih cabang
+      router.replace('/admin');
+    } else {
+      // User multi-cabang (OWNER / MANAGER > 1): jika sudah ada context (misal dari remembered branch) masuk ke dashboard, jika tidak ke /select-branch
+      if (userSession.branchContext || userSession.activeBranchId) {
+        router.replace('/admin');
+      } else {
+        router.replace('/select-branch');
+      }
+    }
+  }, [router]);
+
   // Client guard: hanya redirect jika user TERVALIDASI dari session (bukan sekadar presence cookie)
   useEffect(() => {
     if (!authLoading && user) {
-      router.replace('/admin');
+      handlePostLoginRedirect(user);
     }
-  }, [user, authLoading, router]);
+  }, [user, authLoading, handlePostLoginRedirect]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,8 +50,8 @@ export default function LoginPage() {
     setIsSubmitting(true);
 
     try {
-      await login(identifier, password);
-      router.push('/admin');
+      const userSession = await login(identifier, password);
+      handlePostLoginRedirect(userSession);
     } catch (err: unknown) {
       if (err instanceof Error) {
         setError(err.message);
@@ -43,6 +62,7 @@ export default function LoginPage() {
       setIsSubmitting(false);
     }
   };
+
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-background px-4">

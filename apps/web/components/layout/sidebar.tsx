@@ -130,6 +130,29 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
         )}
       </div>
 
+      {/* Active Branch Indicator & Switcher di Sidebar */}
+      <div className="px-3 pt-3 pb-1 border-b border-border/60">
+        <div className="flex items-center justify-between px-2.5 py-1.5 rounded-md bg-branch-indicator-bg border border-branch-indicator-border text-branch-indicator-text text-xs font-semibold">
+          <div className="flex items-center gap-2 min-w-0">
+            <Building2 className="h-3.5 w-3.5 shrink-0 text-primary" />
+            <span className="truncate">
+              {user?.role === 'OWNER'
+                ? (user?.branchContext === 'ALL' || !user?.activeBranchId ? 'Semua Cabang (Pusat)' : 'Cabang Terpilih')
+                : (user?.branches?.find((b) => b.id === (user?.activeBranchId || user?.branches[0]?.id))?.name || 'Cabang Aktif')}
+            </span>
+          </div>
+          {(user?.role === 'OWNER' || (user?.branches && user.branches.length > 1)) && (
+            <Link
+              href="/select-branch"
+              className="text-[10px] text-primary hover:underline shrink-0 ml-1 font-semibold"
+              title="Ganti Cabang Kerja"
+            >
+              Ganti
+            </Link>
+          )}
+        </div>
+      </div>
+
       {/* Nav List */}
       <div className="flex-1 overflow-y-auto px-3 py-4">
         {renderNavGroup(mainItems)}
@@ -137,6 +160,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
         {renderNavGroup(managementItems, 'Manajemen')}
         {renderNavGroup(systemItems, 'Sistem')}
       </div>
+
 
       {/* Footer Version */}
       <div className="p-4 border-t border-border bg-slate-50/50">

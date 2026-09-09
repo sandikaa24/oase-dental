@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { withErrorHandler } from '@/lib/error-handler';
-import { requireAuth, requireRole, getClientIp } from '@/lib/middleware';
+import { requireAuth, requireRole, getClientIp, requireBranchContext } from '@/lib/middleware';
 import { stockMutationSchema } from '@/lib/validations/stock.schema';
 import { recordStockMutation, type UserContext } from '@/lib/services/stock.service';
 
@@ -12,18 +12,24 @@ export const dynamic = 'force-dynamic';
  * Role: [OWNER, MANAGER]
  */
 export const POST = withErrorHandler(async (req: NextRequest) => {
+  const body = await req.json();
+  const input = stockMutationSchema.parse(body);
+
   const auth = await requireAuth();
   requireRole(auth, 'OWNER', 'MANAGER');
 
-  const body = await req.json();
-  const input = stockMutationSchema.parse(body);
+  let activeBranchId = auth.branchId;
+  if (auth.role !== 'OWNER' && !activeBranchId) {
+    activeBranchId = await requireBranchContext(auth, { allowAllForOwner: false });
+  }
+
   const ip = getClientIp(req);
 
   const userContext: UserContext = {
     userId: auth.userId,
     email: auth.email,
     role: auth.role,
-    activeBranchId: auth.branchId,
+    activeBranchId,
     employeeId: auth.employeeId,
   };
 

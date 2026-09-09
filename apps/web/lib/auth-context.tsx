@@ -17,6 +17,7 @@ export interface UserSession {
   role: UserRole;
   name: string | null;
   activeBranchId: string | null;
+  branchContext?: string | null;
   branches: BranchSummary[];
   permissions: Permission[];
 }
@@ -26,6 +27,7 @@ interface AuthContextValue {
   isLoading: boolean;
   login: (email: string, password: string, branchId?: string) => Promise<UserSession>;
   logout: () => Promise<void>;
+  selectBranch: (branchId: string, remember?: boolean) => Promise<void>;
   switchBranch: (branchId: string) => Promise<void>;
   refreshSession: () => Promise<UserSession | null>;
   hasPermission: (permission: Permission) => boolean;
@@ -96,16 +98,23 @@ export function AuthProvider({
     }
   };
 
-  const switchBranch = async (branchId: string): Promise<void> => {
-    const res = await fetchApi<{ user: UserSession }>('/api/v1/auth/switch-branch', {
-      method: 'POST',
-      body: JSON.stringify({ branchId }),
-    });
+  const selectBranch = async (branchId: string, remember = false): Promise<void> => {
+    const res = await fetchApi<{ user: UserSession; branchContext: string }>(
+      '/api/v1/auth/select-branch',
+      {
+        method: 'POST',
+        body: JSON.stringify({ branchId, remember }),
+      }
+    );
 
     if (res.data?.user) {
       setUser(res.data.user);
       router.refresh();
     }
+  };
+
+  const switchBranch = async (branchId: string): Promise<void> => {
+    return selectBranch(branchId);
   };
 
   const hasPermission = useCallback(
@@ -123,6 +132,7 @@ export function AuthProvider({
         isLoading,
         login,
         logout,
+        selectBranch,
         switchBranch,
         refreshSession,
         hasPermission,

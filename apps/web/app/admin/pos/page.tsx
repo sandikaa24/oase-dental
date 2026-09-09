@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
 import { fetchApi, ApiError } from '@/lib/api-client';
 import {
@@ -117,7 +118,8 @@ export default function PosPage() {
 
     loadCatalog();
     loadTransactions();
-  }, [authLoading, user?.activeBranchId, user?.role, loadCatalog, loadTransactions]);
+  }, [authLoading, user?.activeBranchId, user?.branchContext, user?.role, loadCatalog, loadTransactions]);
+
 
   // Cart Operations
   const handleAddToCart = (item: PosCatalogItem) => {
@@ -413,6 +415,22 @@ export default function PosPage() {
           </button>
         </div>
       </div>
+
+      {/* Warning Banner bila OWNER berada di konteks Semua Cabang */}
+      {user?.role === 'OWNER' && (!user?.activeBranchId || user?.branchContext === 'ALL') && (
+        <div className="p-3 rounded-lg bg-warning-bg border border-warning-border text-warning-text text-xs flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <span className="font-semibold shrink-0">Perhatian:</span>
+            <span>Anda sedang berada dalam konteks &ldquo;Semua Cabang (Pusat)&rdquo;. Untuk membuat transaksi kasir baru, silakan beralih ke cabang fisik spesifik.</span>
+          </div>
+          <Link
+            href="/select-branch"
+            className="font-bold underline hover:opacity-80 shrink-0"
+          >
+            Pilih Cabang Fisik
+          </Link>
+        </div>
+      )}
 
       {/* Global Success Banner */}
       {successMessage && (

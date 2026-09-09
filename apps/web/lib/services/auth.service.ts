@@ -7,8 +7,18 @@ import {
   verifyPassword,
   verifyRefreshToken,
 } from '../auth';
-import { BranchAccessDeniedError, ForbiddenError, UnauthorizedError } from '../errors';
-import { getPermissions, type Permission, type UserRole } from '@oase/shared';
+import {
+  BranchAccessDeniedError,
+  ForbiddenError,
+  NotFoundError,
+  UnauthorizedError,
+} from '../errors';
+import {
+  getPermissions,
+  isMultiBranchUser,
+  type Permission,
+  type UserRole,
+} from '@oase/shared';
 
 const REFRESH_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -24,6 +34,7 @@ export interface PublicUser {
   role: UserRole;
   name: string | null;
   activeBranchId: string | null;
+  branchContext?: string | null;
   branches: BranchSummary[];
   permissions: Permission[];
 }
@@ -38,7 +49,7 @@ export interface SessionTokens {
  * OWNER: akses semua cabang, tapi tanpa assignment (API-CONTRACT: branches []).
  * Non-OWNER: dari EmployeeBranch yang aktif dan cabangnya aktif.
  */
-async function getAssignedBranches(userId: string): Promise<BranchSummary[]> {
+export async function getAssignedBranches(userId: string): Promise<BranchSummary[]> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { role: true, employeeId: true },
@@ -66,6 +77,7 @@ async function issueSession(params: {
   role: UserRole;
   branchId: string | null;
   employeeId: string | null;
+  branchCount?: number;
 }): Promise<SessionTokens> {
   const accessToken = await createAccessToken({
     userId: params.userId,
@@ -73,6 +85,7 @@ async function issueSession(params: {
     role: params.role,
     branchId: params.branchId,
     employeeId: params.employeeId,
+    branchCount: params.branchCount,
   });
 
   const refreshToken = await createRefreshToken({
@@ -94,15 +107,22 @@ async function issueSession(params: {
 
 /**
  * Login: email + password.
- * activeBranchId sesuai API-CONTRACT — OWNER null, non-OWNER dengan tepat 1
- * assignment di-set otomatis, lebih dari 1 wajib switch-branch dulu.
+ * - Single-branch (CASHIER dll): otomatis masuk tanpa interstisial.
+ * - Multi-branch: re-validasi rememberedBranch 30 hari (Amandemen A2), jika valid auto-apply,
+ *   jika tidak diarahkan ke interstisial /select-branch.
  */
 export async function login(input: {
   identifier?: string;
   email?: string;
   password: string;
   ip: string | null;
-}): Promise<{ user: PublicUser; tokens: SessionTokens }> {
+  rememberedBranch?: string | null;
+}): Promise<{
+  user: PublicUser;
+  tokens: SessionTokens;
+  branchContext: string | null;
+  rememberedApplied: boolean;
+}> {
   const rawIdentifier = (input.identifier || input.email || '').trim().toLowerCase();
 
   // Prioritas lookup: email dulu, lalu username (keduanya case-insensitive)
@@ -157,7 +177,44 @@ export async function login(input: {
     throw new ForbiddenError('Akun belum punya penempatan cabang aktif');
   }
 
-  const activeBranchId = branches.length === 1 ? (branches[0]?.id ?? null) : null;
+  let activeBranchId: string | null = null;
+  let branchContext: string | null = null;
+  let rememberedApplied = false;
+
+  const isMultiBranch = isMultiBranchUser({ role, branches });
+
+  if (!isMultiBranch) {
+    // User terikat 1 cabang (CASHIER dll.): login langsung masuk, TANPA langkah pilih cabang.
+    activeBranchId = branches[0]?.id ?? null;
+    branchContext = activeBranchId;
+  } else {
+    // User multi-cabang: re-validasi server-side terhadap assignment aktif saat login (Amandemen A2)
+    if (input.rememberedBranch) {
+      if (role === 'OWNER') {
+        if (input.rememberedBranch === 'ALL') {
+          activeBranchId = null;
+          branchContext = 'ALL';
+          rememberedApplied = true;
+        } else {
+          const branch = await prisma.branch.findUnique({
+            where: { id: input.rememberedBranch },
+          });
+          if (branch && branch.active) {
+            activeBranchId = branch.id;
+            branchContext = branch.id;
+            rememberedApplied = true;
+          }
+        }
+      } else {
+        const found = branches.find((b) => b.id === input.rememberedBranch);
+        if (found) {
+          activeBranchId = found.id;
+          branchContext = found.id;
+          rememberedApplied = true;
+        }
+      }
+    }
+  }
 
   const tokens = await issueSession({
     userId: user.id,
@@ -165,6 +222,7 @@ export async function login(input: {
     role,
     branchId: activeBranchId,
     employeeId: user.employeeId,
+    branchCount: branches.length,
   });
 
   await prisma.auditLog.create({
@@ -184,19 +242,23 @@ export async function login(input: {
       role,
       name: user.employee?.name ?? null,
       activeBranchId,
+      branchContext,
       branches,
       permissions: getPermissions(role),
     },
     tokens,
+    branchContext,
+    rememberedApplied,
   };
 }
 
 /**
- * Bentuk PublicUser dari userId + branch aktif (dipakai /auth/me & switch-branch).
+ * Bentuk PublicUser dari userId + branch aktif (dipakai /auth/me & select-branch).
  */
 export async function getSessionUser(
   userId: string,
   activeBranchId: string | null,
+  branchContext?: string | null,
 ): Promise<PublicUser> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
@@ -208,6 +270,8 @@ export async function getSessionUser(
   }
 
   const role = user.role as UserRole;
+  const branches = await getAssignedBranches(user.id);
+  const effectiveContext = branchContext !== undefined ? branchContext : activeBranchId;
 
   return {
     id: user.id,
@@ -215,7 +279,8 @@ export async function getSessionUser(
     role,
     name: user.employee?.name ?? null,
     activeBranchId,
-    branches: await getAssignedBranches(user.id),
+    branchContext: effectiveContext,
+    branches,
     permissions: getPermissions(role),
   };
 }
@@ -224,9 +289,13 @@ export async function getSessionUser(
  * Rotasi access token memakai refresh token dari cookie.
  * Token lama langsung direvoke (rotation) agar tidak bisa dipakai dua kali.
  */
-export async function refreshSession(rawRefreshToken: string): Promise<{
+export async function refreshSession(
+  rawRefreshToken: string,
+  currentBranchContext?: string | null,
+): Promise<{
   user: PublicUser;
   tokens: SessionTokens;
+  branchContext: string | null;
 }> {
   let payload;
   try {
@@ -253,6 +322,10 @@ export async function refreshSession(rawRefreshToken: string): Promise<{
   }
 
   const role = user.role as UserRole;
+  const branches = await getAssignedBranches(user.id);
+
+  // Amandemen A2: Pertahankan branchContext yang ada dari session cookie
+  const effectiveBranchContext = currentBranchContext ?? payload.branchId;
 
   // Revoke token lama & terbitkan yang baru dalam satu transaction.
   const tokens = await prisma.$transaction(async (tx) => {
@@ -267,12 +340,14 @@ export async function refreshSession(rawRefreshToken: string): Promise<{
       role,
       branchId: payload.branchId,
       employeeId: user.employeeId,
+      branchCount: branches.length,
     });
   });
 
   return {
-    user: await getSessionUser(user.id, payload.branchId),
+    user: await getSessionUser(user.id, payload.branchId, effectiveBranchContext),
     tokens,
+    branchContext: effectiveBranchContext,
   };
 }
 
@@ -308,27 +383,49 @@ export async function logout(input: {
 }
 
 /**
- * Ganti branch aktif. Hanya untuk non-OWNER (API-CONTRACT bagian 1).
- * Branch tujuan wajib ada di assignment user, jika tidak → BRANCH_ACCESS_DENIED.
- * Refresh token lama direvoke dan diganti yang baru dalam satu transaction
- * (device-scoped rotation, sama seperti pola refreshSession).
+ * Pilih konteks cabang kerja (Amandemen A1: satu pintu untuk seluruh role).
+ * - Role OWNER: boleh memilih "ALL" (Semua Cabang) ATAU UUID cabang aktif spesifik.
+ * - Role Non-OWNER: hanya boleh memilih cabang yang di-assign dan aktif; "ALL" dilarang (403 FORBIDDEN).
  */
-export async function switchBranch(input: {
+export async function selectBranch(input: {
   userId: string;
   role: UserRole;
   branchId: string;
+  remember?: boolean;
   rawRefreshToken: string | null;
   ip: string | null;
-}): Promise<{ user: PublicUser; tokens: SessionTokens }> {
-  if (input.role === 'OWNER') {
-    throw new ForbiddenError('OWNER sudah memiliki akses ke semua cabang');
-  }
+}): Promise<{ user: PublicUser; tokens: SessionTokens; branchContext: string }> {
+  let targetBranchId: string | null = null;
+  let targetBranchCode = 'ALL';
+  let branchContext = input.branchId;
 
-  const branches = await getAssignedBranches(input.userId);
-  const target = branches.find((b) => b.id === input.branchId);
-
-  if (!target) {
-    throw new BranchAccessDeniedError();
+  if (input.branchId === 'ALL') {
+    if (input.role !== 'OWNER') {
+      throw new ForbiddenError('Hanya OWNER yang dapat memilih Semua Cabang (Pusat)');
+    }
+    targetBranchId = null;
+    branchContext = 'ALL';
+  } else {
+    if (input.role === 'OWNER') {
+      const branch = await prisma.branch.findUnique({
+        where: { id: input.branchId },
+      });
+      if (!branch || !branch.active) {
+        throw new NotFoundError('Cabang tidak ditemukan atau sudah tidak aktif');
+      }
+      targetBranchId = branch.id;
+      targetBranchCode = branch.code;
+      branchContext = branch.id;
+    } else {
+      const branches = await getAssignedBranches(input.userId);
+      const target = branches.find((b) => b.id === input.branchId);
+      if (!target) {
+        throw new BranchAccessDeniedError();
+      }
+      targetBranchId = target.id;
+      targetBranchCode = target.code;
+      branchContext = target.id;
+    }
   }
 
   const user = await prisma.user.findUnique({
@@ -340,16 +437,14 @@ export async function switchBranch(input: {
     throw new UnauthorizedError('Akun tidak aktif atau tidak ditemukan');
   }
 
-  // Cari refresh token lama di DB (hanya jika dikirim oleh caller).
-  // Token yang tidak dikenal / sudah revoked diabaikan agar switch tetap jalan.
   const oldToken = input.rawRefreshToken
     ? await prisma.refreshToken.findUnique({
         where: { tokenHash: hashRefreshToken(input.rawRefreshToken) },
       })
     : null;
 
-  // Revoke token lama + terbitkan yang baru dalam satu transaction —
-  // mengikuti persis pola refreshSession() agar tidak ada mekanisme revoke ganda.
+  const branches = await getAssignedBranches(input.userId);
+
   const tokens = await prisma.$transaction(async (tx) => {
     if (oldToken && !oldToken.revokedAt) {
       await tx.refreshToken.update({
@@ -362,8 +457,9 @@ export async function switchBranch(input: {
       userId: input.userId,
       email: user.email,
       role: input.role,
-      branchId: target.id,
+      branchId: targetBranchId,
       employeeId: user.employeeId,
+      branchCount: branches.length,
     });
   });
 
@@ -372,14 +468,29 @@ export async function switchBranch(input: {
       actorId: input.userId,
       action: 'SWITCH_BRANCH',
       entity: 'Branch',
-      entityId: target.id,
+      entityId: targetBranchId ?? input.userId,
       ip: input.ip,
-      note: 'Branch aktif diganti ke ' + target.code,
+      note: 'Konteks cabang diubah ke ' + targetBranchCode,
     },
   });
 
   return {
-    user: await getSessionUser(input.userId, target.id),
+    user: await getSessionUser(input.userId, targetBranchId, branchContext),
     tokens,
+    branchContext,
   };
+}
+
+/**
+ * @deprecated Digantikan oleh selectBranch() (Amandemen A1: satu pintu untuk seluruh role).
+ * Dijadwalkan dihapus pada v2.1.
+ */
+export async function switchBranch(input: {
+  userId: string;
+  role: UserRole;
+  branchId: string;
+  rawRefreshToken: string | null;
+  ip: string | null;
+}): Promise<{ user: PublicUser; tokens: SessionTokens; branchContext: string }> {
+  return selectBranch(input);
 }

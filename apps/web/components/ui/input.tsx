@@ -6,11 +6,12 @@ export interface InputProps extends Omit<React.InputHTMLAttributes<HTMLInputElem
   error?: string;
   helperText?: string;
   prefix?: React.ReactNode;
+  suffix?: React.ReactNode;
   containerClassName?: string;
 }
 
 export const Input = React.forwardRef<HTMLInputElement, InputProps>(
-  ({ className, containerClassName, label, error, helperText, prefix, id, type, ...props }, ref) => {
+  ({ className, containerClassName, label, error, helperText, prefix, suffix, id, type, ...props }, ref) => {
     const inputId = id || (label ? `input-${label.toLowerCase().replace(/\s+/g, '-')}` : undefined);
 
     return (
@@ -38,6 +39,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
               'focus-visible:outline-none focus-visible:border-accent focus-visible:ring-2 focus-visible:ring-primary-soft',
               'disabled:cursor-not-allowed disabled:opacity-50 disabled:bg-slate-50',
               prefix && 'pl-10',
+              suffix && 'pr-10',
               error && 'border-danger-icon focus-visible:border-danger-icon focus-visible:ring-danger-bg',
               className
             )}
@@ -45,6 +47,11 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
             aria-describedby={error ? `${inputId}-error` : helperText ? `${inputId}-helper` : undefined}
             {...props}
           />
+          {suffix && (
+            <div className="absolute inset-y-0 right-0 flex items-center">
+              {suffix}
+            </div>
+          )}
         </div>
         {error && (
           <p id={`${inputId}-error`} className="text-xs text-danger-text font-medium">

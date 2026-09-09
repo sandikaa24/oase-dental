@@ -248,26 +248,27 @@ export function UserModal({
                   Role {role}: minimal {minPasswordLength} karakter
                 </span>
               </label>
-              <div className="relative">
-                <Input
-                  type={showPassword ? 'text' : 'password'}
-                  required
-                  minLength={minPasswordLength}
-                  placeholder={`Minimal ${minPasswordLength} karakter`}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="pr-9 text-xs font-mono"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  aria-label={showPassword ? 'Sembunyikan password' : 'Lihat password'}
-                  title={showPassword ? 'Sembunyikan password' : 'Lihat password'}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted hover:text-foreground p-0.5 rounded"
-                >
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
-              </div>
+              <Input
+                type={showPassword ? 'text' : 'password'}
+                required
+                minLength={minPasswordLength}
+                placeholder={`Minimal ${minPasswordLength} karakter`}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="text-xs font-mono"
+                suffix={
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    aria-label={showPassword ? 'Sembunyikan password' : 'Lihat password'}
+                    title={showPassword ? 'Sembunyikan password' : 'Lihat password'}
+                    className="w-10 h-10 flex items-center justify-center text-muted hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded-r-md transition-colors"
+                    tabIndex={-1}
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                }
+              />
             </div>
           )}
 

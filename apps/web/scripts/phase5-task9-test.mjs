@@ -124,35 +124,24 @@ async function runSuite() {
     const mgrCookies = extractCookie(mgrSwitchRes);
     if (mgrCookies) managerAuth.cookies = mgrCookies;
 
-    // Buat/ambil Cashier akun aktif dengan employee
-    let cashier = await prisma.user.findFirst({
-      where: { role: 'CASHIER', active: true, employeeId: { not: null } },
+    // Buat Cashier akun pengujian terisolasi
+    const cashierEmp = await prisma.employee.create({
+      data: {
+        name: 'Cashier Uji Exp',
+        position: 'Kasir',
+        branches: { create: { branchId: branchJKT.id } },
+      },
+    });
+    const cashier = await prisma.user.create({
+      data: {
+        email: `csh.exp.${Date.now()}.${Math.floor(Math.random() * 1000)}@oase.id`,
+        passwordHash: hash,
+        role: 'CASHIER',
+        employeeId: cashierEmp.id,
+        active: true,
+      },
       include: { employee: true },
     });
-    if (!cashier) {
-      const emp = await prisma.employee.create({
-        data: {
-          name: 'Cashier Uji JKT',
-          position: 'Kasir',
-          branches: { create: { branchId: branchJKT.id } },
-        },
-      });
-      cashier = await prisma.user.create({
-        data: {
-          email: `csh.jkt.${Date.now()}@oase.id`,
-          passwordHash: hash,
-          role: 'CASHIER',
-          employeeId: emp.id,
-          active: true,
-        },
-        include: { employee: true },
-      });
-    } else {
-      await prisma.user.update({
-        where: { id: cashier.id },
-        data: { passwordHash: hash, active: true },
-      });
-    }
     const cashierAuth = await login(cashier.email, '1234');
     assert(cashierAuth.status === 200, 'SETUP-3', 'Login CASHIER berhasil');
 

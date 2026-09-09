@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { ErrorBanner } from '@/components/ui/placeholder';
-import { Sparkles } from 'lucide-react';
+import { Sparkles, Eye, EyeOff } from 'lucide-react';
 
 import type { UserSession } from '@/lib/auth-context';
 
@@ -17,6 +17,7 @@ export default function LoginPage() {
 
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -104,13 +105,29 @@ export default function LoginPage() {
               <div className="space-y-1">
                 <Input
                   label="Kata Sandi"
-                  type="password"
+                  type={showPassword ? 'text' : 'password'}
                   placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
                   autoComplete="current-password"
                   disabled={isSubmitting || authLoading}
+                  suffix={
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((prev) => !prev)}
+                      aria-label={showPassword ? 'Sembunyikan kata sandi' : 'Lihat kata sandi'}
+                      title={showPassword ? 'Sembunyikan kata sandi' : 'Lihat kata sandi'}
+                      className="w-10 h-10 flex items-center justify-center text-muted hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded-r-md transition-colors"
+                      tabIndex={-1}
+                    >
+                      {showPassword ? (
+                        <EyeOff className="h-4 w-4" aria-hidden="true" />
+                      ) : (
+                        <Eye className="h-4 w-4" aria-hidden="true" />
+                      )}
+                    </button>
+                  }
                 />
               </div>
 

@@ -36,9 +36,9 @@ async function run() {
   const hash = await bcrypt.hash('1234', 10);
   await prisma.user.updateMany({ data: { passwordHash: hash } });
 
-  const owner = await prisma.user.findFirst({ where: { role: 'OWNER' } });
-  const manager = await prisma.user.findFirst({ where: { role: 'MANAGER' } });
-  const cashier = await prisma.user.findFirst({ where: { role: 'CASHIER' } });
+  const owner = await prisma.user.findFirst({ where: { role: 'OWNER', active: true } });
+  const manager = await prisma.user.findFirst({ where: { role: 'MANAGER', active: true } });
+  const cashier = await prisma.user.findFirst({ where: { role: 'CASHIER', active: true } });
 
   const ownerCookie = await login(owner.email, '1234');
   const managerCookie = manager ? await login(manager.email, '1234') : null;

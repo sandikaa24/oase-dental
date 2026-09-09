@@ -1,4 +1,5 @@
 import { prisma } from '../prisma';
+import type { Prisma } from '@prisma/client';
 import {
   createAccessToken,
   createRefreshToken,
@@ -71,14 +72,17 @@ export async function getAssignedBranches(userId: string): Promise<BranchSummary
  * Cookie menyimpan JWT-nya; DB hanya menyimpan hash sehingga token bisa direvoke
  * dan tidak pernah tersimpan dalam bentuk plaintext.
  */
-async function issueSession(params: {
-  userId: string;
-  email: string;
-  role: UserRole;
-  branchId: string | null;
-  employeeId: string | null;
-  branchCount?: number;
-}): Promise<SessionTokens> {
+async function issueSession(
+  params: {
+    userId: string;
+    email: string;
+    role: UserRole;
+    branchId: string | null;
+    employeeId: string | null;
+    branchCount?: number;
+  },
+  db: Prisma.TransactionClient | typeof prisma = prisma
+): Promise<SessionTokens> {
   const accessToken = await createAccessToken({
     userId: params.userId,
     email: params.email,
@@ -94,7 +98,7 @@ async function issueSession(params: {
     branchId: params.branchId,
   });
 
-  await prisma.refreshToken.create({
+  await db.refreshToken.create({
     data: {
       userId: params.userId,
       tokenHash: hashRefreshToken(refreshToken),
@@ -334,14 +338,17 @@ export async function refreshSession(
       data: { revokedAt: new Date() },
     });
 
-    return issueSession({
-      userId: user.id,
-      email: user.email,
-      role,
-      branchId: payload.branchId,
-      employeeId: user.employeeId,
-      branchCount: branches.length,
-    });
+    return issueSession(
+      {
+        userId: user.id,
+        email: user.email,
+        role,
+        branchId: payload.branchId,
+        employeeId: user.employeeId,
+        branchCount: branches.length,
+      },
+      tx
+    );
   });
 
   return {
@@ -453,25 +460,30 @@ export async function selectBranch(input: {
       });
     }
 
-    return issueSession({
-      userId: input.userId,
-      email: user.email,
-      role: input.role,
-      branchId: targetBranchId,
-      employeeId: user.employeeId,
-      branchCount: branches.length,
-    });
-  });
+    const newTokens = await issueSession(
+      {
+        userId: input.userId,
+        email: user.email,
+        role: input.role,
+        branchId: targetBranchId,
+        employeeId: user.employeeId,
+        branchCount: branches.length,
+      },
+      tx
+    );
 
-  await prisma.auditLog.create({
-    data: {
-      actorId: input.userId,
-      action: 'SWITCH_BRANCH',
-      entity: 'Branch',
-      entityId: targetBranchId ?? input.userId,
-      ip: input.ip,
-      note: 'Konteks cabang diubah ke ' + targetBranchCode,
-    },
+    await tx.auditLog.create({
+      data: {
+        actorId: input.userId,
+        action: 'SWITCH_BRANCH',
+        entity: 'Branch',
+        entityId: targetBranchId ?? input.userId,
+        ip: input.ip,
+        note: 'Konteks cabang diubah ke ' + targetBranchCode,
+      },
+    });
+
+    return newTokens;
   });
 
   return {

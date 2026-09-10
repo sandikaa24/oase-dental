@@ -14,8 +14,11 @@ import {
   Clock,
   Building2,
   Info,
+  ArrowLeftRight,
 } from 'lucide-react';
 import type { AttendanceRecord } from './attendance-widget';
+import { ShiftSwapModal } from './shift-swap-modal';
+import { Button } from '@/components/ui/button';
 
 export function MyAttendanceTab() {
   // Default: bulan berjalan WIB (YYYY-MM)
@@ -28,6 +31,7 @@ export function MyAttendanceTab() {
     .slice(0, 7);
 
   const [selectedMonth, setSelectedMonth] = useState<string>(currentMonthWib);
+  const [isSwapModalOpen, setIsSwapModalOpen] = useState<boolean>(false);
 
   const {
     data: resData,
@@ -68,17 +72,30 @@ export function MyAttendanceTab() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
-          <label htmlFor="month-select" className="text-xs font-medium text-muted-foreground">
-            Bulan:
-          </label>
-          <input
-            id="month-select"
-            type="month"
-            value={selectedMonth}
-            onChange={(e) => setSelectedMonth(e.target.value)}
-            className="px-3 py-1.5 text-xs font-medium bg-card border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
-          />
+        <div className="flex items-center gap-3">
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={() => setIsSwapModalOpen(true)}
+            className="text-xs h-8 gap-1.5 border-border shadow-xs"
+          >
+            <ArrowLeftRight className="w-3.5 h-3.5 text-primary" />
+            <span>Tukar Shift</span>
+          </Button>
+
+          <div className="flex items-center gap-2">
+            <label htmlFor="month-select" className="text-xs font-medium text-muted-foreground">
+              Bulan:
+            </label>
+            <input
+              id="month-select"
+              type="month"
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(e.target.value)}
+              className="px-3 py-1.5 text-xs font-medium bg-card border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
+            />
+          </div>
         </div>
       </div>
 
@@ -212,6 +229,9 @@ export function MyAttendanceTab() {
           </div>
         )}
       </Card>
+
+      {/* Modal Tukar Shift */}
+      <ShiftSwapModal open={isSwapModalOpen} onOpenChange={setIsSwapModalOpen} />
     </div>
   );
 }

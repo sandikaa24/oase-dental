@@ -7,6 +7,7 @@ import { fetchApi } from '@/lib/api-client';
 import { Branch } from './branch-types';
 import { BranchModal } from './branch-modal';
 import { WorkingHoursModal } from './working-hours-modal';
+import { ShiftCalendarModal } from './shift-calendar-modal';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -18,6 +19,7 @@ import {
   Search,
   Edit2,
   Clock,
+  Calendar,
   Power,
   ChevronLeft,
   ChevronRight,
@@ -40,6 +42,9 @@ export function BranchTable() {
 
   const [workingHoursModalOpen, setWorkingHoursModalOpen] = useState(false);
   const [branchForWorkingHours, setBranchForWorkingHours] = useState<Branch | null>(null);
+
+  const [shiftCalendarModalOpen, setShiftCalendarModalOpen] = useState(false);
+  const [branchForShiftCalendar, setBranchForShiftCalendar] = useState<Branch | null>(null);
 
   const [feedbackMessage, setFeedbackMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -75,6 +80,11 @@ export function BranchTable() {
   const handleOpenWorkingHours = (b: Branch) => {
     setBranchForWorkingHours(b);
     setWorkingHoursModalOpen(true);
+  };
+
+  const handleOpenShiftCalendar = (b: Branch) => {
+    setBranchForShiftCalendar(b);
+    setShiftCalendarModalOpen(true);
   };
 
   const handleToggleStatus = async (b: Branch) => {
@@ -301,11 +311,21 @@ export function BranchTable() {
                           {/* Setting Jam Kerja */}
                           <button
                             type="button"
-                            title="Atur jam operasional & shift"
+                            title="Atur jam operasional standar"
                             onClick={() => handleOpenWorkingHours(branch)}
                             className="p-1.5 rounded-md text-slate-500 hover:text-primary hover:bg-primary-soft transition-colors"
                           >
                             <Clock className="h-3.5 w-3.5" />
+                          </button>
+
+                          {/* Jadwal Shift Staf */}
+                          <button
+                            type="button"
+                            title="Atur jadwal shift staf harian"
+                            onClick={() => handleOpenShiftCalendar(branch)}
+                            className="p-1.5 rounded-md text-slate-500 hover:text-primary hover:bg-primary-soft transition-colors"
+                          >
+                            <Calendar className="h-3.5 w-3.5" />
                           </button>
 
                           {/* Edit Profil */}
@@ -391,6 +411,13 @@ export function BranchTable() {
           if (msg) setFeedbackMessage({ type: 'success', text: msg });
         }}
         branch={branchForWorkingHours}
+      />
+
+      {/* Modal Kalender Shift Staf */}
+      <ShiftCalendarModal
+        open={shiftCalendarModalOpen}
+        onOpenChange={setShiftCalendarModalOpen}
+        branch={branchForShiftCalendar}
       />
     </div>
   );

@@ -29,6 +29,13 @@ export interface AttendanceRecord {
   status: 'PRESENT' | 'LATE';
   corrected: boolean;
   correctionNote: string | null;
+  shift?: 'MORNING' | 'EVENING';
+  latitude?: number | null;
+  longitude?: number | null;
+  distanceMeters?: number | null;
+  accuracyMeters?: number | null;
+  autoCheckout?: boolean;
+  lateCheckoutMinutes?: number | null;
   createdAt?: string;
   updatedAt?: string;
   employee?: {

@@ -84,14 +84,14 @@ export async function listShiftAssignments(params: {
     where.employeeId = params.employeeId;
   }
   if (params.date) {
-    where.date = new Date(`${params.date}T00:00:00+07:00`);
+    where.date = new Date(`${params.date}T00:00:00.000Z`);
   } else if (params.startDate || params.endDate) {
     where.date = {};
     if (params.startDate) {
-      where.date.gte = new Date(`${params.startDate}T00:00:00+07:00`);
+      where.date.gte = new Date(`${params.startDate}T00:00:00.000Z`);
     }
     if (params.endDate) {
-      where.date.lte = new Date(`${params.endDate}T00:00:00+07:00`);
+      where.date.lte = new Date(`${params.endDate}T00:00:00.000Z`);
     }
   }
 
@@ -134,7 +134,7 @@ export async function createShiftAssignment(
     throw new NotFoundError('Cabang tidak ditemukan atau nonaktif');
   }
 
-  const assignmentDate = new Date(`${input.date}T00:00:00+07:00`);
+  const assignmentDate = new Date(`${input.date}T00:00:00.000Z`);
 
   // Validasi bentrok shift
   const existing = await prisma.shiftAssignment.findUnique({
@@ -244,7 +244,7 @@ export async function createSwapRequest(
     throw new NotFoundError('Rekan kerja target tidak ditemukan atau nonaktif');
   }
 
-  const swapDate = new Date(`${input.date}T00:00:00+07:00`);
+  const swapDate = new Date(`${input.date}T00:00:00.000Z`);
 
   // Validasi: satu request aktif per pasangan per tanggal
   const activeExisting = await prisma.shiftSwapRequest.findFirst({
@@ -540,7 +540,7 @@ export async function listSwapRequests(
     where.status = params.status;
   }
   if (params.date) {
-    where.date = new Date(`${params.date}T00:00:00+07:00`);
+    where.date = new Date(`${params.date}T00:00:00.000Z`);
   }
 
   // Jika bukan OWNER, batasi hanya permohonan yang melibatkan employeeId staf tersebut

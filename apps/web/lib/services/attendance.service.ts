@@ -35,7 +35,7 @@ export function getJakartaDateTime(date: Date = new Date()) {
 
   const dateStr = `${year}-${month}-${day}`;
   const timeStr = `${hour}:${minute}`;
-  const workDate = new Date(`${dateStr}T00:00:00+07:00`);
+  const workDate = new Date(`${dateStr}T00:00:00.000Z`);
 
   return { dateStr, timeStr, workDate };
 }
@@ -102,10 +102,15 @@ export async function runLazyAutoCheckout(): Promise<number> {
     const cutoffTime = att.shift === 'MORNING' ? '13:30' : '21:30';
     const isPastCutoffToday = !isPastDate && timeStr > cutoffTime;
 
-    if (isPastDate || isPastCutoffToday) {
-      const { dateStr } = getJakartaDateTime(att.workDate);
-      const autoCheckoutDate = new Date(`${dateStr}T${cutoffTime}:00+07:00`);
+    const { dateStr } = getJakartaDateTime(att.workDate);
+    const autoCheckoutDate = new Date(`${dateStr}T${cutoffTime}:00+07:00`);
 
+    // Auto checkout hanya berlaku jika staf check-in SEBELUM waktu cutoff
+    // Mencegah check-in yang baru dibuat setelah batas jam shift langsung ter-checkout secara instan
+    const isEligibleForAutoCheckout =
+      isPastDate || (isPastCutoffToday && (!att.checkIn || att.checkIn <= autoCheckoutDate));
+
+    if (isEligibleForAutoCheckout) {
       await prisma.$transaction(async (tx) => {
         await tx.attendance.update({
           where: { id: att.id },
@@ -118,7 +123,7 @@ export async function runLazyAutoCheckout(): Promise<number> {
 
         await tx.auditLog.create({
           data: {
-            actorId: 'SYSTEM',
+            actorId: null,
             action: 'ATTENDANCE_AUTO_CHECKOUT',
             entity: 'Attendance',
             entityId: att.id,
@@ -392,8 +397,12 @@ export async function checkOut(
   let lateCheckoutMinutes: number | null = null;
 
   if (timeStr > shiftEndTime) {
-    const [currH, currM] = timeStr.split(':').map(Number);
-    const [endH, endM] = shiftEndTime.split(':').map(Number);
+    const partsCurr = timeStr.split(':').map(Number);
+    const partsEnd = shiftEndTime.split(':').map(Number);
+    const currH = partsCurr[0] ?? 0;
+    const currM = partsCurr[1] ?? 0;
+    const endH = partsEnd[0] ?? 0;
+    const endM = partsEnd[1] ?? 0;
     const diff = (currH * 60 + currM) - (endH * 60 + endM);
     if (diff > 0) {
       lateCheckoutMinutes = diff;

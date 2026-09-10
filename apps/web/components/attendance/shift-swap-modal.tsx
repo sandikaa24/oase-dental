@@ -131,7 +131,7 @@ export function ShiftSwapModal({ open, onOpenChange }: ShiftSwapModalProps) {
   if (!open) return null;
 
   const swaps = swapsRes?.data || [];
-  const otherEmployees = employeesRes?.data?.filter((e) => e.id !== user?.employeeId) || [];
+  const otherEmployees = employeesRes?.data?.filter((e) => e.name !== user?.name) || [];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
@@ -339,7 +339,7 @@ export function ShiftSwapModal({ open, onOpenChange }: ShiftSwapModalProps) {
             ) : (
               <div className="space-y-2.5 max-h-80 overflow-y-auto pr-1">
                 {swaps.map((item) => {
-                  const isTarget = item.targetEmployeeId === user?.employeeId;
+                  const isTarget = item.targetEmployee?.name === user?.name || isOwner;
 
                   return (
                     <div

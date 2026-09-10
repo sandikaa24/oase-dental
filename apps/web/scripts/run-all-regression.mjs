@@ -52,6 +52,7 @@ const testSuites = [
   'phase8-portal-cms-test.mjs',
   'task-branch-guard-test.mjs',
   'task-account-disabled-audit-test.mjs',
+  'geofence-and-shift-test.mjs',
 ];
 
 console.log('======================================================================');

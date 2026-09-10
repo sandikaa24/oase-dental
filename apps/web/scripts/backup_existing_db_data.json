@@ -1,0 +1,692 @@
+{
+  "timestamp": "2026-09-10T13:47:36.027Z",
+  "branches": [
+    {
+      "id": "7f5fe919-9f18-4d69-81d7-75c689b809df",
+      "code": "PUSAT",
+      "name": "OASE Dental Clinic  Pusat",
+      "address": "Jl. Utama No. 1",
+      "phone": "081234567890",
+      "active": true,
+      "createdAt": "2026-09-04T18:37:31.297Z",
+      "updatedAt": "2026-09-04T18:37:31.297Z",
+      "workingHours": {
+        "id": "6431be33-919c-4bd7-8811-8daa74da4012",
+        "branchId": "7f5fe919-9f18-4d69-81d7-75c689b809df",
+        "openTime": "08:00",
+        "closeTime": "21:00",
+        "lateAfter": "08:15",
+        "createdAt": "2026-09-04T18:37:31.357Z",
+        "updatedAt": "2026-09-04T18:37:31.357Z"
+      }
+    }
+  ],
+  "users": [
+    {
+      "id": "601775fe-4dcf-42e6-86ea-4fb1b478813b",
+      "email": "riolugas@oase.id",
+      "username": "owner",
+      "passwordHash": "$2a$10$M8xhvCVuN48DtzJciDXHtuEEJvMkVLMrU0uDANvKo213CpM/Sslkq",
+      "role": "OWNER",
+      "employeeId": null,
+      "active": true,
+      "createdAt": "2026-09-04T18:37:31.106Z",
+      "updatedAt": "2026-09-04T18:37:31.106Z",
+      "employee": null
+    },
+    {
+      "id": "aa42257d-d1af-4bb1-aa29-5aa6fcd81104",
+      "email": "ratih@oase.id",
+      "username": "ratih",
+      "passwordHash": "$2a$10$alexIi5zh3ujv3fvLPC1auJcTvxYl8bxLX50oYHwG.pls4F84magi",
+      "role": "EMPLOYEE",
+      "employeeId": "8b56c080-4b9b-4261-babe-ae4661ffe9e0",
+      "active": true,
+      "createdAt": "2026-09-05T17:27:23.909Z",
+      "updatedAt": "2026-09-05T17:27:23.909Z",
+      "employee": {
+        "id": "8b56c080-4b9b-4261-babe-ae4661ffe9e0",
+        "name": "drg. Ratih",
+        "phone": "00000000",
+        "position": "Dokter",
+        "active": true,
+        "createdAt": "2026-09-05T07:28:22.719Z",
+        "updatedAt": "2026-09-05T07:28:22.719Z",
+        "branches": [
+          {
+            "id": "3aed8322-a086-4763-9144-70cb5a398db9",
+            "employeeId": "8b56c080-4b9b-4261-babe-ae4661ffe9e0",
+            "branchId": "7f5fe919-9f18-4d69-81d7-75c689b809df",
+            "active": true,
+            "createdAt": "2026-09-05T07:28:22.724Z",
+            "updatedAt": "2026-09-05T07:28:22.724Z"
+          }
+        ]
+      }
+    },
+    {
+      "id": "ad99cf3b-21f5-412d-ba73-9a858c748636",
+      "email": "dummy@oase.id",
+      "username": "dummy",
+      "passwordHash": "$2a$10$jy9mhvb7ZYOfcWL7jq8aX.92nnFI6oYTpJ8ie/56u7GGZkYS3QLlq",
+      "role": "MANAGER",
+      "employeeId": "65b29ad2-5e8f-46fc-aceb-31cb31d45c16",
+      "active": true,
+      "createdAt": "2026-09-07T14:02:43.894Z",
+      "updatedAt": "2026-09-07T14:02:43.894Z",
+      "employee": {
+        "id": "65b29ad2-5e8f-46fc-aceb-31cb31d45c16",
+        "name": "Dummy",
+        "phone": "000000000000",
+        "position": "Manager",
+        "active": true,
+        "createdAt": "2026-09-07T14:01:41.275Z",
+        "updatedAt": "2026-09-07T14:01:41.275Z",
+        "branches": [
+          {
+            "id": "8f0b56c8-325f-4984-ad63-bfb7de0574ac",
+            "employeeId": "65b29ad2-5e8f-46fc-aceb-31cb31d45c16",
+            "branchId": "7f5fe919-9f18-4d69-81d7-75c689b809df",
+            "active": true,
+            "createdAt": "2026-09-07T14:01:41.291Z",
+            "updatedAt": "2026-09-07T14:01:41.291Z"
+          }
+        ]
+      }
+    },
+    {
+      "id": "db5e9331-7c8f-4352-8c75-db11428ebe43",
+      "email": "rina@oase.id",
+      "username": "rina",
+      "passwordHash": "$2a$10$Lb6.0cOzNJDJpn73XXrLguUmiwxMbkG8yGQqHx/U3QKWlOjVkvR8O",
+      "role": "CASHIER",
+      "employeeId": "784a525d-bd7c-4cda-8ea0-f4549d22e9db",
+      "active": true,
+      "createdAt": "2026-09-05T17:28:19.159Z",
+      "updatedAt": "2026-09-09T14:45:00.061Z",
+      "employee": {
+        "id": "784a525d-bd7c-4cda-8ea0-f4549d22e9db",
+        "name": "Rina",
+        "phone": "00000000",
+        "position": "Kasir",
+        "active": true,
+        "createdAt": "2026-09-05T17:27:53.425Z",
+        "updatedAt": "2026-09-05T17:27:53.425Z",
+        "branches": [
+          {
+            "id": "76c444c6-4dd9-44c0-b457-e43d9665196d",
+            "employeeId": "784a525d-bd7c-4cda-8ea0-f4549d22e9db",
+            "branchId": "7f5fe919-9f18-4d69-81d7-75c689b809df",
+            "active": true,
+            "createdAt": "2026-09-05T17:27:53.429Z",
+            "updatedAt": "2026-09-05T17:27:53.429Z"
+          }
+        ]
+      }
+    },
+    {
+      "id": "b59184e6-2c1f-4cac-bd7c-2f3938235cfe",
+      "email": "qa.owner@oase.id",
+      "username": "qa_owner",
+      "passwordHash": "$2a$10$YCT2yv.f7suhDoEL3bhflOsUcJgj.JMmq.c2DFdhgXoXfiUZGTQby",
+      "role": "OWNER",
+      "employeeId": null,
+      "active": false,
+      "createdAt": "2026-09-07T16:03:26.118Z",
+      "updatedAt": "2026-09-09T14:52:42.989Z",
+      "employee": null
+    }
+  ],
+  "categories": [],
+  "services": [
+    {
+      "id": "80e8928e-d2f9-479d-8514-a7ea4373ad4f",
+      "categoryId": null,
+      "name": "Scalling Gigi",
+      "nameEn": "Dental Scalling",
+      "description": "membersihkan karang Gigi",
+      "descriptionEn": null,
+      "price": "300000",
+      "active": true,
+      "showOnPortal": true,
+      "deletedAt": null,
+      "createdAt": "2026-09-05T04:00:45.644Z",
+      "updatedAt": "2026-09-05T04:00:45.644Z"
+    },
+    {
+      "id": "59345ae5-73ed-4564-8b67-5509d9ae03b8",
+      "categoryId": null,
+      "name": "Tambal Gigi",
+      "nameEn": null,
+      "description": "menambal gigi yang berlubang",
+      "descriptionEn": null,
+      "price": "500000",
+      "active": true,
+      "showOnPortal": true,
+      "deletedAt": null,
+      "createdAt": "2026-09-05T04:01:21.003Z",
+      "updatedAt": "2026-09-05T04:01:21.003Z"
+    }
+  ],
+  "materials": [
+    {
+      "id": "8e13fd16-b039-48e6-9e34-26597e1a0164",
+      "name": "Komposit Resin A2",
+      "sku": "BHP-KMP-A2",
+      "unit": "syringe",
+      "category": "Bahan Tindakan",
+      "costPrice": "285000",
+      "minStock": 20,
+      "isStockTracked": true,
+      "active": true,
+      "deletedAt": null,
+      "createdAt": "2026-09-07T16:02:13.355Z",
+      "updatedAt": "2026-09-07T16:02:13.355Z",
+      "branchStocks": [
+        {
+          "id": "f2d428f2-0a72-46f0-805c-2f0c6283dc05",
+          "materialId": "8e13fd16-b039-48e6-9e34-26597e1a0164",
+          "branchId": "7f5fe919-9f18-4d69-81d7-75c689b809df",
+          "quantity": 50,
+          "minStock": 20,
+          "createdAt": "2026-09-07T16:02:13.460Z",
+          "updatedAt": "2026-09-07T16:02:13.460Z"
+        }
+      ],
+      "stockBatches": [
+        {
+          "id": "89f956d9-3fae-4496-beec-f27f9ead77aa",
+          "materialId": "8e13fd16-b039-48e6-9e34-26597e1a0164",
+          "branchId": "7f5fe919-9f18-4d69-81d7-75c689b809df",
+          "batchNumber": "LOT-BHP-KMP-A2-01",
+          "quantity": 50,
+          "expiredDate": "2027-03-06T00:00:00.000Z",
+          "costPrice": "285000",
+          "createdAt": "2026-09-07T16:02:13.999Z",
+          "updatedAt": "2026-09-07T16:02:13.999Z"
+        }
+      ]
+    },
+    {
+      "id": "707dfd0c-9068-440a-a857-14870a82fbb0",
+      "name": "Etching Gel 37%",
+      "sku": "BHP-ETC-37",
+      "unit": "syringe",
+      "category": "Bahan Tindakan",
+      "costPrice": "95000",
+      "minStock": 10,
+      "isStockTracked": true,
+      "active": true,
+      "deletedAt": null,
+      "createdAt": "2026-09-07T16:02:14.254Z",
+      "updatedAt": "2026-09-07T16:02:14.254Z",
+      "branchStocks": [
+        {
+          "id": "9007ee56-b563-4477-a497-7115bcff46e3",
+          "materialId": "707dfd0c-9068-440a-a857-14870a82fbb0",
+          "branchId": "7f5fe919-9f18-4d69-81d7-75c689b809df",
+          "quantity": 5,
+          "minStock": 10,
+          "createdAt": "2026-09-07T16:02:14.370Z",
+          "updatedAt": "2026-09-07T16:02:14.370Z"
+        }
+      ],
+      "stockBatches": [
+        {
+          "id": "6581ac78-1683-4100-a237-009373a21fad",
+          "materialId": "707dfd0c-9068-440a-a857-14870a82fbb0",
+          "branchId": "7f5fe919-9f18-4d69-81d7-75c689b809df",
+          "batchNumber": "LOT-BHP-ETC-37-01",
+          "quantity": 5,
+          "expiredDate": "2026-09-21T00:00:00.000Z",
+          "costPrice": "95000",
+          "createdAt": "2026-09-07T16:02:14.494Z",
+          "updatedAt": "2026-09-07T16:02:14.494Z"
+        }
+      ]
+    },
+    {
+      "id": "adbdd96f-bb24-487f-ba91-fee50cbec506",
+      "name": "Sarung Tangan Latex M",
+      "sku": "BHP-GLV-M",
+      "unit": "box",
+      "category": "BHP",
+      "costPrice": "65000",
+      "minStock": 5,
+      "isStockTracked": true,
+      "active": true,
+      "deletedAt": null,
+      "createdAt": "2026-09-07T16:02:14.531Z",
+      "updatedAt": "2026-09-07T16:02:14.531Z",
+      "branchStocks": [
+        {
+          "id": "a0778521-d2e9-4f9f-8f52-50eacf62c404",
+          "materialId": "adbdd96f-bb24-487f-ba91-fee50cbec506",
+          "branchId": "7f5fe919-9f18-4d69-81d7-75c689b809df",
+          "quantity": 2,
+          "minStock": 5,
+          "createdAt": "2026-09-07T16:02:14.564Z",
+          "updatedAt": "2026-09-07T16:02:14.564Z"
+        }
+      ],
+      "stockBatches": []
+    },
+    {
+      "id": "4e5c8a3f-3251-4a83-a700-69f2bd730656",
+      "name": "Masker Medis 3-Ply",
+      "sku": "BHP-MSK-3P",
+      "unit": "box",
+      "category": "BHP",
+      "costPrice": "35000",
+      "minStock": 10,
+      "isStockTracked": true,
+      "active": true,
+      "deletedAt": null,
+      "createdAt": "2026-09-07T16:02:14.600Z",
+      "updatedAt": "2026-09-07T16:02:14.600Z",
+      "branchStocks": [
+        {
+          "id": "c9df1a33-7540-44b0-9016-749e009e4c8f",
+          "materialId": "4e5c8a3f-3251-4a83-a700-69f2bd730656",
+          "branchId": "7f5fe919-9f18-4d69-81d7-75c689b809df",
+          "quantity": 30,
+          "minStock": 10,
+          "createdAt": "2026-09-07T16:02:14.635Z",
+          "updatedAt": "2026-09-07T16:02:14.635Z"
+        }
+      ],
+      "stockBatches": [
+        {
+          "id": "89c116c9-6e50-4366-9105-5036e939ffac",
+          "materialId": "4e5c8a3f-3251-4a83-a700-69f2bd730656",
+          "branchId": "7f5fe919-9f18-4d69-81d7-75c689b809df",
+          "batchNumber": "LOT-BHP-MSK-3P-01",
+          "quantity": 30,
+          "expiredDate": "2027-09-06T00:00:00.000Z",
+          "costPrice": "35000",
+          "createdAt": "2026-09-07T16:02:14.723Z",
+          "updatedAt": "2026-09-07T16:02:14.723Z"
+        }
+      ]
+    },
+    {
+      "id": "28d76310-6640-4e19-8760-a80491dd1f0e",
+      "name": "Articaine Anestesi Lokal",
+      "sku": "AL-ART-01",
+      "unit": "ampul",
+      "category": "Bahan Tindakan",
+      "costPrice": "22000",
+      "minStock": 10,
+      "isStockTracked": true,
+      "active": true,
+      "deletedAt": null,
+      "createdAt": "2026-09-07T16:02:14.778Z",
+      "updatedAt": "2026-09-07T16:02:14.778Z",
+      "branchStocks": [
+        {
+          "id": "5ba7e7cb-3637-487d-8db9-21f86ebbc84e",
+          "materialId": "28d76310-6640-4e19-8760-a80491dd1f0e",
+          "branchId": "7f5fe919-9f18-4d69-81d7-75c689b809df",
+          "quantity": 10,
+          "minStock": 10,
+          "createdAt": "2026-09-07T16:02:14.822Z",
+          "updatedAt": "2026-09-08T13:56:59.073Z"
+        }
+      ],
+      "stockBatches": [
+        {
+          "id": "5e29655c-e5e8-4752-8557-fce268c7b646",
+          "materialId": "28d76310-6640-4e19-8760-a80491dd1f0e",
+          "branchId": "7f5fe919-9f18-4d69-81d7-75c689b809df",
+          "batchNumber": "LOT-AL-ART-01-01",
+          "quantity": 10,
+          "expiredDate": "2026-09-01T00:00:00.000Z",
+          "costPrice": "22000",
+          "createdAt": "2026-09-07T16:02:14.908Z",
+          "updatedAt": "2026-09-08T13:56:59.063Z"
+        }
+      ]
+    },
+    {
+      "id": "f618cb01-9495-4f9c-a093-b7a75c2abf26",
+      "name": "Kasa Steril 7.5x7.5",
+      "sku": "BM-KAS-75",
+      "unit": "pack",
+      "category": "BHP",
+      "costPrice": "8500",
+      "minStock": 15,
+      "isStockTracked": true,
+      "active": true,
+      "deletedAt": null,
+      "createdAt": "2026-09-07T16:02:14.945Z",
+      "updatedAt": "2026-09-07T16:02:14.945Z",
+      "branchStocks": [
+        {
+          "id": "12cef2e9-bb65-438e-bf1e-d4ac63d3edb7",
+          "materialId": "f618cb01-9495-4f9c-a093-b7a75c2abf26",
+          "branchId": "7f5fe919-9f18-4d69-81d7-75c689b809df",
+          "quantity": 100,
+          "minStock": 15,
+          "createdAt": "2026-09-07T16:02:14.979Z",
+          "updatedAt": "2026-09-07T16:02:14.979Z"
+        }
+      ],
+      "stockBatches": [
+        {
+          "id": "0a85e0c4-3c35-4de9-8ec5-abb2a497326e",
+          "materialId": "f618cb01-9495-4f9c-a093-b7a75c2abf26",
+          "branchId": "7f5fe919-9f18-4d69-81d7-75c689b809df",
+          "batchNumber": "LOT-BM-KAS-75-01",
+          "quantity": 100,
+          "expiredDate": "2026-09-26T00:00:00.000Z",
+          "costPrice": "8500",
+          "createdAt": "2026-09-07T16:02:15.054Z",
+          "updatedAt": "2026-09-07T16:02:15.054Z"
+        }
+      ]
+    }
+  ],
+  "transactions": [
+    {
+      "id": "69f6b131-f2ae-4e48-893e-11b14fe09549",
+      "transactionNumber": "TRX-20260906-00001",
+      "branchId": "7f5fe919-9f18-4d69-81d7-75c689b809df",
+      "cashierId": "db5e9331-7c8f-4352-8c75-db11428ebe43",
+      "patientName": "sandika",
+      "patientPhone": null,
+      "status": "PAID",
+      "subtotal": "800000",
+      "total": "800000",
+      "transactionDate": "2026-09-05T17:29:49.634Z",
+      "paidAt": "2026-09-05T17:29:49.774Z",
+      "cancelledAt": null,
+      "cancelledBy": null,
+      "cancellationReason": null,
+      "createdAt": "2026-09-05T17:29:49.635Z",
+      "updatedAt": "2026-09-05T17:29:49.775Z",
+      "items": [
+        {
+          "id": "7f2ed2cf-8033-489f-920b-e7af26f73bde",
+          "transactionId": "69f6b131-f2ae-4e48-893e-11b14fe09549",
+          "serviceId": "80e8928e-d2f9-479d-8514-a7ea4373ad4f",
+          "itemId": "80e8928e-d2f9-479d-8514-a7ea4373ad4f",
+          "name": "Scalling Gigi",
+          "nameEn": "Dental Scalling",
+          "price": "300000",
+          "quantity": 1,
+          "lineTotal": "300000",
+          "createdAt": "2026-09-05T17:29:49.635Z",
+          "updatedAt": "2026-09-05T17:29:49.635Z"
+        },
+        {
+          "id": "33085e88-8764-498a-abda-a1806965afa1",
+          "transactionId": "69f6b131-f2ae-4e48-893e-11b14fe09549",
+          "serviceId": "59345ae5-73ed-4564-8b67-5509d9ae03b8",
+          "itemId": "59345ae5-73ed-4564-8b67-5509d9ae03b8",
+          "name": "Tambal Gigi",
+          "nameEn": null,
+          "price": "500000",
+          "quantity": 1,
+          "lineTotal": "500000",
+          "createdAt": "2026-09-05T17:29:49.635Z",
+          "updatedAt": "2026-09-05T17:29:49.635Z"
+        }
+      ],
+      "payments": [
+        {
+          "id": "0f72d21d-98a5-41ce-bec0-b424919d8c3a",
+          "transactionId": "69f6b131-f2ae-4e48-893e-11b14fe09549",
+          "method": "CASH",
+          "amount": "800000",
+          "createdAt": "2026-09-05T17:29:49.771Z",
+          "updatedAt": "2026-09-05T17:29:49.771Z"
+        }
+      ]
+    },
+    {
+      "id": "1daf83c2-45e0-4e55-9f46-d6fa8cb17470",
+      "transactionNumber": "TRX-20260907-00001",
+      "branchId": "7f5fe919-9f18-4d69-81d7-75c689b809df",
+      "cashierId": "db5e9331-7c8f-4352-8c75-db11428ebe43",
+      "patientName": "billy",
+      "patientPhone": null,
+      "status": "PAID",
+      "subtotal": "500000",
+      "total": "500000",
+      "transactionDate": "2026-09-07T07:06:08.040Z",
+      "paidAt": "2026-09-07T07:06:08.316Z",
+      "cancelledAt": null,
+      "cancelledBy": null,
+      "cancellationReason": null,
+      "createdAt": "2026-09-07T07:06:08.041Z",
+      "updatedAt": "2026-09-07T07:06:08.318Z",
+      "items": [
+        {
+          "id": "d161b19e-3fef-4636-bae7-50c8b4b50cc1",
+          "transactionId": "1daf83c2-45e0-4e55-9f46-d6fa8cb17470",
+          "serviceId": "59345ae5-73ed-4564-8b67-5509d9ae03b8",
+          "itemId": "59345ae5-73ed-4564-8b67-5509d9ae03b8",
+          "name": "Tambal Gigi",
+          "nameEn": null,
+          "price": "500000",
+          "quantity": 1,
+          "lineTotal": "500000",
+          "createdAt": "2026-09-07T07:06:08.041Z",
+          "updatedAt": "2026-09-07T07:06:08.041Z"
+        }
+      ],
+      "payments": [
+        {
+          "id": "7b36f0a2-59d5-407b-9051-7794785002c4",
+          "transactionId": "1daf83c2-45e0-4e55-9f46-d6fa8cb17470",
+          "method": "CASH",
+          "amount": "500000",
+          "createdAt": "2026-09-07T07:06:08.312Z",
+          "updatedAt": "2026-09-07T07:06:08.312Z"
+        }
+      ]
+    },
+    {
+      "id": "8961d5f9-6609-44dd-a28e-991e104b142f",
+      "transactionNumber": "TRX-20260908-00001",
+      "branchId": "7f5fe919-9f18-4d69-81d7-75c689b809df",
+      "cashierId": "db5e9331-7c8f-4352-8c75-db11428ebe43",
+      "patientName": "nabila",
+      "patientPhone": null,
+      "status": "PAID",
+      "subtotal": "300000",
+      "total": "300000",
+      "transactionDate": "2026-09-07T18:15:36.303Z",
+      "paidAt": "2026-09-07T18:15:36.531Z",
+      "cancelledAt": null,
+      "cancelledBy": null,
+      "cancellationReason": null,
+      "createdAt": "2026-09-07T18:15:36.304Z",
+      "updatedAt": "2026-09-07T18:15:36.532Z",
+      "items": [
+        {
+          "id": "aeeaec8f-0411-4e4f-82ed-315263fc7fc1",
+          "transactionId": "8961d5f9-6609-44dd-a28e-991e104b142f",
+          "serviceId": "80e8928e-d2f9-479d-8514-a7ea4373ad4f",
+          "itemId": "80e8928e-d2f9-479d-8514-a7ea4373ad4f",
+          "name": "Scalling Gigi",
+          "nameEn": "Dental Scalling",
+          "price": "300000",
+          "quantity": 1,
+          "lineTotal": "300000",
+          "createdAt": "2026-09-07T18:15:36.304Z",
+          "updatedAt": "2026-09-07T18:15:36.304Z"
+        }
+      ],
+      "payments": [
+        {
+          "id": "eeccb4fc-932c-46e4-ae87-f1dea58451fe",
+          "transactionId": "8961d5f9-6609-44dd-a28e-991e104b142f",
+          "method": "CASH",
+          "amount": "300000",
+          "createdAt": "2026-09-07T18:15:36.528Z",
+          "updatedAt": "2026-09-07T18:15:36.528Z"
+        }
+      ]
+    },
+    {
+      "id": "da2e5348-ab2a-4032-9c17-cada0307eb2b",
+      "transactionNumber": "TRX-20260908-00002",
+      "branchId": "7f5fe919-9f18-4d69-81d7-75c689b809df",
+      "cashierId": "db5e9331-7c8f-4352-8c75-db11428ebe43",
+      "patientName": "rooon",
+      "patientPhone": null,
+      "status": "PAID",
+      "subtotal": "400000",
+      "total": "400000",
+      "transactionDate": "2026-09-08T13:45:41.439Z",
+      "paidAt": "2026-09-08T13:45:41.605Z",
+      "cancelledAt": null,
+      "cancelledBy": null,
+      "cancellationReason": null,
+      "createdAt": "2026-09-08T13:45:41.440Z",
+      "updatedAt": "2026-09-08T13:45:41.606Z",
+      "items": [
+        {
+          "id": "ceeccffe-ff41-405f-bee7-28a8258917e1",
+          "transactionId": "da2e5348-ab2a-4032-9c17-cada0307eb2b",
+          "serviceId": "80e8928e-d2f9-479d-8514-a7ea4373ad4f",
+          "itemId": "80e8928e-d2f9-479d-8514-a7ea4373ad4f",
+          "name": "Scalling Gigi",
+          "nameEn": "Dental Scalling",
+          "price": "400000",
+          "quantity": 1,
+          "lineTotal": "400000",
+          "createdAt": "2026-09-08T13:45:41.440Z",
+          "updatedAt": "2026-09-08T13:45:41.440Z"
+        }
+      ],
+      "payments": [
+        {
+          "id": "6956745e-dc4b-4756-8457-dc8f3ead3c47",
+          "transactionId": "da2e5348-ab2a-4032-9c17-cada0307eb2b",
+          "method": "CASH",
+          "amount": "400000",
+          "createdAt": "2026-09-08T13:45:41.600Z",
+          "updatedAt": "2026-09-08T13:45:41.600Z"
+        }
+      ]
+    },
+    {
+      "id": "5bb18810-80f3-4a18-91b1-cc021152e7b4",
+      "transactionNumber": "TRX-20260909-00001",
+      "branchId": "7f5fe919-9f18-4d69-81d7-75c689b809df",
+      "cashierId": "db5e9331-7c8f-4352-8c75-db11428ebe43",
+      "patientName": "dgfd",
+      "patientPhone": null,
+      "status": "PAID",
+      "subtotal": "300000",
+      "total": "300000",
+      "transactionDate": "2026-09-09T10:59:54.620Z",
+      "paidAt": "2026-09-09T10:59:54.857Z",
+      "cancelledAt": null,
+      "cancelledBy": null,
+      "cancellationReason": null,
+      "createdAt": "2026-09-09T10:59:54.622Z",
+      "updatedAt": "2026-09-09T10:59:54.858Z",
+      "items": [
+        {
+          "id": "4ca8ee14-74b6-4ee5-b009-c66aa1026b9c",
+          "transactionId": "5bb18810-80f3-4a18-91b1-cc021152e7b4",
+          "serviceId": "80e8928e-d2f9-479d-8514-a7ea4373ad4f",
+          "itemId": "80e8928e-d2f9-479d-8514-a7ea4373ad4f",
+          "name": "Scalling Gigi",
+          "nameEn": "Dental Scalling",
+          "price": "300000",
+          "quantity": 1,
+          "lineTotal": "300000",
+          "createdAt": "2026-09-09T10:59:54.622Z",
+          "updatedAt": "2026-09-09T10:59:54.622Z"
+        }
+      ],
+      "payments": [
+        {
+          "id": "6c81794d-63af-4fef-942f-487685615b67",
+          "transactionId": "5bb18810-80f3-4a18-91b1-cc021152e7b4",
+          "method": "CASH",
+          "amount": "300000",
+          "createdAt": "2026-09-09T10:59:54.852Z",
+          "updatedAt": "2026-09-09T10:59:54.852Z"
+        }
+      ]
+    }
+  ],
+  "attendances": [
+    {
+      "id": "aeb7613b-e7fd-43e4-9924-4024ffd412c7",
+      "employeeId": "784a525d-bd7c-4cda-8ea0-f4549d22e9db",
+      "branchId": "7f5fe919-9f18-4d69-81d7-75c689b809df",
+      "workDate": "2026-09-06T00:00:00.000Z",
+      "checkIn": "2026-09-07T07:03:31.481Z",
+      "checkOut": null,
+      "status": "LATE",
+      "corrected": false,
+      "correctionNote": null,
+      "createdAt": "2026-09-07T07:03:31.482Z",
+      "updatedAt": "2026-09-07T07:03:31.482Z"
+    },
+    {
+      "id": "6dbcba1c-393e-4b55-9a2b-ae3d2094fa1d",
+      "employeeId": "65b29ad2-5e8f-46fc-aceb-31cb31d45c16",
+      "branchId": "7f5fe919-9f18-4d69-81d7-75c689b809df",
+      "workDate": "2026-09-06T00:00:00.000Z",
+      "checkIn": "2026-09-07T14:04:45.347Z",
+      "checkOut": null,
+      "status": "LATE",
+      "corrected": false,
+      "correctionNote": null,
+      "createdAt": "2026-09-07T14:04:45.348Z",
+      "updatedAt": "2026-09-07T14:04:45.348Z"
+    },
+    {
+      "id": "db9fdeff-118d-472c-98f5-856d7ae98b42",
+      "employeeId": "784a525d-bd7c-4cda-8ea0-f4549d22e9db",
+      "branchId": "7f5fe919-9f18-4d69-81d7-75c689b809df",
+      "workDate": "2026-09-07T00:00:00.000Z",
+      "checkIn": "2026-09-08T13:48:47.522Z",
+      "checkOut": null,
+      "status": "LATE",
+      "corrected": false,
+      "correctionNote": null,
+      "createdAt": "2026-09-08T13:48:47.522Z",
+      "updatedAt": "2026-09-08T13:48:47.522Z"
+    }
+  ],
+  "leaveRequests": [
+    {
+      "id": "da9d80dd-b871-47a0-bb1a-997f3707d462",
+      "employeeId": "784a525d-bd7c-4cda-8ea0-f4549d22e9db",
+      "type": "CUTI",
+      "startDate": "2026-09-08T00:00:00.000Z",
+      "endDate": "2026-09-10T00:00:00.000Z",
+      "reason": "izin untuk menikah",
+      "status": "REJECTED",
+      "decidedBy": "601775fe-4dcf-42e6-86ea-4fb1b478813b",
+      "decidedAt": "2026-09-08T13:49:29.652Z",
+      "decisionNote": null,
+      "createdAt": "2026-09-05T17:32:14.661Z",
+      "updatedAt": "2026-09-08T13:49:29.657Z"
+    }
+  ],
+  "stockOpnames": [],
+  "expenses": [
+    {
+      "id": "2d5b31ab-3778-4f9c-a4ed-3100065f3626",
+      "branchId": "7f5fe919-9f18-4d69-81d7-75c689b809df",
+      "category": "OPERASIONAL",
+      "amount": "10000",
+      "expenseDate": "2026-09-05T00:00:00.000Z",
+      "note": "nota staging",
+      "proofUrl": "https://japwlbqitbkeywidkkzt.supabase.co/storage/v1/object/public/expense-proofs/expense-1788592200818-79ea0c69.png",
+      "createdBy": "601775fe-4dcf-42e6-86ea-4fb1b478813b",
+      "createdAt": "2026-09-05T07:10:05.876Z",
+      "updatedAt": "2026-09-05T07:10:05.876Z"
+    }
+  ],
+  "cashClosings": []
+}

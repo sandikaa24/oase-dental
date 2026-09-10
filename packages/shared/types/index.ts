@@ -93,9 +93,35 @@ export const AuditAction = {
   STOCK_OPNAME_SUBMITTED: 'STOCK_OPNAME_SUBMITTED',
   LEAVE_APPROVED: 'LEAVE_APPROVED',
   LEAVE_REJECTED: 'LEAVE_REJECTED',
-  ATTENDANCE_CORRECTED: 'ATTENDANCE_CORRECTED'
+  ATTENDANCE_CORRECTED: 'ATTENDANCE_CORRECTED',
+  ATTENDANCE_OUT_OF_RANGE: 'ATTENDANCE_OUT_OF_RANGE',
+  ATTENDANCE_AUTO_CHECKOUT: 'ATTENDANCE_AUTO_CHECKOUT',
+  SHIFT_SWAP_REQUESTED: 'SHIFT_SWAP_REQUESTED',
+  SHIFT_SWAP_APPROVED: 'SHIFT_SWAP_APPROVED',
+  SHIFT_SWAP_REJECTED: 'SHIFT_SWAP_REJECTED'
 } as const;
 export type AuditAction = (typeof AuditAction)[keyof typeof AuditAction];
+
+export const WorkShift = {
+  MORNING: 'MORNING',
+  EVENING: 'EVENING'
+} as const;
+export type WorkShift = (typeof WorkShift)[keyof typeof WorkShift];
+
+export const ShiftSource = {
+  MANUAL: 'MANUAL',
+  SWAP: 'SWAP'
+} as const;
+export type ShiftSource = (typeof ShiftSource)[keyof typeof ShiftSource];
+
+export const SwapStatus = {
+  PENDING_PEER: 'PENDING_PEER',
+  PENDING_OWNER: 'PENDING_OWNER',
+  APPROVED: 'APPROVED',
+  REJECTED: 'REJECTED',
+  CANCELLED: 'CANCELLED'
+} as const;
+export type SwapStatus = (typeof SwapStatus)[keyof typeof SwapStatus];
 
 /**
  * Kandidat user untuk pengecekan multi-cabang (Amandemen A3).

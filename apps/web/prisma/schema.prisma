@@ -99,6 +99,29 @@ enum AuditAction {
   LEAVE_REJECTED
   ATTENDANCE_CORRECTED
   STOCK_MUTATION
+  ATTENDANCE_OUT_OF_RANGE
+  ATTENDANCE_AUTO_CHECKOUT
+  SHIFT_SWAP_REQUESTED
+  SHIFT_SWAP_APPROVED
+  SHIFT_SWAP_REJECTED
+}
+
+enum WorkShift {
+  MORNING
+  EVENING
+}
+
+enum ShiftSource {
+  MANUAL
+  SWAP
+}
+
+enum SwapStatus {
+  PENDING_PEER
+  PENDING_OWNER
+  APPROVED
+  REJECTED
+  CANCELLED
 }
 
 enum StockMovementType {
@@ -122,12 +145,15 @@ enum PortalContentType {
 
 
 model Branch {
-  id      String  @id @default(uuid())
-  code    String  @unique
-  name    String
-  address String
-  phone   String?
-  active  Boolean @default(true)
+  id             String  @id @default(uuid())
+  code           String  @unique
+  name           String
+  address        String
+  phone          String?
+  active         Boolean @default(true)
+  latitude       Float?
+  longitude      Float?
+  geofenceRadius Int     @default(100)
 
   employees          EmployeeBranch[]
   transactions       Transaction[]
@@ -137,6 +163,7 @@ model Branch {
   expenses           Expense[]
   workingHours       BranchWorkingHour?
   attendances        Attendance[]
+  shiftAssignments   ShiftAssignment[]
   stockLevels        StockLevel[]
   numberSequences    NumberSequence[]
   materialStocks     MaterialBranchStock[]
@@ -206,10 +233,13 @@ model Employee {
   position String
   active   Boolean @default(true)
 
-  user          User?
-  branches      EmployeeBranch[]
-  attendances   Attendance[]
-  leaveRequests LeaveRequest[]
+  user              User?
+  branches          EmployeeBranch[]
+  attendances       Attendance[]
+  leaveRequests     LeaveRequest[]
+  shiftAssignments  ShiftAssignment[]
+  swapRequestsSent  ShiftSwapRequest[] @relation("SwapRequester")
+  swapRequestsRecv  ShiftSwapRequest[] @relation("SwapTarget")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -233,24 +263,71 @@ model EmployeeBranch {
 }
 
 model Attendance {
-  id             String           @id @default(uuid())
-  employeeId     String
-  employee       Employee         @relation(fields: [employeeId], references: [id])
-  branchId       String
-  branch         Branch           @relation(fields: [branchId], references: [id])
-  workDate       DateTime         @db.Date
-  checkIn        DateTime?
-  checkOut       DateTime?
-  status         AttendanceStatus
-  corrected      Boolean          @default(false)
-  correctionNote String?
+  id                  String           @id @default(uuid())
+  employeeId          String
+  employee            Employee         @relation(fields: [employeeId], references: [id])
+  branchId            String
+  branch              Branch           @relation(fields: [branchId], references: [id])
+  workDate            DateTime         @db.Date
+  checkIn             DateTime?
+  checkOut            DateTime?
+  status              AttendanceStatus
+  corrected           Boolean          @default(false)
+  correctionNote      String?
+  shift               WorkShift        @default(MORNING)
+  latitude            Float?
+  longitude           Float?
+  distanceMeters      Float?
+  accuracyMeters      Float?
+  autoCheckout        Boolean          @default(false)
+  lateCheckoutMinutes Int?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([employeeId, workDate, branchId])
-  @@index([workDate])
+  @@unique([employeeId, workDate, shift])
+  @@index([branchId, workDate])
   @@map("attendances")
+}
+
+model ShiftAssignment {
+  id          String      @id @default(uuid())
+  employeeId  String
+  employee    Employee    @relation(fields: [employeeId], references: [id])
+  branchId    String
+  branch      Branch      @relation(fields: [branchId], references: [id])
+  date        DateTime    @db.Date
+  shift       WorkShift
+  source      ShiftSource @default(MANUAL)
+
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@unique([employeeId, date, shift])
+  @@index([branchId, date])
+  @@map("shift_assignments")
+}
+
+model ShiftSwapRequest {
+  id              String      @id @default(uuid())
+  requesterId     String
+  requester       Employee    @relation("SwapRequester", fields: [requesterId], references: [id])
+  targetId        String
+  target          Employee    @relation("SwapTarget", fields: [targetId], references: [id])
+  date            DateTime    @db.Date
+  requesterShift  WorkShift
+  targetShift     WorkShift
+  status          SwapStatus  @default(PENDING_PEER)
+  decidedBy       String?
+  decidedAt       DateTime?
+  note            String?
+
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@index([requesterId, date])
+  @@index([targetId, date])
+  @@map("shift_swap_requests")
 }
 
 model LeaveRequest {

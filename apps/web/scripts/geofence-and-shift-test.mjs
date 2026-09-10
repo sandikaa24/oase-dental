@@ -460,6 +460,106 @@ async function run() {
       'Presensi menggantung kemarin otomatis ditutup oleh lazy auto-checkout',
       updatedHanging?.checkOut !== null && updatedHanging?.autoCheckout === true
     );
+
+    console.log('\n--- PENGUJIAN FITUR B: MULTI-SHIFT PER CABANG & AUTO-SYNC TURUNAN ---');
+
+    // 1. Simpan multi-shift lengkap
+    const multiShiftPayload = {
+      morningOpen: '09:00',
+      morningClose: '13:00',
+      morningLateAfter: '09:15',
+      eveningOpen: '16:00',
+      eveningClose: '21:00',
+      eveningLateAfter: '16:15',
+      saturdayEveningClosed: true,
+      sundayClosed: true,
+    };
+
+    const multiShiftRes = await req(
+      `/branches/${branchWithGeo.id}/working-hours`,
+      'PATCH',
+      multiShiftPayload,
+      ownerCookie
+    );
+
+    assert(
+      'PATCH /branches/:id/working-hours dengan multi-shift berhasil (200)',
+      multiShiftRes.status === 200,
+      JSON.stringify(multiShiftRes.data)
+    );
+
+    const whData = multiShiftRes.data?.data;
+    assert(
+      'Multi-shift tersimpan dengan kolom shift baru',
+      whData?.morningOpen === '09:00' &&
+        whData?.morningClose === '13:00' &&
+        whData?.morningLateAfter === '09:15' &&
+        whData?.eveningOpen === '16:00' &&
+        whData?.eveningClose === '21:00' &&
+        whData?.eveningLateAfter === '16:15' &&
+        whData?.saturdayEveningClosed === true &&
+        whData?.sundayClosed === true
+    );
+
+    assert(
+      'Kolom turunan ter-auto-sync saat simpan (openTime=morningOpen, closeTime=eveningClose, lateAfter=morningLateAfter)',
+      whData?.openTime === '09:00' &&
+        whData?.closeTime === '21:00' &&
+        whData?.lateAfter === '09:15',
+      `openTime=${whData?.openTime}, closeTime=${whData?.closeTime}, lateAfter=${whData?.lateAfter}`
+    );
+
+    // 2. Validasi penolakan: eveningOpen < morningClose (tumpang tindih shift)
+    const invalidOverlapRes = await req(
+      `/branches/${branchWithGeo.id}/working-hours`,
+      'PATCH',
+      {
+        morningOpen: '09:00',
+        morningClose: '15:00',
+        eveningOpen: '14:00', // < morningClose
+        eveningClose: '21:00',
+      },
+      ownerCookie
+    );
+    assert(
+      'Shift sore dimulai sebelum shift pagi selesai ditolak (400)',
+      invalidOverlapRes.status === 400
+    );
+
+    // 3. Validasi penolakan: lateAfter di luar rentang shift
+    const invalidLateRes = await req(
+      `/branches/${branchWithGeo.id}/working-hours`,
+      'PATCH',
+      {
+        morningOpen: '09:00',
+        morningClose: '13:00',
+        morningLateAfter: '13:30', // > morningClose
+      },
+      ownerCookie
+    );
+    assert(
+      'Batas terlambat di luar batas shift ditolak (400)',
+      invalidLateRes.status === 400
+    );
+
+    // 4. Backward compatibility: kirim hanya openTime, closeTime, lateAfter
+    const legacyPayloadRes = await req(
+      `/branches/${branchWithGeo.id}/working-hours`,
+      'PATCH',
+      {
+        openTime: '08:30',
+        closeTime: '20:30',
+        lateAfter: '08:45',
+      },
+      ownerCookie
+    );
+    assert(
+      'Payload legacy {openTime, closeTime, lateAfter} tetap didukung dan auto-sync (200)',
+      legacyPayloadRes.status === 200 &&
+        legacyPayloadRes.data?.data?.morningOpen === '08:30' &&
+        legacyPayloadRes.data?.data?.morningLateAfter === '08:45' &&
+        legacyPayloadRes.data?.data?.openTime === '08:30'
+    );
   } catch (err) {
     console.error('Unhandled Exception in Test Suite:', err);
     failCount++;

@@ -100,12 +100,28 @@ async function main() {
 
       await tx.branchWorkingHour.upsert({
         where: { branchId: branchJkt.id },
-        update: { openTime: '08:00', closeTime: '21:00', lateAfter: '08:15' },
+        update: {
+          openTime: '08:00',
+          closeTime: '21:00',
+          lateAfter: '08:15',
+          morningOpen: '08:00',
+          morningClose: '13:00',
+          morningLateAfter: '08:15',
+          eveningOpen: '16:00',
+          eveningClose: '21:00',
+          eveningLateAfter: '16:15',
+        },
         create: {
           branchId: branchJkt.id,
           openTime: '08:00',
           closeTime: '21:00',
           lateAfter: '08:15',
+          morningOpen: '08:00',
+          morningClose: '13:00',
+          morningLateAfter: '08:15',
+          eveningOpen: '16:00',
+          eveningClose: '21:00',
+          eveningLateAfter: '16:15',
         },
       });
 
@@ -133,12 +149,28 @@ async function main() {
 
       await tx.branchWorkingHour.upsert({
         where: { branchId: branchBdg.id },
-        update: { openTime: '08:00', closeTime: '21:00', lateAfter: '08:15' },
+        update: {
+          openTime: '08:00',
+          closeTime: '21:00',
+          lateAfter: '08:15',
+          morningOpen: '08:00',
+          morningClose: '13:00',
+          morningLateAfter: '08:15',
+          eveningOpen: '16:00',
+          eveningClose: '21:00',
+          eveningLateAfter: '16:15',
+        },
         create: {
           branchId: branchBdg.id,
           openTime: '08:00',
           closeTime: '21:00',
           lateAfter: '08:15',
+          morningOpen: '08:00',
+          morningClose: '13:00',
+          morningLateAfter: '08:15',
+          eveningOpen: '16:00',
+          eveningClose: '21:00',
+          eveningLateAfter: '16:15',
         },
       });
 

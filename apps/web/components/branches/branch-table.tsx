@@ -284,13 +284,16 @@ export function BranchTable() {
                       </td>
                       <td className="py-3 px-4 text-slate-700">
                         {branch.workingHours ? (
-                          <div className="space-y-0.5">
-                            <span className="inline-flex items-center gap-1 font-mono text-[11px] font-semibold text-foreground">
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-1 font-mono text-[11px] font-semibold text-foreground">
                               <Clock className="h-3 w-3 text-primary" />
-                              <span>{branch.workingHours.openTime} – {branch.workingHours.closeTime}</span>
-                            </span>
-                            <div className="text-[10px] text-muted">
-                              Late after: <span className="font-mono font-medium">{branch.workingHours.lateAfter}</span>
+                              <span>Pagi: {branch.workingHours.morningOpen || branch.workingHours.openTime || '09:00'}–{branch.workingHours.morningClose || '13:00'}</span>
+                            </div>
+                            <div className="flex items-center gap-1 font-mono text-[11px] text-slate-600 pl-4">
+                              <span>Sore: {branch.workingHours.eveningOpen || '16:00'}–{branch.workingHours.eveningClose || branch.workingHours.closeTime || '21:00'}</span>
+                            </div>
+                            <div className="text-[10px] text-muted pl-4">
+                              Terlambat: {branch.workingHours.morningLateAfter || branch.workingHours.lateAfter || '09:15'} / {branch.workingHours.eveningLateAfter || '16:15'}
                             </div>
                           </div>
                         ) : (

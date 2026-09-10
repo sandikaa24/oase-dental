@@ -177,15 +177,24 @@ model Branch {
 }
 
 model BranchWorkingHour {
-  id        String @id @default(uuid())
-  branchId  String @unique
-  branch    Branch @relation(fields: [branchId], references: [id])
-  openTime  String
-  closeTime String
-  lateAfter String
+  id                    String   @id @default(uuid())
+  branchId              String   @unique
+  branch                Branch   @relation(fields: [branchId], references: [id])
+  openTime              String   // Turunan auto-sync dari morningOpen
+  closeTime             String   // Turunan auto-sync dari eveningClose
+  lateAfter             String   // Turunan auto-sync dari morningLateAfter
+  morningOpen           String   @default("09:00")
+  morningClose          String   @default("13:00")
+  morningLateAfter      String   @default("09:15")
+  eveningOpen           String   @default("16:00")
+  eveningClose          String   @default("21:00")
+  eveningLateAfter      String   @default("16:15")
+  saturdayEveningClosed Boolean  @default(true)
+  sundayClosed          Boolean  @default(true)
+  daysSchedule          Json?
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 
   @@map("branch_working_hours")
 }

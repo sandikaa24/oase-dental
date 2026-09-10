@@ -78,13 +78,52 @@ const attendancePublicSelect = {
   },
 } as const;
 
+interface ShiftConfig {
+  morningOpen: string;
+  morningClose: string;
+  morningLateAfter: string;
+  eveningOpen: string;
+  eveningClose: string;
+  eveningLateAfter: string;
+}
+
+const DEFAULT_SHIFT_CONFIG: ShiftConfig = {
+  morningOpen: '09:00',
+  morningClose: '13:00',
+  morningLateAfter: '09:15',
+  eveningOpen: '16:00',
+  eveningClose: '21:00',
+  eveningLateAfter: '16:15',
+};
+
+export function getBranchShiftConfig(workingHours?: {
+  morningOpen?: string | null;
+  morningClose?: string | null;
+  morningLateAfter?: string | null;
+  eveningOpen?: string | null;
+  eveningClose?: string | null;
+  eveningLateAfter?: string | null;
+} | null): ShiftConfig {
+  if (!workingHours) {
+    return DEFAULT_SHIFT_CONFIG;
+  }
+  return {
+    morningOpen: workingHours.morningOpen || DEFAULT_SHIFT_CONFIG.morningOpen,
+    morningClose: workingHours.morningClose || DEFAULT_SHIFT_CONFIG.morningClose,
+    morningLateAfter: workingHours.morningLateAfter || DEFAULT_SHIFT_CONFIG.morningLateAfter,
+    eveningOpen: workingHours.eveningOpen || DEFAULT_SHIFT_CONFIG.eveningOpen,
+    eveningClose: workingHours.eveningClose || DEFAULT_SHIFT_CONFIG.eveningClose,
+    eveningLateAfter: workingHours.eveningLateAfter || DEFAULT_SHIFT_CONFIG.eveningLateAfter,
+  };
+}
+
 /**
  * Mekanisme Lazy-Check AUTO_CHECKOUT:
  * Dipanggil pada setiap aktivitas presensi. Mengevaluasi record presensi yang masih
- * belum check-out (checkOut: null) dan waktu operasional sudah melewati batas shift + 30 menit.
- * Batas shift:
- * - MORNING (09:00 - 13:00) -> Cutoff +30m: 13:30 WIB
- * - EVENING (16:00 - 21:00) -> Cutoff +30m: 21:30 WIB
+ * belum check-out (checkOut: null) dan waktu operasional sudah melewati batas shift cabang + 30 menit.
+ * Batas shift dihitung dinamis dari konfigurasi shift cabang:
+ * - MORNING: morningClose + 30m
+ * - EVENING: eveningClose + 30m
  */
 export async function runLazyAutoCheckout(): Promise<number> {
   const { workDate, timeStr } = getJakartaDateTime();
@@ -94,12 +133,28 @@ export async function runLazyAutoCheckout(): Promise<number> {
       checkOut: null,
       workDate: { lte: workDate },
     },
+    include: {
+      branch: {
+        include: {
+          workingHours: true,
+        },
+      },
+    },
   });
 
   let count = 0;
   for (const att of pendingAttendances) {
     const isPastDate = att.workDate < workDate;
-    const cutoffTime = att.shift === 'MORNING' ? '13:30' : '21:30';
+    const shiftConfig = getBranchShiftConfig(att.branch?.workingHours);
+    const closeTime = att.shift === 'MORNING' ? shiftConfig.morningClose : shiftConfig.eveningClose;
+
+    // Hitung waktu cutoff: jam tutup shift + 30 menit
+    const [h, m] = closeTime.split(':').map(Number);
+    const totalMinutes = ((h ?? 0) * 60 + (m ?? 0)) + 30;
+    const cutoffH = Math.floor(totalMinutes / 60) % 24;
+    const cutoffM = totalMinutes % 60;
+    const cutoffTime = `${String(cutoffH).padStart(2, '0')}:${String(cutoffM).padStart(2, '0')}`;
+
     const isPastCutoffToday = !isPastDate && timeStr > cutoffTime;
 
     const { dateStr } = getJakartaDateTime(att.workDate);
@@ -175,13 +230,10 @@ export async function checkIn(
     include: { branch: true },
   });
 
-  // Tentukan cabang validasi dan shift aktif
+  // Tentukan cabang validasi
   let targetBranchId = branchId;
-  let activeShift: WorkShift = timeStr < '15:00' ? 'MORNING' : 'EVENING';
-
   if (assignment) {
     targetBranchId = assignment.branchId;
-    activeShift = assignment.shift;
   }
 
   // A1: Wajib targetBranchId
@@ -197,6 +249,22 @@ export async function checkIn(
 
   if (!branch || !branch.active) {
     throw new ValidationError('Cabang tidak ditemukan atau sudah tidak aktif');
+  }
+
+  const shiftConfig = getBranchShiftConfig(branch.workingHours);
+
+  // Tentukan shift aktif: penugasan spesifik staf atau jadwal shift cabang
+  let activeShift: WorkShift = 'MORNING';
+  if (assignment) {
+    activeShift = assignment.shift;
+  } else {
+    // Ambang batas pergantian shift: 1 jam sebelum jam buka sore cabang (misal 15:00 jika buka 16:00)
+    const [eveningH, eveningM] = shiftConfig.eveningOpen.split(':').map(Number);
+    const eveningThresholdMin = ((eveningH ?? 16) * 60 + (eveningM ?? 0)) - 60;
+    const thresholdH = Math.floor(eveningThresholdMin / 60) % 24;
+    const thresholdM = eveningThresholdMin % 60;
+    const thresholdStr = `${String(thresholdH).padStart(2, '0')}:${String(thresholdM).padStart(2, '0')}`;
+    activeShift = timeStr < thresholdStr ? 'MORNING' : 'EVENING';
   }
 
   // Cek apakah karyawan aktif
@@ -278,8 +346,10 @@ export async function checkIn(
     }
   }
 
-  // Tentukan status PRESENT vs LATE
-  const lateAfter = activeShift === 'MORNING' ? (branch.workingHours?.lateAfter ?? '09:15') : '16:15';
+  // Tentukan status PRESENT vs LATE dari konfigurasi shift cabang
+  const lateAfter = activeShift === 'MORNING'
+    ? shiftConfig.morningLateAfter
+    : shiftConfig.eveningLateAfter;
   const status: AttendanceStatus = timeStr > lateAfter ? 'LATE' : 'PRESENT';
 
   const attendance = await prisma.$transaction(async (tx) => {
@@ -364,6 +434,13 @@ export async function checkOut(
       workDate,
       checkOut: null,
     },
+    include: {
+      branch: {
+        include: {
+          workingHours: true,
+        },
+      },
+    },
     orderBy: { checkIn: 'desc' },
   });
 
@@ -392,8 +469,11 @@ export async function checkOut(
     );
   }
 
-  // Hitung selisih keterlambatan checkout jika melewati batas shift
-  const shiftEndTime = attendance.shift === 'MORNING' ? '13:00' : '21:00';
+  // Hitung selisih keterlambatan checkout jika melewati batas jam tutup shift cabang
+  const shiftConfig = getBranchShiftConfig(attendance.branch?.workingHours);
+  const shiftEndTime = attendance.shift === 'MORNING'
+    ? shiftConfig.morningClose
+    : shiftConfig.eveningClose;
   let lateCheckoutMinutes: number | null = null;
 
   if (timeStr > shiftEndTime) {
@@ -563,9 +643,10 @@ export async function correctAttendance(
 
       // Recalculate status jika checkIn dikoreksi
       const { timeStr } = getJakartaDateTime(checkInDate);
+      const shiftConfig = getBranchShiftConfig(existing.branch?.workingHours);
       const lateAfter = existing.shift === 'MORNING'
-        ? (existing.branch.workingHours?.lateAfter ?? '09:15')
-        : '16:15';
+        ? shiftConfig.morningLateAfter
+        : shiftConfig.eveningLateAfter;
       newStatus = timeStr > lateAfter ? 'LATE' : 'PRESENT';
       updateData.status = newStatus;
     }

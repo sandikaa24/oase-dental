@@ -79,18 +79,34 @@ async function main() {
     });
     console.log(`[OK] Cabang utama terdaftar: ${branch.code} - ${branch.name}`);
 
-    // 3. Jam Operasional Cabang
+    // 3. Jam Operasional Cabang (Multi-shift dengan auto-sync turunan openTime/closeTime/lateAfter)
     await tx.branchWorkingHour.upsert({
       where: { branchId: branch.id },
-      update: { openTime, closeTime, lateAfter },
+      update: {
+        openTime,
+        closeTime,
+        lateAfter,
+        morningOpen: openTime,
+        morningClose: '13:00',
+        morningLateAfter: lateAfter,
+        eveningOpen: '16:00',
+        eveningClose: closeTime,
+        eveningLateAfter: '16:15',
+      },
       create: {
         branchId: branch.id,
         openTime,
         closeTime,
         lateAfter,
+        morningOpen: openTime,
+        morningClose: '13:00',
+        morningLateAfter: lateAfter,
+        eveningOpen: '16:00',
+        eveningClose: closeTime,
+        eveningLateAfter: '16:15',
       },
     });
-    console.log(`[OK] Jam operasional terkonfigurasi: ${openTime} - ${closeTime} (terlambat setelah ${lateAfter})`);
+    console.log(`[OK] Jam operasional terkonfigurasi: Multi-shift Pagi & Sore (Turunan: ${openTime} - ${closeTime}, terlambat setelah ${lateAfter})`);
   });
 
   console.log('--- SEED PRODUKSI SELESAI DENGAN SUKSES (0 DATA DUMMY) ---');

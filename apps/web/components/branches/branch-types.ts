@@ -4,6 +4,15 @@ export interface BranchWorkingHour {
   openTime: string;
   closeTime: string;
   lateAfter: string;
+  morningOpen?: string;
+  morningClose?: string;
+  morningLateAfter?: string;
+  eveningOpen?: string;
+  eveningClose?: string;
+  eveningLateAfter?: string;
+  saturdayEveningClosed?: boolean;
+  sundayClosed?: boolean;
+  daysSchedule?: Record<string, unknown> | null;
   createdAt: string;
 }
 

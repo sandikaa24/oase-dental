@@ -51,17 +51,59 @@ async function main() {
       },
     });
 
-    // 3. Jam operasional per cabang; lateAfter dipakai menghitung status absensi
+    // 3. Jam operasional per cabang (Multi-shift dengan auto-sync turunan openTime/closeTime/lateAfter)
     await tx.branchWorkingHour.upsert({
       where: { branchId: jkt.id },
-      update: {},
-      create: { branchId: jkt.id, openTime: '08:00', closeTime: '21:00', lateAfter: '08:15' },
+      update: {
+        morningOpen: '08:00',
+        morningClose: '13:00',
+        morningLateAfter: '08:15',
+        eveningOpen: '16:00',
+        eveningClose: '21:00',
+        eveningLateAfter: '16:15',
+        openTime: '08:00',
+        closeTime: '21:00',
+        lateAfter: '08:15',
+      },
+      create: {
+        branchId: jkt.id,
+        morningOpen: '08:00',
+        morningClose: '13:00',
+        morningLateAfter: '08:15',
+        eveningOpen: '16:00',
+        eveningClose: '21:00',
+        eveningLateAfter: '16:15',
+        openTime: '08:00',
+        closeTime: '21:00',
+        lateAfter: '08:15',
+      },
     });
 
     await tx.branchWorkingHour.upsert({
       where: { branchId: bdg.id },
-      update: {},
-      create: { branchId: bdg.id, openTime: '08:00', closeTime: '21:00', lateAfter: '08:15' },
+      update: {
+        morningOpen: '08:00',
+        morningClose: '13:00',
+        morningLateAfter: '08:15',
+        eveningOpen: '16:00',
+        eveningClose: '21:00',
+        eveningLateAfter: '16:15',
+        openTime: '08:00',
+        closeTime: '21:00',
+        lateAfter: '08:15',
+      },
+      create: {
+        branchId: bdg.id,
+        morningOpen: '08:00',
+        morningClose: '13:00',
+        morningLateAfter: '08:15',
+        eveningOpen: '16:00',
+        eveningClose: '21:00',
+        eveningLateAfter: '16:15',
+        openTime: '08:00',
+        closeTime: '21:00',
+        lateAfter: '08:15',
+      },
     });
 
     // 4a. Satu kategori contoh

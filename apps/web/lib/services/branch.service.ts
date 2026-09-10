@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client';
 import { prisma } from '../prisma';
 import { ConflictError, NotFoundError } from '../errors';
 
@@ -100,20 +101,63 @@ export async function updateBranch(
 
 export async function upsertWorkingHours(
   id: string,
-  input: { openTime: string; closeTime: string; lateAfter: string }
+  input: {
+    openTime?: string;
+    closeTime?: string;
+    lateAfter?: string;
+    morningOpen?: string;
+    morningClose?: string;
+    morningLateAfter?: string;
+    eveningOpen?: string;
+    eveningClose?: string;
+    eveningLateAfter?: string;
+    saturdayEveningClosed?: boolean;
+    sundayClosed?: boolean;
+    daysSchedule?: Record<string, unknown> | null;
+  }
 ) {
   const branch = await prisma.branch.findUnique({ where: { id } });
   if (!branch) {
     throw new NotFoundError('Cabang tidak ditemukan');
   }
 
+  // Shift baru dengan fallback standar
+  const morningOpen = input.morningOpen ?? input.openTime ?? '09:00';
+  const morningClose = input.morningClose ?? '13:00';
+  const morningLateAfter = input.morningLateAfter ?? input.lateAfter ?? '09:15';
+  const eveningOpen = input.eveningOpen ?? '16:00';
+  const eveningClose = input.eveningClose ?? input.closeTime ?? '21:00';
+  const eveningLateAfter = input.eveningLateAfter ?? '16:15';
+  const saturdayEveningClosed = input.saturdayEveningClosed ?? true;
+  const sundayClosed = input.sundayClosed ?? true;
+
+  // Kolom lama SEBAGAI TURUNAN: auto-sync dari kolom shift baru
+  const openTime = morningOpen;
+  const closeTime = eveningClose;
+  const lateAfter = morningLateAfter;
+
+  const dataToSave = {
+    morningOpen,
+    morningClose,
+    morningLateAfter,
+    eveningOpen,
+    eveningClose,
+    eveningLateAfter,
+    saturdayEveningClosed,
+    sundayClosed,
+    daysSchedule: (input.daysSchedule as Prisma.InputJsonValue) ?? undefined,
+    openTime,
+    closeTime,
+    lateAfter,
+  };
+
   const workingHours = await prisma.branchWorkingHour.upsert({
     where: { branchId: id },
     create: {
       branchId: id,
-      ...input,
+      ...dataToSave,
     },
-    update: input,
+    update: dataToSave,
   });
 
   return workingHours;

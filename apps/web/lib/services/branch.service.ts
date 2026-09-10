@@ -43,6 +43,9 @@ export async function createBranch(input: {
   name: string;
   address: string;
   phone?: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  geofenceRadius?: number;
 }) {
   try {
     const branch = await prisma.branch.create({
@@ -62,7 +65,15 @@ export async function createBranch(input: {
 
 export async function updateBranch(
   id: string,
-  input: { code?: string; name?: string; address?: string; phone?: string }
+  input: {
+    code?: string;
+    name?: string;
+    address?: string;
+    phone?: string;
+    latitude?: number | null;
+    longitude?: number | null;
+    geofenceRadius?: number;
+  }
 ) {
   // Check existence first to distinguish between NotFound and other errors
   const existing = await prisma.branch.findUnique({ where: { id } });

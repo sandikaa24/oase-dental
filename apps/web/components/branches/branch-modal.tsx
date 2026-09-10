@@ -27,8 +27,12 @@ export function BranchModal({
   const [name, setName] = useState('');
   const [address, setAddress] = useState('');
   const [phone, setPhone] = useState('');
+  const [latitude, setLatitude] = useState<string>('');
+  const [longitude, setLongitude] = useState<string>('');
+  const [geofenceRadius, setGeofenceRadius] = useState<number>(100);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isGettingLocation, setIsGettingLocation] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -39,14 +43,40 @@ export function BranchModal({
         setName(branch.name);
         setAddress(branch.address);
         setPhone(branch.phone || '');
+        setLatitude(branch.latitude != null ? String(branch.latitude) : '');
+        setLongitude(branch.longitude != null ? String(branch.longitude) : '');
+        setGeofenceRadius(branch.geofenceRadius ?? 100);
       } else {
         setCode('');
         setName('');
         setAddress('');
         setPhone('');
+        setLatitude('');
+        setLongitude('');
+        setGeofenceRadius(100);
       }
     }
   }, [open, branch]);
+
+  const handleGetCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      setError('Browser tidak mendukung geolokasi GPS.');
+      return;
+    }
+    setIsGettingLocation(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setLatitude(pos.coords.latitude.toFixed(6));
+        setLongitude(pos.coords.longitude.toFixed(6));
+        setIsGettingLocation(false);
+      },
+      (err) => {
+        setError(`Gagal mengambil lokasi perangkat: ${err.message}`);
+        setIsGettingLocation(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
 
   if (!open) return null;
 
@@ -75,6 +105,18 @@ export function BranchModal({
       return;
     }
 
+    const parsedLat = latitude.trim() ? parseFloat(latitude) : null;
+    const parsedLng = longitude.trim() ? parseFloat(longitude) : null;
+
+    if (parsedLat !== null && (isNaN(parsedLat) || parsedLat < -90 || parsedLat > 90)) {
+      setError('Latitude harus berupa angka valid antara -90 dan 90.');
+      return;
+    }
+    if (parsedLng !== null && (isNaN(parsedLng) || parsedLng < -180 || parsedLng > 180)) {
+      setError('Longitude harus berupa angka valid antara -180 dan 180.');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       const payload = {
@@ -82,6 +124,9 @@ export function BranchModal({
         name: trimmedName,
         address: trimmedAddress,
         phone: phone.trim() || undefined,
+        latitude: parsedLat,
+        longitude: parsedLng,
+        geofenceRadius: geofenceRadius || 100,
       };
 
       if (isEditing && branch) {
@@ -183,6 +228,79 @@ export function BranchModal({
               onChange={(e) => setPhone(e.target.value)}
               className="text-xs font-mono"
             />
+          </div>
+
+          {/* Konfigurasi Geofence (Fitur A) */}
+          <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-2.5">
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                  <span>Titik Koordinat & Geofence Cabang</span>
+                  <span className="text-[10px] font-normal text-muted-foreground">(Radius 100m)</span>
+                </h4>
+                <p className="text-[11px] text-muted-foreground">
+                  Staf wajib berada di dalam radius ini saat melakukan presensi masuk/keluar.
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={handleGetCurrentLocation}
+                isLoading={isGettingLocation}
+                className="text-[11px] h-7 px-2.5"
+              >
+                Gunakan GPS Saya
+              </Button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <div className="space-y-0.5">
+                <label className="text-[11px] font-medium text-slate-600">Latitude</label>
+                <Input
+                  type="text"
+                  placeholder="-6.2088"
+                  value={latitude}
+                  onChange={(e) => setLatitude(e.target.value)}
+                  className="text-xs font-mono h-8"
+                />
+              </div>
+              <div className="space-y-0.5">
+                <label className="text-[11px] font-medium text-slate-600">Longitude</label>
+                <Input
+                  type="text"
+                  placeholder="106.8456"
+                  value={longitude}
+                  onChange={(e) => setLongitude(e.target.value)}
+                  className="text-xs font-mono h-8"
+                />
+              </div>
+              <div className="space-y-0.5">
+                <label className="text-[11px] font-medium text-slate-600">Radius (Meter)</label>
+                <Input
+                  type="number"
+                  min={10}
+                  max={5000}
+                  value={geofenceRadius}
+                  onChange={(e) => setGeofenceRadius(parseInt(e.target.value, 10) || 100)}
+                  className="text-xs font-mono h-8"
+                />
+              </div>
+            </div>
+
+            {latitude && longitude && (
+              <div className="text-[11px] text-primary flex items-center justify-between pt-0.5">
+                <span>Koordinat terpasang: {latitude}, {longitude}</span>
+                <a
+                  href={`https://www.openstreetmap.org/?mlat=${latitude}&mlon=${longitude}#map=18/${latitude}/${longitude}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="underline hover:text-primary-dark"
+                >
+                  Lihat di Peta ↗
+                </a>
+              </div>
+            )}
           </div>
 
           <div className="flex items-center justify-end gap-2 pt-3 border-t border-border">

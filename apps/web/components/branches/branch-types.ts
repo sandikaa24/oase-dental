@@ -14,6 +14,9 @@ export interface Branch {
   address: string;
   phone?: string | null;
   active: boolean;
+  latitude?: number | null;
+  longitude?: number | null;
+  geofenceRadius?: number;
   workingHours?: BranchWorkingHour | null;
   createdAt: string;
   updatedAt: string;

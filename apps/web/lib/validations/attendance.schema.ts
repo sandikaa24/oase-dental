@@ -38,3 +38,10 @@ export const attendanceCorrectSchema = z.object({
   message: 'Waktu check-out tidak boleh mendahului check-in',
   path: ['checkOut'],
 });
+
+// POST /attendance/check-in schema (SELF)
+export const attendanceCheckInSchema = z.object({
+  latitude: z.number().min(-90).max(90).optional().nullable(),
+  longitude: z.number().min(-180).max(180).optional().nullable(),
+  accuracy: z.number().nonnegative().optional().nullable(),
+}).optional();

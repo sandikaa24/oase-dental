@@ -56,6 +56,26 @@ export class BranchContextRequiredError extends AppError {
   }
 }
 
+export class GpsRequiredError extends AppError {
+  constructor(message: string = 'Lokasi GPS diperlukan untuk melakukan absensi pada cabang ini') {
+    super(message, 403, 'GPS_REQUIRED');
+  }
+}
+
+export class OutOfRangeError extends AppError {
+  public readonly distance?: number;
+  public readonly radius?: number;
+  constructor(
+    message: string = 'Posisi Anda berada di luar radius absensi cabang (maksimal 100 meter)',
+    distance?: number,
+    radius?: number
+  ) {
+    super(message, 403, 'OUT_OF_RANGE');
+    this.distance = distance;
+    this.radius = radius;
+  }
+}
+
 
 export class NotFoundError extends AppError {
   constructor(message: string = 'Data tidak ditemukan') {

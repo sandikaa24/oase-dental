@@ -1,11 +1,14 @@
 import { prisma } from '../prisma';
-import { Prisma, type UserRole, type AttendanceStatus } from '@prisma/client';
+import { Prisma, type UserRole, type AttendanceStatus, type WorkShift } from '@prisma/client';
 import {
   AlreadyCheckedInError,
   ConflictError,
   NotFoundError,
   ValidationError,
+  GpsRequiredError,
+  OutOfRangeError,
 } from '../errors';
+import { calculateDistanceMeters } from '../utils/geo';
 
 /**
  * Helper: Dapatkan tanggal (YYYY-MM-DD), jam (HH:mm), dan workDate (@db.Date)
@@ -47,6 +50,13 @@ const attendancePublicSelect = {
   status: true,
   corrected: true,
   correctionNote: true,
+  shift: true,
+  latitude: true,
+  longitude: true,
+  distanceMeters: true,
+  accuracyMeters: true,
+  autoCheckout: true,
+  lateCheckoutMinutes: true,
   createdAt: true,
   updatedAt: true,
   employee: {
@@ -61,34 +71,122 @@ const attendancePublicSelect = {
       id: true,
       code: true,
       name: true,
+      latitude: true,
+      longitude: true,
+      geofenceRadius: true,
     },
   },
 } as const;
 
 /**
+ * Mekanisme Lazy-Check AUTO_CHECKOUT:
+ * Dipanggil pada setiap aktivitas presensi. Mengevaluasi record presensi yang masih
+ * belum check-out (checkOut: null) dan waktu operasional sudah melewati batas shift + 30 menit.
+ * Batas shift:
+ * - MORNING (09:00 - 13:00) -> Cutoff +30m: 13:30 WIB
+ * - EVENING (16:00 - 21:00) -> Cutoff +30m: 21:30 WIB
+ */
+export async function runLazyAutoCheckout(): Promise<number> {
+  const { workDate, timeStr } = getJakartaDateTime();
+
+  const pendingAttendances = await prisma.attendance.findMany({
+    where: {
+      checkOut: null,
+      workDate: { lte: workDate },
+    },
+  });
+
+  let count = 0;
+  for (const att of pendingAttendances) {
+    const isPastDate = att.workDate < workDate;
+    const cutoffTime = att.shift === 'MORNING' ? '13:30' : '21:30';
+    const isPastCutoffToday = !isPastDate && timeStr > cutoffTime;
+
+    if (isPastDate || isPastCutoffToday) {
+      const { dateStr } = getJakartaDateTime(att.workDate);
+      const autoCheckoutDate = new Date(`${dateStr}T${cutoffTime}:00+07:00`);
+
+      await prisma.$transaction(async (tx) => {
+        await tx.attendance.update({
+          where: { id: att.id },
+          data: {
+            checkOut: autoCheckoutDate,
+            autoCheckout: true,
+            lateCheckoutMinutes: 30,
+          },
+        });
+
+        await tx.auditLog.create({
+          data: {
+            actorId: 'SYSTEM',
+            action: 'ATTENDANCE_AUTO_CHECKOUT',
+            entity: 'Attendance',
+            entityId: att.id,
+            note: `Auto-checkout: Karyawan ${att.employeeId} tidak melakukan presensi pulang melewati batas shift ${att.shift} + 30 menit`,
+          },
+        });
+      });
+      count++;
+    }
+  }
+
+  return count;
+}
+
+/**
  * Check-in absensi (SELF)
- * Sesuai kontrak: tolak jika sudah ada record hari ini (400 ALREADY_CHECKED_IN).
- * Status dihitung vs lateAfter branch (fallback 08:00 jika tidak ada).
+ * Sesuai aturan Fitur A (Geofence 100M Anti-Bypass) & Fitur B (Shift Fleksibel):
+ * 1. Cabang punya koordinat -> koordinat client wajib. Tanpa koordinat = 403 GPS_REQUIRED + audit log.
+ *    Di luar radius = 403 OUT_OF_RANGE + audit log.
+ * 2. Cabang tanpa koordinat -> lolos (masa transisi) + audit log flag GEO_NOT_CONFIGURED.
+ * 3. Cabang & shift ditentukan dari penugasan (ShiftAssignment) hari ini jika ada,
+ *    atau default shift standar cabang jika tidak ada penugasan khusus.
  */
 export async function checkIn(
   employeeId: string | null,
-  branchId: string | null
+  branchId: string | null,
+  coords?: { latitude?: number | null; longitude?: number | null; accuracy?: number | null },
+  actorId?: string,
+  ip?: string | null
 ) {
-  // D1: User tanpa employeeId (mis. default OWNER) ditolak
+  // D1: User tanpa employeeId ditolak
   if (!employeeId) {
     throw new ValidationError(
       'Akun belum terhubung ke data karyawan untuk melakukan absensi'
     );
   }
 
-  // A1: Wajib activeBranchId
-  if (!branchId) {
+  // Jalankan lazy-check auto checkout
+  await runLazyAutoCheckout().catch(() => {});
+
+  const { workDate, timeStr } = getJakartaDateTime();
+
+  // Cek apakah ada ShiftAssignment untuk staf hari ini
+  const assignment = await prisma.shiftAssignment.findFirst({
+    where: {
+      employeeId,
+      date: workDate,
+    },
+    include: { branch: true },
+  });
+
+  // Tentukan cabang validasi dan shift aktif
+  let targetBranchId = branchId;
+  let activeShift: WorkShift = timeStr < '15:00' ? 'MORNING' : 'EVENING';
+
+  if (assignment) {
+    targetBranchId = assignment.branchId;
+    activeShift = assignment.shift;
+  }
+
+  // A1: Wajib targetBranchId
+  if (!targetBranchId) {
     throw new ValidationError('Branch aktif diperlukan untuk absensi');
   }
 
-  // Cek apakah cabang aktif
+  // Cek apakah cabang target aktif
   const branch = await prisma.branch.findUnique({
-    where: { id: branchId },
+    where: { id: targetBranchId },
     include: { workingHours: true },
   });
 
@@ -106,15 +204,13 @@ export async function checkIn(
     throw new ValidationError('Data karyawan tidak ditemukan atau sudah tidak aktif');
   }
 
-  const { workDate, timeStr } = getJakartaDateTime();
-
-  // A4: Tolak jika sudah ada record hari ini
+  // Cek apakah sudah check-in pada shift ini hari ini
   const existing = await prisma.attendance.findUnique({
     where: {
-      employeeId_workDate_branchId: {
+      employeeId_workDate_shift: {
         employeeId,
         workDate,
-        branchId,
+        shift: activeShift,
       },
     },
   });
@@ -123,19 +219,108 @@ export async function checkIn(
     throw new AlreadyCheckedInError('Sudah melakukan check-in hari ini');
   }
 
-  // A2 & D3: Tentukan status PRESENT vs LATE vs lateAfter
-  const lateAfter = branch.workingHours?.lateAfter ?? '08:00';
+  // ─── VALIDASI GEOFENCE (FITUR A) ───
+  const hasBranchCoords = branch.latitude !== null && branch.longitude !== null;
+  let distanceMeters: number | null = null;
+  const accuracyMeters: number | null = coords?.accuracy ?? null;
+
+  if (hasBranchCoords) {
+    // 1. Cabang SUDAH punya koordinat -> koordinat client WAJIB
+    if (
+      coords?.latitude === undefined ||
+      coords?.latitude === null ||
+      coords?.longitude === undefined ||
+      coords?.longitude === null
+    ) {
+      await prisma.auditLog.create({
+        data: {
+          actorId: actorId ?? employeeId,
+          action: 'ATTENDANCE_OUT_OF_RANGE',
+          entity: 'Attendance',
+          entityId: branch.id,
+          note: `Check-in ditolak: GPS_REQUIRED pada cabang berkoordinat (${branch.name})`,
+          ip,
+        },
+      });
+      throw new GpsRequiredError('Koordinat GPS wajib disertakan untuk melakukan absensi pada cabang ini');
+    }
+
+    // Hitung jarak Haversine
+    distanceMeters = calculateDistanceMeters(
+      coords.latitude,
+      coords.longitude,
+      branch.latitude!,
+      branch.longitude!
+    );
+
+    const radius = branch.geofenceRadius || 100;
+    if (distanceMeters > radius) {
+      await prisma.auditLog.create({
+        data: {
+          actorId: actorId ?? employeeId,
+          action: 'ATTENDANCE_OUT_OF_RANGE',
+          entity: 'Attendance',
+          entityId: branch.id,
+          note: `Check-in ditolak: di luar radius geofence. Jarak: ${distanceMeters}m (radius: ${radius}m), akurasi: ${accuracyMeters ?? 'N/A'}m`,
+          ip,
+        },
+      });
+      throw new OutOfRangeError(
+        `Posisi Anda berada di luar radius absensi cabang (${distanceMeters}m, maksimal ${radius} meter)`,
+        distanceMeters,
+        radius
+      );
+    }
+  }
+
+  // Tentukan status PRESENT vs LATE
+  const lateAfter = activeShift === 'MORNING' ? (branch.workingHours?.lateAfter ?? '09:15') : '16:15';
   const status: AttendanceStatus = timeStr > lateAfter ? 'LATE' : 'PRESENT';
 
-  const attendance = await prisma.attendance.create({
-    data: {
-      employeeId,
-      branchId,
-      workDate,
-      checkIn: new Date(),
-      status,
-    },
-    select: attendancePublicSelect,
+  const attendance = await prisma.$transaction(async (tx) => {
+    const created = await tx.attendance.create({
+      data: {
+        employeeId,
+        branchId: targetBranchId!,
+        workDate,
+        shift: activeShift,
+        checkIn: new Date(),
+        status,
+        latitude: coords?.latitude ?? null,
+        longitude: coords?.longitude ?? null,
+        distanceMeters,
+        accuracyMeters,
+      },
+      select: attendancePublicSelect,
+    });
+
+    if (!hasBranchCoords) {
+      // 2. Cabang BELUM punya koordinat -> lolos dengan flag GEO_NOT_CONFIGURED
+      await tx.auditLog.create({
+        data: {
+          actorId: actorId ?? employeeId,
+          action: 'CREATE',
+          entity: 'Attendance',
+          entityId: created.id,
+          note: `Presensi dicatat (GEO_NOT_CONFIGURED: Cabang ${branch.name} belum dikonfigurasi koordinat geofence)`,
+          ip,
+        },
+      });
+    } else {
+      // Audit log keberhasilan presensi dengan koordinat & akurasi
+      await tx.auditLog.create({
+        data: {
+          actorId: actorId ?? employeeId,
+          action: 'CREATE',
+          entity: 'Attendance',
+          entityId: created.id,
+          note: `Check-in berhasil di ${branch.name}. Jarak: ${distanceMeters}m (radius: ${branch.geofenceRadius}m), Akurasi: ${accuracyMeters ?? 'N/A'}m`,
+          ip,
+        },
+      });
+    }
+
+    return created;
   });
 
   return attendance;
@@ -143,8 +328,9 @@ export async function checkIn(
 
 /**
  * Check-out absensi (SELF)
- * A3: Check-out tanpa check-in -> 409 INVALID_TRANSACTION_STATE
- * T10: Check-out kedua kali pada hari sama -> 409 INVALID_TRANSACTION_STATE
+ * A3: Belum check-in -> 409 INVALID_TRANSACTION_STATE
+ * T10: Sudah check-out sebelumnya -> 409 INVALID_TRANSACTION_STATE
+ * Fitur B: Menghitung keterlambatan pulang (lateCheckoutMinutes) jika melewati batas selesai shift.
  */
 export async function checkOut(
   employeeId: string | null,
@@ -162,38 +348,63 @@ export async function checkOut(
     throw new ValidationError('Branch aktif diperlukan untuk absensi');
   }
 
-  const { workDate } = getJakartaDateTime();
+  await runLazyAutoCheckout().catch(() => {});
 
-  const attendance = await prisma.attendance.findUnique({
+  const { workDate, timeStr } = getJakartaDateTime();
+
+  // Cari record absensi hari ini yang belum check-out
+  const attendance = await prisma.attendance.findFirst({
     where: {
-      employeeId_workDate_branchId: {
-        employeeId,
-        workDate,
-        branchId,
-      },
+      employeeId,
+      workDate,
+      checkOut: null,
     },
+    orderBy: { checkIn: 'desc' },
   });
 
-  // A3: Belum check-in
+  // Jika tidak ditemukan record yang belum checkout
   if (!attendance) {
-    throw new ConflictError(
-      'Belum melakukan check-in hari ini',
-      'INVALID_TRANSACTION_STATE'
-    );
-  }
+    const anyToday = await prisma.attendance.findFirst({
+      where: {
+        employeeId,
+        workDate,
+      },
+      orderBy: { checkIn: 'desc' },
+    });
 
-  // T10: Sudah check-out sebelumnya
-  if (attendance.checkOut !== null) {
+    if (!anyToday) {
+      // A3: Belum check-in
+      throw new ConflictError(
+        'Belum melakukan check-in hari ini',
+        'INVALID_TRANSACTION_STATE'
+      );
+    }
+
+    // T10: Sudah check-out sebelumnya
     throw new ConflictError(
       'Sudah melakukan check-out hari ini',
       'INVALID_TRANSACTION_STATE'
     );
   }
 
+  // Hitung selisih keterlambatan checkout jika melewati batas shift
+  const shiftEndTime = attendance.shift === 'MORNING' ? '13:00' : '21:00';
+  let lateCheckoutMinutes: number | null = null;
+
+  if (timeStr > shiftEndTime) {
+    const [currH, currM] = timeStr.split(':').map(Number);
+    const [endH, endM] = shiftEndTime.split(':').map(Number);
+    const diff = (currH * 60 + currM) - (endH * 60 + endM);
+    if (diff > 0) {
+      lateCheckoutMinutes = diff;
+    }
+  }
+
   const updated = await prisma.attendance.update({
     where: { id: attendance.id },
     data: {
       checkOut: new Date(),
+      lateCheckoutMinutes,
     },
     select: attendancePublicSelect,
   });
@@ -204,7 +415,6 @@ export async function checkOut(
 /**
  * GET /attendance/me (SELF)
  * Riwayat absensi sendiri dengan filter bulan (?month=YYYY-MM).
- * Default: bulan berjalan WIB jika tidak diisi.
  */
 export async function getMyAttendance(
   employeeId: string | null,
@@ -214,13 +424,15 @@ export async function getMyAttendance(
     throw new ValidationError('Akun belum terhubung ke data karyawan');
   }
 
+  await runLazyAutoCheckout().catch(() => {});
+
   const targetStr = monthStr ?? getJakartaDateTime().dateStr.slice(0, 7);
   const parts = targetStr.split('-');
   const year = parseInt(parts[0] ?? '2026', 10);
   const month = parseInt(parts[1] ?? '1', 10);
 
   const startDate = new Date(Date.UTC(year, month - 1, 1));
-  const endDate = new Date(Date.UTC(year, month, 0)); // Hari terakhir bulan tersebut
+  const endDate = new Date(Date.UTC(year, month, 0));
 
   const attendances = await prisma.attendance.findMany({
     where: {
@@ -239,8 +451,7 @@ export async function getMyAttendance(
 
 /**
  * GET /attendance (OWNER, MANAGER)
- * List absensi semua karyawan.
- * D4: MANAGER otomatis dibatasi ke activeBranchId (auth.branchId).
+ * List absensi seluruh staf.
  */
 export async function listAttendances(
   params: {
@@ -253,6 +464,8 @@ export async function listAttendances(
   role: UserRole,
   activeBranchId: string | null
 ) {
+  await runLazyAutoCheckout().catch(() => {});
+
   const where: Prisma.AttendanceWhereInput = {};
 
   if (role === 'MANAGER') {
@@ -297,7 +510,6 @@ export async function listAttendances(
 /**
  * POST /attendance/:id/correct (OWNER)
  * Koreksi manual jam checkIn/checkOut + catatan wajib.
- * Audit action: ATTENDANCE_CORRECTED.
  */
 export async function correctAttendance(
   id: string,
@@ -342,7 +554,9 @@ export async function correctAttendance(
 
       // Recalculate status jika checkIn dikoreksi
       const { timeStr } = getJakartaDateTime(checkInDate);
-      const lateAfter = existing.branch.workingHours?.lateAfter ?? '08:00';
+      const lateAfter = existing.shift === 'MORNING'
+        ? (existing.branch.workingHours?.lateAfter ?? '09:15')
+        : '16:15';
       newStatus = timeStr > lateAfter ? 'LATE' : 'PRESENT';
       updateData.status = newStatus;
     }

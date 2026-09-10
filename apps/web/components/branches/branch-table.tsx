@@ -249,6 +249,18 @@ export function BranchTable() {
                           <MapPin className="h-3 w-3 text-muted shrink-0" />
                           <span className="line-clamp-1">{branch.address}</span>
                         </div>
+                        <div className="mt-1">
+                          {branch.latitude != null && branch.longitude != null ? (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-mono text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                              <span>Geofence ({branch.geofenceRadius || 100}m):</span>
+                              <span>{branch.latitude.toFixed(4)}, {branch.longitude.toFixed(4)}</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center text-[10px] text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                              Pin Geofence: Belum terpasang
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="py-3 px-4 text-slate-700 font-medium">
                         {branch.phone ? (

@@ -58,6 +58,67 @@ export function AttendanceWidget({ todayAttendance, isLoadingToday }: Attendance
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
 
+  // Status GPS Geofence (Fitur A)
+  const [gpsStatus, setGpsStatus] = useState<'prompt' | 'locating' | 'granted' | 'denied' | 'unavailable'>('prompt');
+  const [userCoords, setUserCoords] = useState<{ latitude: number; longitude: number; accuracy: number } | null>(null);
+  const [gpsErrorMessage, setGpsErrorMessage] = useState<string | null>(null);
+
+  // Minta izin lokasi GPS secara proaktif saat widget dimuat
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'geolocation' in navigator) {
+      setGpsStatus('locating');
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          setUserCoords({
+            latitude: pos.coords.latitude,
+            longitude: pos.coords.longitude,
+            accuracy: pos.coords.accuracy,
+          });
+          setGpsStatus('granted');
+          setGpsErrorMessage(null);
+        },
+        (err) => {
+          setGpsStatus('denied');
+          if (err.code === 1) {
+            setGpsErrorMessage('Izin akses lokasi GPS ditolak oleh pengguna/browser.');
+          } else if (err.code === 2) {
+            setGpsErrorMessage('Sinyal GPS tidak tersedia atau perangkat sedang offline.');
+          } else {
+            setGpsErrorMessage('Waktu permintaan lokasi GPS habis (timeout).');
+          }
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
+      );
+    } else {
+      setGpsStatus('unavailable');
+      setGpsErrorMessage('Browser atau perangkat ini tidak mendukung geolokasi GPS.');
+    }
+  }, []);
+
+  const requestGpsLocation = () => {
+    if (!navigator.geolocation) {
+      setGpsStatus('unavailable');
+      return;
+    }
+    setGpsStatus('locating');
+    setGpsErrorMessage(null);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setUserCoords({
+          latitude: pos.coords.latitude,
+          longitude: pos.coords.longitude,
+          accuracy: pos.coords.accuracy,
+        });
+        setGpsStatus('granted');
+      },
+      (err) => {
+        setGpsStatus('denied');
+        setGpsErrorMessage(`Izin lokasi GPS belum aktif (${err.message}).`);
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
+  };
+
   useEffect(() => {
     const updateTime = () => {
       const now = new Date();
@@ -86,19 +147,44 @@ export function AttendanceWidget({ todayAttendance, isLoadingToday }: Attendance
     return () => clearInterval(interval);
   }, []);
 
-  // Mutasi Check-In
+  // Mutasi Check-In (mengirimkan koordinat GPS)
   const checkInMutation = useMutation({
-    mutationFn: () =>
-      fetchApi<AttendanceRecord>('/api/v1/attendance/check-in', {
+    mutationFn: async () => {
+      let coordsToSend = userCoords;
+      if (typeof window !== 'undefined' && 'geolocation' in navigator) {
+        try {
+          const freshPos = await new Promise<GeolocationPosition>((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(resolve, reject, {
+              enableHighAccuracy: true,
+              timeout: 7000,
+              maximumAge: 0,
+            });
+          });
+          coordsToSend = {
+            latitude: freshPos.coords.latitude,
+            longitude: freshPos.coords.longitude,
+            accuracy: freshPos.coords.accuracy,
+          };
+          setUserCoords(coordsToSend);
+          setGpsStatus('granted');
+        } catch {
+          // gunakan coordsToSend yang tersimpan sebelumnya
+        }
+      }
+
+      return fetchApi<AttendanceRecord>('/api/v1/attendance/check-in', {
         method: 'POST',
-      }),
+        body: JSON.stringify(coordsToSend || {}),
+      });
+    },
     onSuccess: (res) => {
       setActionError(null);
       const isLate = res.data?.status === 'LATE';
+      const distInfo = res.data?.distanceMeters != null ? ` (Jarak: ${res.data.distanceMeters}m)` : '';
       setActionSuccess(
         isLate
-          ? 'Check-in berhasil tercatat (Status: Terlambat).'
-          : 'Check-in berhasil tercatat tepat waktu.'
+          ? `Check-in berhasil tercatat (Status: Terlambat)${distInfo}.`
+          : `Check-in berhasil tercatat tepat waktu${distInfo}.`
       );
       queryClient.invalidateQueries({ queryKey: ['attendance', 'me'] });
       queryClient.invalidateQueries({ queryKey: ['attendance', 'list'] });
@@ -273,15 +359,31 @@ export function AttendanceWidget({ todayAttendance, isLoadingToday }: Attendance
         {/* Kolom Kanan: Tombol Aksi */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0">
           {!isCheckedIn ? (
-            <Button
-              onClick={() => checkInMutation.mutate()}
-              disabled={checkInMutation.isPending || !user?.activeBranchId}
-              variant="primary"
-              className="gap-2 px-6 h-11"
-            >
-              <LogIn className="w-4 h-4" />
-              {checkInMutation.isPending ? 'Mencatat Masuk...' : 'Check-In Sekarang'}
-            </Button>
+            <div className="flex flex-col gap-1.5">
+              <Button
+                onClick={() => checkInMutation.mutate()}
+                disabled={
+                  checkInMutation.isPending ||
+                  !user?.activeBranchId ||
+                  gpsStatus === 'denied' ||
+                  gpsStatus === 'unavailable'
+                }
+                variant="primary"
+                className="gap-2 px-6 h-11"
+              >
+                <LogIn className="w-4 h-4" />
+                {checkInMutation.isPending ? 'Mencatat Masuk...' : 'Check-In Sekarang'}
+              </Button>
+              {gpsStatus === 'denied' && (
+                <button
+                  type="button"
+                  onClick={requestGpsLocation}
+                  className="text-[11px] text-danger-text hover:underline text-center"
+                >
+                  Izin GPS ditolak. Klik untuk coba lagi.
+                </button>
+              )}
+            </div>
           ) : !isCheckedOut ? (
             <Button
               onClick={() => checkOutMutation.mutate()}
@@ -299,6 +401,36 @@ export function AttendanceWidget({ todayAttendance, isLoadingToday }: Attendance
             </Button>
           )}
         </div>
+      </div>
+
+      {/* GPS Status Indicator (Fitur A) */}
+      <div className="mt-3 pt-3 border-t border-border flex flex-wrap items-center justify-between text-xs text-muted-foreground gap-2">
+        <div className="flex items-center gap-2">
+          <MapPin className="w-3.5 h-3.5 text-primary" />
+          <span>Status Geolokasi: </span>
+          {gpsStatus === 'granted' ? (
+            <span className="text-success-text font-medium flex items-center gap-1">
+              <CheckCircle2 className="w-3 h-3" /> GPS Aktif (Akurasi: {userCoords?.accuracy ? `${Math.round(userCoords.accuracy)}m` : 'Tinggi'})
+            </span>
+          ) : gpsStatus === 'locating' ? (
+            <span className="text-primary font-medium animate-pulse">
+              Mendeteksi koordinat perangkat...
+            </span>
+          ) : gpsStatus === 'denied' ? (
+            <span className="text-danger-text font-medium">
+              GPS Tidak Diizinkan / Mati
+            </span>
+          ) : (
+            <span className="text-warning-text font-medium">
+              GPS Tidak Didukung
+            </span>
+          )}
+        </div>
+        {gpsStatus === 'denied' && (
+          <span className="text-[11px] text-danger-text/90">
+            {gpsErrorMessage || 'Geofence 100M mewajibkan lokasi GPS untuk presensi cabang klinik.'}
+          </span>
+        )}
       </div>
 
       {/* Pesan Feedback Sukses / Gagal */}

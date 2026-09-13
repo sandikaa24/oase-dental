@@ -14,18 +14,24 @@ import {
   CheckCircle2,
   Sparkles,
 } from 'lucide-react';
-import { getPublicServices, getPublicBranches, buildWhatsAppUrl } from '@/lib/services/public.service';
+import {
+  getPublicServices,
+  getPublicBranches,
+  getPublicBranchHours,
+  buildWhatsAppUrl,
+} from '@/lib/services/public.service';
 import { getPublicDoctors } from '@/lib/services/portal-content.service';
 import { CLINIC_PILLARS, PATIENT_TESTIMONIALS } from '@/lib/public-content';
 import { formatRupiah } from '@/lib/formatters';
 
-export const revalidate = 3600; // ISR cache 1 jam
+export const revalidate = 60; // ISR cache 60 detik (sinkron data DB)
 
 export default async function HomePage() {
-  const [services, branches, doctors] = await Promise.all([
+  const [services, branches, doctors, branchHours] = await Promise.all([
     getPublicServices(),
     getPublicBranches(),
     getPublicDoctors(),
+    getPublicBranchHours(),
   ]);
 
   const defaultBranch = branches[0];
@@ -105,28 +111,39 @@ export default async function HomePage() {
       </section>
 
       {/* 2. QUICK BRANCH & WORKING HOURS STRIP */}
-      {branches.length > 0 && (
+      {branchHours.length > 0 && (
         <section className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="rounded-2xl border border-border/80 bg-card p-6 shadow-sm">
-            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+            <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
               <div className="space-y-1">
                 <div className="flex items-center gap-2 text-xs font-semibold text-primary uppercase tracking-wider">
                   <Clock className="h-3.5 w-3.5" />
                   <span>Jadwal Operasional Klinik</span>
                 </div>
-                <h2 className="text-lg font-bold text-foreground">Buka Setiap Hari untuk Kenyamanan Anda</h2>
+                <h2 className="text-lg font-bold text-foreground">Dua Shift Setiap Hari Kerja untuk Kenyamanan Anda</h2>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full md:w-auto">
-                {branches.slice(0, 2).map((b) => (
-                  <div key={b.id} className="rounded-xl border border-border/60 bg-background p-3.5 space-y-1 text-xs">
-                    <p className="font-semibold text-foreground">{b.name}</p>
-                    <p className="text-muted-foreground truncate">{b.address}</p>
-                    {b.workingHours && (
-                      <p className="text-primary font-medium">
-                        Jam Buka: {b.workingHours.openTime} – {b.workingHours.closeTime} WIB
-                      </p>
-                    )}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full lg:w-auto">
+                {branchHours.slice(0, 2).map((b) => (
+                  <div key={b.id} className="rounded-xl border border-border/60 bg-background p-3.5 space-y-2 text-xs">
+                    <div>
+                      <p className="font-semibold text-foreground">{b.name}</p>
+                      <p className="text-muted-foreground truncate">{b.address}</p>
+                    </div>
+                    <div className="space-y-1 border-t border-border/50 pt-2 text-[11px]">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-muted-foreground">Sen-Jum:</span>
+                        <span className="font-medium text-foreground">{b.schedule.weekdays}</span>
+                      </div>
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-muted-foreground">Sabtu:</span>
+                        <span className="font-medium text-foreground">{b.schedule.saturday}</span>
+                      </div>
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-muted-foreground">Minggu:</span>
+                        <span className="font-semibold text-destructive">{b.schedule.sunday}</span>
+                      </div>
+                    </div>
                   </div>
                 ))}
               </div>

@@ -107,6 +107,103 @@ export async function getPublicBranches(): Promise<PublicBranchItem[]> {
   }
 }
 
+export interface PublicBranchHoursItem {
+  id: string;
+  code: string;
+  name: string;
+  address: string;
+  phone: string | null;
+  morningOpen: string;
+  morningClose: string;
+  eveningOpen: string;
+  eveningClose: string;
+  saturdayEveningClosed: boolean;
+  sundayClosed: boolean;
+  schedule: {
+    weekdays: string;
+    saturday: string;
+    sunday: string;
+  };
+}
+
+/**
+ * Mengambil jam operasional publik per cabang aktif langsung dari database.
+ * Menerapkan whitelist data aman (TANPA geofence koordinat, radius, maupun toleransi keterlambatan internal).
+ * Fallback standar sesuai service absensi:
+ * Shift Pagi: 09:00–13:00, Shift Sore: 16:00–21:00, Sabtu Sore Tutup, Minggu Tutup.
+ */
+export async function getPublicBranchHours(): Promise<PublicBranchHoursItem[]> {
+  try {
+    const branches = await prisma.branch.findMany({
+      where: {
+        active: true,
+      },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        address: true,
+        phone: true,
+        workingHours: {
+          select: {
+            openTime: true,
+            closeTime: true,
+            morningOpen: true,
+            morningClose: true,
+            eveningOpen: true,
+            eveningClose: true,
+            saturdayEveningClosed: true,
+            sundayClosed: true,
+          },
+        },
+      },
+      orderBy: {
+        name: 'asc',
+      },
+    });
+
+    return branches.map((b) => {
+      const wh = b.workingHours;
+      const morningOpen = wh?.morningOpen || wh?.openTime || '09:00';
+      const morningClose = wh?.morningClose || '13:00';
+      const eveningOpen = wh?.eveningOpen || '16:00';
+      const eveningClose = wh?.eveningClose || wh?.closeTime || '21:00';
+      const saturdayEveningClosed = wh?.saturdayEveningClosed ?? true;
+      const sundayClosed = wh?.sundayClosed ?? true;
+
+      const weekdays = `${morningOpen}–${morningClose} & ${eveningOpen}–${eveningClose} WIB`;
+      const saturday = saturdayEveningClosed
+        ? `${morningOpen}–${morningClose} WIB`
+        : `${morningOpen}–${morningClose} & ${eveningOpen}–${eveningClose} WIB`;
+      const sunday = sundayClosed
+        ? 'Tutup'
+        : `${morningOpen}–${morningClose} & ${eveningOpen}–${eveningClose} WIB`;
+
+      return {
+        id: b.id,
+        code: b.code,
+        name: b.name,
+        address: b.address,
+        phone: b.phone,
+        morningOpen,
+        morningClose,
+        eveningOpen,
+        eveningClose,
+        saturdayEveningClosed,
+        sundayClosed,
+        schedule: {
+          weekdays,
+          saturday,
+          sunday,
+        },
+      };
+    });
+  } catch (error) {
+    console.error('Gagal mengambil jam operasional cabang publik:', error);
+    return [];
+  }
+}
+
 /**
  * Mengambil halaman statis dari tabel portal_pages berdasarkan slug.
  */

@@ -111,8 +111,37 @@ async function runTests() {
   assert(cabangHtml.includes('wa.me/'), 'Halaman Cabang memuat deep-link WhatsApp');
   assert(cabangHtml.includes('Jam Operasional') || cabangHtml.includes('Jam Praktik'), 'Halaman Cabang memuat jam operasional');
 
-  // 6. SERVER-SIDE GUARD ADMIN TETAP BERFUNGSI
-  console.log('\n--- 6. Guard Dashboard Admin (Non-Public Protection) ---');
+  // 6. ENDPOINT PUBLIK JAM OPERASIONAL & HOMEPAGE SCHEDULE
+  console.log('\n--- 6. Endpoint Publik Jam Operasional & Homepage Schedule ---');
+  const branchHoursRes = await fetch(`${BASE_URL}/api/v1/public/branch-hours`);
+  assert(branchHoursRes.status === 200, 'GET /api/v1/public/branch-hours mengembalikan HTTP 200');
+  
+  const branchHoursJson = await branchHoursRes.json();
+  assert(branchHoursJson.success === true, 'Response branch-hours memiliki { success: true }');
+  assert(Array.isArray(branchHoursJson.data) && branchHoursJson.data.length > 0, 'Response branch-hours memuat daftar cabang aktif');
+
+  const firstBranch = branchHoursJson.data[0];
+  assert(firstBranch.name && firstBranch.address, 'Data cabang memuat nama dan alamat');
+  assert(firstBranch.morningOpen && firstBranch.morningClose, 'Data cabang memuat jam shift pagi');
+  assert(firstBranch.eveningOpen && firstBranch.eveningClose, 'Data cabang memuat jam shift sore');
+  assert(firstBranch.schedule && firstBranch.schedule.weekdays, 'Data cabang memuat schedule.weekdays');
+  assert(firstBranch.schedule.saturday, 'Data cabang memuat schedule.saturday');
+  assert(firstBranch.schedule.sunday === 'Tutup', 'Data cabang memuat schedule.sunday "Tutup"');
+
+  // Validasi Zero-Leakage pada response JSON endpoint branch-hours
+  const branchHoursStr = JSON.stringify(branchHoursJson);
+  assert(!branchHoursStr.includes('latitude') && !branchHoursStr.includes('longitude') && !branchHoursStr.includes('geofenceRadius'), 'Endpoint branch-hours TIDAK membocorkan koordinat geofence/radius');
+  assert(!branchHoursStr.includes('lateAfter'), 'Endpoint branch-hours TIDAK membocorkan aturan toleransi keterlambatan internal');
+
+  // Validasi Homepage HTML merender string jam operasional dari DB + "Tutup" untuk Minggu
+  assert(homeHtml.includes('Dua Shift Setiap Hari Kerja untuk Kenyamanan Anda'), 'Homepage memuat headline baru yang selaras dengan data dua shift');
+  assert(!homeHtml.includes('Buka Setiap Hari untuk Kenyamanan Anda'), 'Homepage TIDAK memuat headline lama yang kontradiktif');
+  const weekdaysHtml = firstBranch.schedule.weekdays.replace('&', '&amp;');
+  assert(homeHtml.includes(firstBranch.schedule.weekdays) || homeHtml.includes(weekdaysHtml), `Homepage memuat string jam operasional hari kerja (${firstBranch.schedule.weekdays})`);
+  assert(homeHtml.includes('Tutup'), 'Homepage memuat status "Tutup" untuk hari Minggu');
+
+  // 7. SERVER-SIDE GUARD ADMIN TETAP BERFUNGSI
+  console.log('\n--- 7. Guard Dashboard Admin (Non-Public Protection) ---');
   const adminRes = await fetch(`${BASE_URL}/admin`, { redirect: 'manual' });
   assert(adminRes.status === 307 || adminRes.status === 302, 'Akses /admin tanpa token ditolak redirect (307/302)');
   assert(adminRes.headers.get('location')?.includes('/login'), 'Redirect /admin mengarah ke /login');

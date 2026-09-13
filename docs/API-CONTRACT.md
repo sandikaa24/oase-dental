@@ -873,3 +873,41 @@ Response 409 (Stok Tidak Mencukupi saat mutasi `OUT`):
 |---|---|---|---|
 | GET | `/api/v1/stock/movements` | OWNER, MANAGER, CASHIER | Riwayat mutasi per produk / cabang (`?productId&branchId&type&page&limit`) |
 
+---
+
+## 19. Endpoint Publik
+
+| Method | Path | Permission | Deskripsi |
+|---|---|---|---|
+| GET | `/api/v1/public/branch-hours` | 🔓 | Daftar cabang aktif beserta jam operasional per-hari-per-shift (whitelist aman tanpa geofence/lateAfter) |
+
+**GET /api/v1/public/branch-hours**
+
+Response 200:
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "uuid-cabang",
+      "code": "JKT",
+      "name": "OASE Klinik Gigi — Pusat",
+      "address": "Jl. Contoh No. 1, Jakarta",
+      "phone": "02100000001",
+      "morningOpen": "08:00",
+      "morningClose": "13:00",
+      "eveningOpen": "16:00",
+      "eveningClose": "21:00",
+      "saturdayEveningClosed": true,
+      "sundayClosed": true,
+      "schedule": {
+        "weekdays": "08:00–13:00 & 16:00–21:00 WIB",
+        "saturday": "08:00–13:00 WIB",
+        "sunday": "Tutup"
+      }
+    }
+  ]
+}
+```
+
+

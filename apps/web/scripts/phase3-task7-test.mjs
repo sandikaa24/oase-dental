@@ -105,9 +105,17 @@ async function main() {
     if (ownerCtx) owner.cookie = `${owner.cookie}; ${ownerCtx}`;
   }
 
-  const branchesRes = await req('/branches?limit=100', 'GET', null, owner.cookie);
-  const jkt = branchesRes.data?.data?.find((b) => b.code === 'JKT');
-  const bdg = branchesRes.data?.data?.find((b) => b.code === 'BDG');
+  let jkt = null;
+  let bdg = null;
+  let page = 1;
+  while ((!jkt || !bdg) && page <= 5) {
+    const branchesRes = await req(`/branches?page=${page}&limit=100`, 'GET', null, owner.cookie);
+    const list = branchesRes.data?.data || [];
+    if (list.length === 0) break;
+    if (!jkt) jkt = list.find((b) => b.code === 'JKT');
+    if (!bdg) bdg = list.find((b) => b.code === 'BDG');
+    page++;
+  }
   if (!jkt || !bdg) throw new Error('Cabang JKT atau BDG tidak ditemukan');
   pass('Cabang pengujian JKT dan BDG tersedia');
 

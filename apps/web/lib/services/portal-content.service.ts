@@ -382,28 +382,32 @@ export async function bulkDeleteDemoContent(
  * - Fallback ke CLINIC_DOCTORS konstanta bila kosong (konstanta TIDAK dihapus).
  */
 export async function getPublicDoctors(): Promise<DoctorProfile[]> {
-  const dbDoctors = await prisma.portalContent.findMany({
-    where: {
-      type: 'DOCTOR',
-      published: true,
-    },
-    orderBy: { sortOrder: 'asc' },
-  });
-
-  if (dbDoctors.length > 0) {
-    return dbDoctors.map((doc) => {
-      const meta = (doc.metadata || {}) as Record<string, unknown>;
-      return {
-        id: doc.id,
-        name: (meta.name as string) || doc.title,
-        title: (meta.title as string) || 'Dokter Gigi',
-        specialization: (meta.specialization as string) || 'Dokter Gigi Umum',
-        experience: (meta.experience as string) || 'Praktisi Terlisensi',
-        scheduleSummary: (meta.scheduleSummary as string) || 'Senin - Sabtu',
-      };
+  try {
+    const dbDoctors = await prisma.portalContent.findMany({
+      where: {
+        type: 'DOCTOR',
+        published: true,
+      },
+      orderBy: { sortOrder: 'asc' },
     });
+
+    if (dbDoctors.length > 0) {
+      return dbDoctors.map((doc) => {
+        const meta = (doc.metadata || {}) as Record<string, unknown>;
+        return {
+          id: doc.id,
+          name: (meta.name as string) || doc.title,
+          title: (meta.title as string) || 'Dokter Gigi',
+          specialization: (meta.specialization as string) || 'Dokter Gigi Umum',
+          experience: (meta.experience as string) || 'Praktisi Terlisensi',
+          scheduleSummary: (meta.scheduleSummary as string) || 'Senin - Sabtu',
+        };
+      });
+    }
+  } catch (error) {
+    console.error('Gagal mengambil data dokter publik dari DB:', error);
   }
 
-  // Fallback ke konstanta terkurasi jika belum ada dokter aktif di database
+  // Fallback ke konstanta terkurasi jika belum ada dokter aktif di database atau query DB gagal
   return CLINIC_DOCTORS;
 }

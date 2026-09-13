@@ -1,6 +1,6 @@
 import React from 'react';
 import type { Metadata } from 'next';
-import { getPublicBranches } from '@/lib/services/public.service';
+import { getPublicBranches, getPublicBranchHours } from '@/lib/services/public.service';
 import { PublicHeader } from '@/components/public/public-header';
 import { PublicFooter } from '@/components/public/public-footer';
 import { WhatsAppFloatingBtn } from '@/components/public/whatsapp-floating-btn';
@@ -36,7 +36,10 @@ export default async function PublicLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const branches = await getPublicBranches();
+  const [branches, branchHours] = await Promise.all([
+    getPublicBranches(),
+    getPublicBranchHours(),
+  ]);
   const primaryPhone = branches[0]?.phone;
 
   // Schema.org Dentist JSON-LD
@@ -52,22 +55,51 @@ export default async function PublicLayout({
       streetAddress: b.address,
       addressCountry: 'ID',
     })),
-    openingHoursSpecification: branches
-      .filter((b) => b.workingHours)
-      .map((b) => ({
-        '@type': 'OpeningHoursSpecification',
-        dayOfWeek: [
-          'Monday',
-          'Tuesday',
-          'Wednesday',
-          'Thursday',
-          'Friday',
-          'Saturday',
-          'Sunday',
-        ],
-        opens: b.workingHours?.openTime || '08:00',
-        closes: b.workingHours?.closeTime || '20:00',
-      })),
+    openingHoursSpecification: branchHours.flatMap((b) => {
+      const specs = [
+        {
+          '@type': 'OpeningHoursSpecification',
+          dayOfWeek: [
+            'Monday',
+            'Tuesday',
+            'Wednesday',
+            'Thursday',
+            'Friday',
+          ],
+          opens: b.morningOpen,
+          closes: b.morningClose,
+        },
+        {
+          '@type': 'OpeningHoursSpecification',
+          dayOfWeek: [
+            'Monday',
+            'Tuesday',
+            'Wednesday',
+            'Thursday',
+            'Friday',
+          ],
+          opens: b.eveningOpen,
+          closes: b.eveningClose,
+        },
+        {
+          '@type': 'OpeningHoursSpecification',
+          dayOfWeek: ['Saturday'],
+          opens: b.morningOpen,
+          closes: b.morningClose,
+        },
+      ];
+
+      if (!b.saturdayEveningClosed) {
+        specs.push({
+          '@type': 'OpeningHoursSpecification',
+          dayOfWeek: ['Saturday'],
+          opens: b.eveningOpen,
+          closes: b.eveningClose,
+        });
+      }
+
+      return specs;
+    }),
   };
 
   return (
@@ -80,7 +112,7 @@ export default async function PublicLayout({
 
       <PublicHeader primaryBranchPhone={primaryPhone} />
       <main className="flex-1">{children}</main>
-      <PublicFooter branches={branches} />
+      <PublicFooter branches={branchHours} />
       <WhatsAppFloatingBtn branches={branches} />
     </div>
   );

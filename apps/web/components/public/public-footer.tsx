@@ -1,10 +1,10 @@
 import React from 'react';
 import Link from 'next/link';
 import { ShieldCheck, Phone, MapPin, Clock, Heart } from 'lucide-react';
-import { PublicBranchItem } from '@/lib/services/public.service';
+import { PublicBranchHoursItem } from '@/lib/services/public.service';
 
 interface PublicFooterProps {
-  branches?: PublicBranchItem[];
+  branches?: PublicBranchHoursItem[];
 }
 
 export function PublicFooter({ branches = [] }: PublicFooterProps) {
@@ -100,10 +100,17 @@ export function PublicFooter({ branches = [] }: PublicFooterProps) {
                       <MapPin className="h-3.5 w-3.5 mt-0.5 shrink-0 text-primary" />
                       <span>{b.address}</span>
                     </div>
-                    {b.workingHours && (
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <Clock className="h-3.5 w-3.5 shrink-0 text-primary" />
-                        <span>Buka: {b.workingHours.openTime} – {b.workingHours.closeTime} WIB</span>
+                    {b.schedule && (
+                      <div className="space-y-1 text-xs text-muted-foreground pt-1 border-t border-border/50">
+                        <div className="flex items-center gap-2 font-medium text-foreground">
+                          <Clock className="h-3.5 w-3.5 shrink-0 text-primary" />
+                          <span>Sen–Jum: {b.schedule.weekdays}</span>
+                        </div>
+                        <div className="pl-5 text-[11px] text-muted-foreground flex flex-wrap gap-x-2">
+                          <span>Sabtu: {b.schedule.saturday}</span>
+                          <span>•</span>
+                          <span>Minggu: <span className="text-destructive font-semibold">{b.schedule.sunday}</span></span>
+                        </div>
                       </div>
                     )}
                     {b.phone && (

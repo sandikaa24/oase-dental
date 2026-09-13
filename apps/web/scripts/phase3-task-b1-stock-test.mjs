@@ -377,8 +377,8 @@ async function main() {
     // tanpa expiredDate
   }, ownerCookie);
 
-  // Verifikasi query stok per cabang
-  const rQueryStock = await req(`/api/v1/stock?branchId=${branchJkt.id}&limit=100`, 'GET', null, ownerCookie);
+  // Verifikasi query stok per cabang (gunakan search=uniqueSuffix agar item uji tidak tergeser pagination akibat akumulasi data)
+  const rQueryStock = await req(`/api/v1/stock?branchId=${branchJkt.id}&search=${uniqueSuffix}&limit=100`, 'GET', null, ownerCookie);
   const stockItems = rQueryStock.data?.data?.stocks || rQueryStock.data?.data?.items || [];
 
   const foundPast = stockItems.find(s => s.materialId === expPastId || s.productId === expPastId);

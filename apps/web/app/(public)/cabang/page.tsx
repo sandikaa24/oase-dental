@@ -1,9 +1,9 @@
 import React from 'react';
 import type { Metadata } from 'next';
 import { MapPin, Phone, Clock, MessageCircle, Navigation, Building2 } from 'lucide-react';
-import { getPublicBranches, buildWhatsAppUrl } from '@/lib/services/public.service';
+import { getPublicBranchHours, buildWhatsAppUrl } from '@/lib/services/public.service';
 
-export const revalidate = 3600;
+export const revalidate = 60; // ISR cache 60 detik (sinkron data DB)
 
 export const metadata: Metadata = {
   title: 'Lokasi Cabang & Kontak Klinik',
@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 };
 
 export default async function CabangPage() {
-  const branches = await getPublicBranches();
+  const branches = await getPublicBranchHours();
 
   return (
     <div className="py-12 sm:py-16 space-y-12">
@@ -65,17 +65,26 @@ export default async function CabangPage() {
                       </div>
                     </div>
 
-                    {b.workingHours && (
-                      <div className="flex items-start gap-3">
-                        <Clock className="h-4 w-4 mt-0.5 shrink-0 text-primary" />
-                        <div>
-                          <p className="text-xs font-semibold text-foreground">Jam Operasional:</p>
-                          <p className="text-foreground font-medium">
-                            Setiap Hari: {b.workingHours.openTime} – {b.workingHours.closeTime} WIB
-                          </p>
+                    <div className="flex items-start gap-3">
+                      <Clock className="h-4 w-4 mt-0.5 shrink-0 text-primary" />
+                      <div className="space-y-1.5 w-full">
+                        <p className="text-xs font-semibold text-foreground">Jam Operasional:</p>
+                        <div className="space-y-1 rounded-xl border border-border/60 bg-muted/30 p-3 text-xs">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-muted-foreground">Senin – Jumat:</span>
+                            <span className="font-medium text-foreground">{b.schedule.weekdays}</span>
+                          </div>
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-muted-foreground">Sabtu:</span>
+                            <span className="font-medium text-foreground">{b.schedule.saturday}</span>
+                          </div>
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-muted-foreground">Minggu:</span>
+                            <span className="font-semibold text-destructive">{b.schedule.sunday}</span>
+                          </div>
                         </div>
                       </div>
-                    )}
+                    </div>
 
                     {b.phone && (
                       <div className="flex items-start gap-3">

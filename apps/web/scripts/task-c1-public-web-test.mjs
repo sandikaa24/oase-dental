@@ -70,6 +70,23 @@ async function runTests() {
   assert(homeHtml.includes('Senyum Sehat'), 'Halaman Beranda memuat headline utama senyum sehat');
   assert(homeHtml.includes('name="description"'), 'Halaman Beranda memiliki meta tag description');
 
+  // Validasi JSON-LD OpeningHoursSpecification tanpa Minggu (klinik tutup) & valid
+  const jsonLdMatch = homeHtml.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/);
+  assert(!!jsonLdMatch, 'Halaman Beranda memuat script application/ld+json');
+  if (jsonLdMatch) {
+    try {
+      const parsed = JSON.parse(jsonLdMatch[1]);
+      assert(parsed['@type'] === 'Dentist', 'JSON-LD @type adalah Dentist');
+      const specs = parsed.openingHoursSpecification || [];
+      assert(specs.length > 0, 'JSON-LD memuat openingHoursSpecification valid');
+      const allDays = specs.flatMap((s) => s.dayOfWeek || []);
+      assert(!allDays.includes('Sunday'), 'JSON-LD openingHoursSpecification TIDAK memuat hari Minggu (klinik tutup)');
+      assert(allDays.includes('Monday') && allDays.includes('Saturday'), 'JSON-LD openingHoursSpecification memuat hari kerja & Sabtu');
+    } catch (e) {
+      assert(false, `JSON-LD gagal diparse: ${e.message}`);
+    }
+  }
+
   // 3. ZERO DATA LEAKAGE SCANNER
   console.log('\n--- 3. Zero Data Leakage Scanner (Proteksi Privasi Medis) ---');
   const forbiddenKeywords = [
@@ -110,6 +127,8 @@ async function runTests() {
   const cabangHtml = htmlResponses['/cabang'] || '';
   assert(cabangHtml.includes('wa.me/'), 'Halaman Cabang memuat deep-link WhatsApp');
   assert(cabangHtml.includes('Jam Operasional') || cabangHtml.includes('Jam Praktik'), 'Halaman Cabang memuat jam operasional');
+  assert(!cabangHtml.includes('Setiap Hari: 08:00'), 'Halaman Cabang TIDAK memuat "08:00" legacy ("Setiap Hari: 08:00")');
+  assert(!cabangHtml.includes('Setiap Hari:'), 'Halaman Cabang TIDAK memuat "Setiap Hari" yang kontradiktif');
 
   // 6. ENDPOINT PUBLIK JAM OPERASIONAL & HOMEPAGE SCHEDULE
   console.log('\n--- 6. Endpoint Publik Jam Operasional & Homepage Schedule ---');
@@ -139,6 +158,12 @@ async function runTests() {
   const weekdaysHtml = firstBranch.schedule.weekdays.replace('&', '&amp;');
   assert(homeHtml.includes(firstBranch.schedule.weekdays) || homeHtml.includes(weekdaysHtml), `Homepage memuat string jam operasional hari kerja (${firstBranch.schedule.weekdays})`);
   assert(homeHtml.includes('Tutup'), 'Homepage memuat status "Tutup" untuk hari Minggu');
+
+  // Validasi Footer & Cabang: TIDAK memuat "08:00" legacy dan MEMUAT jam DB + "Tutup"
+  assert(!homeHtml.includes('Buka: 08:00'), 'Footer TIDAK memuat string jam "08:00" legacy');
+  assert(homeHtml.includes('Sen–Jum:'), 'Footer memuat label jadwal kerja Sen–Jum');
+  assert(cabangHtml.includes(firstBranch.schedule.weekdays) || cabangHtml.includes(weekdaysHtml), `Halaman Cabang MEMUAT jam DB (${firstBranch.schedule.weekdays})`);
+  assert(cabangHtml.includes('Tutup'), 'Halaman Cabang MEMUAT status "Tutup" untuk hari Minggu');
 
   // 7. SERVER-SIDE GUARD ADMIN TETAP BERFUNGSI
   console.log('\n--- 7. Guard Dashboard Admin (Non-Public Protection) ---');

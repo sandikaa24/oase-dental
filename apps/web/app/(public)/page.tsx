@@ -387,7 +387,7 @@ export default async function HomePage() {
         </div>
 
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-          {branches.map((b) => {
+          {branchHours.map((b) => {
             const branchWa = buildWhatsAppUrl(b.phone, b.name);
             return (
               <div
@@ -398,7 +398,7 @@ export default async function HomePage() {
                   <div className="flex items-center justify-between">
                     <h3 className="text-lg font-bold text-foreground">{b.name}</h3>
                     <span className="rounded-md bg-emerald-500/10 px-2 py-0.5 text-xs font-semibold text-emerald-700">
-                      Buka
+                      Buka Praktik
                     </span>
                   </div>
 
@@ -407,12 +407,20 @@ export default async function HomePage() {
                       <MapPin className="h-4 w-4 mt-0.5 shrink-0 text-primary" />
                       <span>{b.address}</span>
                     </p>
-                    {b.workingHours && (
-                      <p className="flex items-center gap-2">
-                        <Clock className="h-4 w-4 shrink-0 text-primary" />
-                        <span>Jam Praktik: {b.workingHours.openTime} – {b.workingHours.closeTime} WIB</span>
-                      </p>
-                    )}
+                    <div className="rounded-xl border border-border/60 bg-muted/30 p-3 space-y-1 text-xs">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-muted-foreground">Senin – Jumat:</span>
+                        <span className="font-medium text-foreground">{b.schedule.weekdays}</span>
+                      </div>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-muted-foreground">Sabtu:</span>
+                        <span className="font-medium text-foreground">{b.schedule.saturday}</span>
+                      </div>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-muted-foreground">Minggu:</span>
+                        <span className="font-semibold text-destructive">{b.schedule.sunday}</span>
+                      </div>
+                    </div>
                   </div>
                 </div>
 

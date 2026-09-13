@@ -88,19 +88,20 @@ export async function getPublicBranches(): Promise<PublicBranchItem[]> {
         name: true,
         address: true,
         phone: true,
-        workingHours: {
-          select: {
-            openTime: true,
-            closeTime: true,
-          },
-        },
       },
       orderBy: {
         name: 'asc',
       },
     });
 
-    return branches;
+    return branches.map((b) => ({
+      id: b.id,
+      code: b.code,
+      name: b.name,
+      address: b.address,
+      phone: b.phone,
+      workingHours: null,
+    }));
   } catch (error) {
     console.error('Gagal mengambil data cabang publik:', error);
     return [];

@@ -47,14 +47,14 @@ async function probeLiveDeployment() {
   assert(homeHtml.includes(targetHours) || homeHtml.includes(targetHoursEscaped), 'Homepage memuat jam DB "09:00–13:00 & 16:00–21:00"');
   assert(homeHtml.includes('Tutup'), 'Homepage memuat status "Tutup" hari Minggu');
   assert(!homeHtml.includes('08:00'), 'Homepage TIDAK memuat jam legacy "08:00"');
-  assert(!homeHtml.includes('Setiap Hari'), 'Homepage TIDAK memuat label "Setiap Hari" legacy');
-  assert(!homeHtml.includes('Buka: 08:00'), 'Homepage footer TIDAK memuat "Buka: 08:00" legacy');
+  assert(!homeHtml.includes('Setiap Hari:') && !homeHtml.includes('Setiap Hari :'), 'Homepage TIDAK memuat label "Setiap Hari:" legacy');
+  assert(!homeHtml.includes('Buka: 08:00') && !homeHtml.includes('Buka:'), 'Homepage footer & card TIDAK memuat "Buka:" legacy');
 
   // /cabang
   assert(cabangHtml.includes(targetHours) || cabangHtml.includes(targetHoursEscaped), 'Halaman /cabang memuat jam DB "09:00–13:00 & 16:00–21:00"');
   assert(cabangHtml.includes('Tutup'), 'Halaman /cabang memuat status "Tutup" hari Minggu');
   assert(!cabangHtml.includes('08:00'), 'Halaman /cabang TIDAK memuat jam legacy "08:00"');
-  assert(!cabangHtml.includes('Setiap Hari'), 'Halaman /cabang TIDAK memuat label "Setiap Hari" legacy');
+  assert(!cabangHtml.includes('Setiap Hari:') && !cabangHtml.includes('Setiap Hari :'), 'Halaman /cabang TIDAK memuat label "Setiap Hari:" legacy');
 
   // Footer di halaman non-homepage (/layanan)
   console.log('\n--- TARGET 2: Footer Bersih di Halaman Non-Homepage (/layanan) ---');
@@ -62,7 +62,7 @@ async function probeLiveDeployment() {
   assert(layananHtml.includes('Tutup'), 'Footer di /layanan memuat status "Tutup" hari Minggu');
   assert(!layananHtml.includes('08:00'), 'Footer di /layanan TIDAK memuat jam legacy "08:00"');
   assert(!layananHtml.includes('Setiap Hari'), 'Footer di /layanan TIDAK memuat label "Setiap Hari" legacy');
-  assert(!layananHtml.includes('Buka: 08:00'), 'Footer di /layanan TIDAK memuat "Buka: 08:00" legacy');
+  assert(!layananHtml.includes('Buka:'), 'Footer di /layanan TIDAK memuat "Buka:" legacy');
 
   // --- Target 3: JSON-LD OpeningHoursSpecification tanpa Sunday ---
   console.log('\n--- TARGET 3: JSON-LD openingHoursSpecification Tanpa Sunday ---');

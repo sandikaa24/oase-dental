@@ -1,0 +1,54 @@
+name: Supabase Keep-Alive
+
+on:
+  schedule:
+    # Berjalan tiap 2 hari sekali pada pukul 03:00 UTC (10:00 WIB)
+    - cron: "0 3 */2 * *"
+  workflow_dispatch:
+
+jobs:
+  ping-supabase:
+    name: Ping Database (Anti Auto-Pause)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Lightweight PG Driver
+        run: npm install --no-save pg
+
+      - name: Run Keep-Alive Ping Query (SELECT 1)
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          node -e "
+          const { Client } = require('pg');
+          if (!process.env.DATABASE_URL) {
+            console.error('ERROR: Secret DATABASE_URL belum dipasang di GitHub Repository Secrets!');
+            process.exit(1);
+          }
+          const client = new Client({
+            connectionString: process.env.DATABASE_URL,
+            ssl: { rejectUnauthorized: false }
+          });
+          client.connect()
+            .then(() => {
+              console.log('Koneksi TCP & SSL ke Supabase berhasil.');
+              return client.query('SELECT 1 AS keep_alive_ping, NOW() AS server_time;');
+            })
+            .then((res) => {
+              console.log('✅ SUPABASE KEEP-ALIVE SUKSES:', res.rows[0]);
+              return client.end();
+            })
+            .catch((err) => {
+              console.error('❌ SUPABASE KEEP-ALIVE GAGAL:', err.message);
+              process.exit(1);
+            });
+          "

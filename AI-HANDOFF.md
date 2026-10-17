@@ -88,6 +88,12 @@ jalankan regresi penuh + probe-deploy setelah deploy.
 - Build Vercel pernah **gagal** karena static generation → koneksi pooler Supabase.
   Solusi: parameter `pgbouncer=true` (sudah permanen). Jika build gagal lagi dengan
   error koneksi, cek dulu ini.
+- **Incident 17 Okt 2025 (Supabase Free-Tier Auto-Pause):**
+  - **Penyebab:** Project Supabase staging (`japwlbqitbkeywidkkzt`) otomatis ter-pause karena inaktivitas free-tier (±7 hari idle).
+  - **Gejala:** Build Vercel gagal saat SSG (`/edukasi`, `/galeri`, `/teknologi`), endpoint `/api/v1/auth/login` error 500 (DB timeout 5.5s), dan handshake TLS ke pooler ditolak dengan pesan: `tenant/user postgres.japwlbqitbkeywidkkzt not found`.
+  - **Pelajaran Kunci:** TCP port 6543/5432 terbuka **TIDAK SAMA DENGAN** DB sehat. Pesan `tenant not found` adalah penanda pasti database sedang paused atau proses restore belum selesai. **Urutan diagnosis:** Dashboard Supabase (cek status Active) → Test DB lokal (`node apps/web/scripts/test-prisma-staging.mjs`) → Log Vercel → Redeploy. Jangan mendiagnosis kode jika tidak ada kode yang berubah!
+  - **Prosedur Recovery:** Cukup restore/unpause project via dashboard Supabase. Begitu database aktif kembali, aplikasi produksi live pulih seketika tanpa perlu perubahan kode maupun redeploy paksa.
+  - Setelah incident, deployment `3cbmL3DXY` di-redeploy hanya untuk membersihkan status failure di GitHub Commit Statuses — bukan karena perubahan kode.
 - Verifikasi build lokal dengan env staging (`apps/web/.env.staging`) SEBELUM push.
 - Cek status deploy: `GET api.github.com/repos/sandikaa24/oase-dental/commits/<sha>/statuses`
   (header `User-Agent` wajib).
